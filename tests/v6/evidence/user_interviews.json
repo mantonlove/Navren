@@ -1,0 +1,19 @@
+{
+  "evidence_level": "placeholder",
+  "title": "目标用户访谈证据",
+  "description": "对至少20名目标用户的理财需求访谈记录与结构化分析",
+  "status": "待收集",
+  "target_sample": "20名以上目标用户（覆盖银发/年轻/普通三类人群）",
+  "data": {
+    "interviews": [],
+    "summary": "尚未进行用户访谈。建议招募银行理财用户进行结构化访谈。"
+  },
+  "required_fields": {
+    "sample_size": 0,
+    "target": "≥20",
+    "completion_rate": 0,
+    "willing_to_continue": 0,
+    "perceived_better_than_existing": 0
+  },
+  "collection_guide": "参考 项目市场化生存评价体系-最高标准.md §14.1 用户需求实验设计"
+}

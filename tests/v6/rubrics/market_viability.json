@@ -1,0 +1,135 @@
+{
+  "version": "v1.0",
+  "framework": "市场化生存评价体系-最高标准版",
+  "total_weight": 100,
+  "description": "判断项目是否具备从竞赛原型走向真实市场的生存能力",
+  "dimensions": {
+    "A_demand_intensity": {
+      "name": "需求强度与场景刚性",
+      "weight": 14,
+      "indicators": [
+        {"id": "MA1", "name": "高频问题明确", "weight": 3, "evidence_file": "user_interviews.json", "required_fields": ["sample_size", "willing_to_continue"], "scoring_rule": "sample_size>=20 且 willing_to_continue>=60% 得满分"},
+        {"id": "MA2", "name": "痛点真实强烈", "weight": 3, "evidence_file": "user_interviews.json", "required_fields": ["perceived_better_than_existing"], "scoring_rule": "perceived_better_than_existing>=70% 得满分"},
+        {"id": "MA3", "name": "银行业务价值明确", "weight": 3, "evidence_file": "banker_feedback.json", "required_fields": ["time_saved_pct", "reduces_repetitive_queries_pct"], "scoring_rule": "time_saved_pct>=40% 且 reduces>=70% 得满分"},
+        {"id": "MA4", "name": "不可被 FAQ 替代", "weight": 2, "evidence_file": "user_interviews.json", "required_fields": [], "scoring_rule": "对话样本证明需要多轮、画像、复杂解释"},
+        {"id": "MA5", "name": "目标人群差异明显", "weight": 2, "evidence_file": "user_interviews.json", "required_fields": [], "scoring_rule": "银发/年轻/普通客群有不同交互需求证据"},
+        {"id": "MA6", "name": "用户愿意继续使用", "weight": 1, "evidence_file": "user_interviews.json", "required_fields": ["willing_to_continue"], "scoring_rule": "willing_to_continue>=60% 得满分"}
+      ]
+    },
+    "B_target_market": {
+      "name": "目标客户与市场切入",
+      "weight": 10,
+      "indicators": [
+        {"id": "MB1", "name": "首个客户清晰", "weight": 3, "evidence_file": "deployment_plan.json", "required_fields": ["至少一个明确的 ICP 定义"], "scoring_rule": "有明确银行类型/部门/用户群定义"},
+        {"id": "MB2", "name": "切入场景足够窄", "weight": 2, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "从单一高价值流程切入"},
+        {"id": "MB3", "name": "决策链条清楚", "weight": 2, "evidence_file": "banker_feedback.json", "required_fields": [], "scoring_rule": "知道试用者/决策者/合规验收者"},
+        {"id": "MB4", "name": "试点门槛可控", "weight": 2, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "可用脱敏产品库/模拟账户低风险试点"},
+        {"id": "MB5", "name": "扩展路径明确", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "有从单场景到多场景的路线图"}
+      ]
+    },
+    "C_business_model": {
+      "name": "商业模式与单位经济",
+      "weight": 12,
+      "indicators": [
+        {"id": "MC1", "name": "付费模式明确", "weight": 3, "evidence_file": "roi_model.json", "required_fields": ["至少一种付费模式定义"], "scoring_rule": "SaaS/私有化/API/席位/项目制至少一种成立"},
+        {"id": "MC2", "name": "价值可量化", "weight": 3, "evidence_file": "roi_model.json", "required_fields": ["annual_roi_pct"], "scoring_rule": "有可量化的降本/增收/转化指标"},
+        {"id": "MC3", "name": "模型成本可控", "weight": 2, "evidence_file": "cost_model.json", "required_fields": ["per_conversation_cost"], "scoring_rule": "单轮对话成本可测算"},
+        {"id": "MC4", "name": "交付成本可控", "weight": 2, "evidence_file": "cost_model.json", "required_fields": ["deployment_cost_per_bank"], "scoring_rule": "接入/部署/维护不吞噬毛利"},
+        {"id": "MC5", "name": "续费理由成立", "weight": 1, "evidence_file": "roi_model.json", "required_fields": [], "scoring_rule": "数据更新/评测/合规维护形成持续价值"},
+        {"id": "MC6", "name": "扩容边际成本下降", "weight": 1, "evidence_file": "cost_model.json", "required_fields": [], "scoring_rule": "多客户复用组件，边际成本下降"}
+      ]
+    },
+    "D_product_differentiation": {
+      "name": "产品价值与差异化",
+      "weight": 12,
+      "indicators": [
+        {"id": "MD1", "name": "相比银行APP更顾问化", "weight": 2, "evidence_file": "competitor_analysis.json", "required_fields": ["至少3个竞品分析"], "scoring_rule": "不只是展示产品，而是解释/比较/推荐/追问"},
+        {"id": "MD2", "name": "相比客户经理更规模化", "weight": 2, "evidence_file": "competitor_analysis.json", "required_fields": [], "scoring_rule": "7x24/标准化/低成本覆盖长尾"},
+        {"id": "MD3", "name": "相比通用大模型更可信", "weight": 2, "evidence_file": "competitor_analysis.json", "required_fields": [], "scoring_rule": "绑定产品库/画像/合规/日志审计"},
+        {"id": "MD4", "name": "相比FAQ更智能", "weight": 1, "evidence_file": "competitor_analysis.json", "required_fields": [], "scoring_rule": "能处理复杂多轮和冲突目标"},
+        {"id": "MD5", "name": "三模式真实差异", "weight": 1, "evidence_file": "user_interviews.json", "required_fields": [], "scoring_rule": "不同人群得到不同解释方式和交互路径"},
+        {"id": "MD6", "name": "推荐页形成工作台", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "方案可保存/追问/比较/更新"},
+        {"id": "MD7", "name": "评测体系构成壁垒", "weight": 2, "evidence_file": "competitor_analysis.json", "required_fields": [], "scoring_rule": "有红队题库/量化评分/持续回归"},
+        {"id": "MD8", "name": "合规话术资产", "weight": 1, "evidence_file": "compliance_plan.json", "required_fields": [], "scoring_rule": "积累可复用的合规模板和场景策略"}
+      ]
+    },
+    "E_compliance_feasibility": {
+      "name": "合规可落地性",
+      "weight": 12,
+      "indicators": [
+        {"id": "ME1", "name": "责任边界清晰", "weight": 2, "evidence_file": "compliance_plan.json", "required_fields": ["区分金融教育/产品解释/营销/投资建议/交易执行的边界"], "scoring_rule": "责任边界有清晰文档定义"},
+        {"id": "ME2", "name": "适当性闭环", "weight": 2, "evidence_file": "compliance_plan.json", "required_fields": ["适当性闭环留痕机制"], "scoring_rule": "测评/产品等级/金额期限/用户确认全链路留痕"},
+        {"id": "ME3", "name": "人工复核机制", "weight": 2, "evidence_file": "compliance_plan.json", "required_fields": ["人工复核机制"], "scoring_rule": "高风险/投诉/越级需求进入人工审核"},
+        {"id": "ME4", "name": "输出可审计", "weight": 2, "evidence_file": "compliance_plan.json", "required_fields": ["推荐可追溯"], "scoring_rule": "每次推荐能还原输入/检索/模型/规则/输出"},
+        {"id": "ME5", "name": "规则可配置", "weight": 1, "evidence_file": "compliance_plan.json", "required_fields": [], "scoring_rule": "不同银行可配置禁用词/产品范围/风险规则"},
+        {"id": "ME6", "name": "私有化部署可行", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": ["supports_private_deployment"], "scoring_rule": "支持行内数据不出域"},
+        {"id": "ME7", "name": "法务材料可准备", "weight": 1, "evidence_file": "compliance_plan.json", "required_fields": ["user_agreement_draft", "disclaimer_draft", "privacy_policy_draft"], "scoring_rule": "用户协议/免责声明/隐私政策/风险揭示草案存在"},
+        {"id": "ME8", "name": "监管变化可更新", "weight": 1, "evidence_file": "compliance_plan.json", "required_fields": [], "scoring_rule": "合规规则和prompt可版本化更新"}
+      ]
+    },
+    "F_user_trust": {
+      "name": "用户信任与转化闭环",
+      "weight": 10,
+      "indicators": [
+        {"id": "MF1", "name": "首次信任建立", "weight": 2, "evidence_file": "user_interviews.json", "required_fields": [], "scoring_rule": "用户理解推荐依据和限制"},
+        {"id": "MF2", "name": "持续使用动机", "weight": 2, "evidence_file": "user_interviews.json", "required_fields": ["willing_to_continue"], "scoring_rule": "用户愿意回来看方案/市场变化/持仓解释"},
+        {"id": "MF3", "name": "推荐到行动转化", "weight": 2, "evidence_file": "roi_model.json", "required_fields": ["conversion_rate_improvement"], "scoring_rule": "有转化漏斗数据"},
+        {"id": "MF4", "name": "解释降低焦虑", "weight": 1, "evidence_file": "user_interviews.json", "required_fields": [], "scoring_rule": "面对亏损/波动时帮助用户理解风险"},
+        {"id": "MF5", "name": "负反馈处理", "weight": 1, "evidence_file": "user_interviews.json", "required_fields": [], "scoring_rule": "不满意时能解释/修正/转人工"},
+        {"id": "MF6", "name": "可信UI证据", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "页面展示依据/更新时间/风险提示/日志摘要"},
+        {"id": "MF7", "name": "不过度打扰", "weight": 1, "evidence_file": "user_interviews.json", "required_fields": [], "scoring_rule": "营销话术克制，不诱导"}
+      ]
+    },
+    "G_data_model_moat": {
+      "name": "数据、模型与效果壁垒",
+      "weight": 10,
+      "indicators": [
+        {"id": "MG1", "name": "产品数据体系", "weight": 2, "evidence_file": "deployment_plan.json", "required_fields": ["product_data_integration"], "scoring_rule": "产品字段完整/可更新/可追溯/可过滤"},
+        {"id": "MG2", "name": "用户画像体系", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "画像结构稳定，可跨页面和多轮复用"},
+        {"id": "MG3", "name": "对话评测集", "weight": 2, "evidence_file": "competitor_analysis.json", "required_fields": [], "scoring_rule": "有真实错误样本/红队样本/长尾样本"},
+        {"id": "MG4", "name": "模型选择策略", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "不依赖单一模型，支持降级和替换"},
+        {"id": "MG5", "name": "Prompt版本治理", "weight": 1, "evidence_file": "compliance_plan.json", "required_fields": [], "scoring_rule": "prompt变更有版本/测试/回滚"},
+        {"id": "MG6", "name": "反馈学习闭环", "weight": 1, "evidence_file": "roi_model.json", "required_fields": [], "scoring_rule": "用户反馈和失败案例进入测试集"},
+        {"id": "MG7", "name": "检索与规则壁垒", "weight": 1, "evidence_file": "competitor_analysis.json", "required_fields": [], "scoring_rule": "产品知识/合规规则/场景策略可沉淀"},
+        {"id": "MG8", "name": "效果可持续提升", "weight": 1, "evidence_file": "competitor_analysis.json", "required_fields": [], "scoring_rule": "每版有分数变化和问题闭环"}
+      ]
+    },
+    "H_operations_delivery": {
+      "name": "运营交付能力",
+      "weight": 8,
+      "indicators": [
+        {"id": "MH1", "name": "部署形态清晰", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": ["至少一种部署形态"], "scoring_rule": "本地/私有化/银行内网/云API至少一种"},
+        {"id": "MH2", "name": "数据接入方案", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": ["product_data_integration"], "scoring_rule": "产品/账户/市场/画像/日志接口有设计"},
+        {"id": "MH3", "name": "运营后台需求", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "可查看日志/失败案例/合规拦截/热点问题"},
+        {"id": "MH4", "name": "客户成功流程", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "试点培训/配置/验收/复盘流程明确"},
+        {"id": "MH5", "name": "异常处理机制", "weight": 1, "evidence_file": "compliance_plan.json", "required_fields": ["incident_response_plan"], "scoring_rule": "API失败/产品下架/投诉有流程"},
+        {"id": "MH6", "name": "安全运维", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "权限/审计/脱敏/密钥管理可执行"},
+        {"id": "MH7", "name": "版本更新机制", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "模型/规则/产品库/前端可灰度发布"},
+        {"id": "MH8", "name": "服务SLA", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": ["availability_target", "response_time_p95"], "scoring_rule": "有可用性/响应时间/故障恢复目标"}
+      ]
+    },
+    "I_growth_channels": {
+      "name": "增长与渠道能力",
+      "weight": 6,
+      "indicators": [
+        {"id": "MI1", "name": "渠道明确", "weight": 2, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "银行合作/实验室/区域试点/客户经理工具至少一种"},
+        {"id": "MI2", "name": "获客成本可估", "weight": 1, "evidence_file": "roi_model.json", "required_fields": ["customer_acquisition_cost"], "scoring_rule": "能估算试点客户获客成本"},
+        {"id": "MI3", "name": "传播点清晰", "weight": 1, "evidence_file": "competitor_analysis.json", "required_fields": [], "scoring_rule": "合规/适老化/千人千面/降本增效有卖点"},
+        {"id": "MI4", "name": "可复制销售材料", "weight": 1, "evidence_file": "roi_model.json", "required_fields": [], "scoring_rule": "有演示视频/ROI表/测试报告/合规说明"},
+        {"id": "MI5", "name": "试点转正式路径", "weight": 1, "evidence_file": "roi_model.json", "required_fields": ["payback_period_months"], "scoring_rule": "试点结束后有明确付费升级条件"}
+      ]
+    },
+    "J_risk_resilience": {
+      "name": "风险与抗压能力",
+      "weight": 6,
+      "indicators": [
+        {"id": "MJ1", "name": "监管风险预案", "weight": 1, "evidence_file": "compliance_plan.json", "required_fields": [], "scoring_rule": "新规/投诉/审查时有处理流程"},
+        {"id": "MJ2", "name": "模型失误预案", "weight": 1, "evidence_file": "compliance_plan.json", "required_fields": ["incident_response_plan"], "scoring_rule": "错误建议能追踪/修正/通知/复盘"},
+        {"id": "MJ3", "name": "舆情风险预案", "weight": 1, "evidence_file": "compliance_plan.json", "required_fields": [], "scoring_rule": "用户亏损归因/截图传播有应对"},
+        {"id": "MJ4", "name": "竞争风险分析", "weight": 1, "evidence_file": "competitor_analysis.json", "required_fields": ["至少3个竞品分析"], "scoring_rule": "明确大银行/金融科技/通用模型的竞争压力"},
+        {"id": "MJ5", "name": "供应商风险", "weight": 1, "evidence_file": "deployment_plan.json", "required_fields": [], "scoring_rule": "模型API/语音API/数据源不可用时有替代"},
+        {"id": "MJ6", "name": "法律责任边界", "weight": 1, "evidence_file": "compliance_plan.json", "required_fields": ["user_agreement_draft", "disclaimer_draft"], "scoring_rule": "用户协议/免责声明可支撑责任边界"}
+      ]
+    }
+  }
+}

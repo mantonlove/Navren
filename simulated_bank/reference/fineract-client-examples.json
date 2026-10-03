@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1,
+    "account_no": "000000001",
+    "status_enum": 300,
+    "activation_date": "2014-03-07",
+    "display_name": "Smith R",
+    "office_id": 1
+  },
+  {
+    "id": 2,
+    "account_no": "000000002",
+    "status_enum": 300,
+    "activation_date": "2010-01-04",
+    "display_name": "Johnson D",
+    "office_id": 2
+  },
+  {
+    "id": 4,
+    "account_no": "000000004",
+    "status_enum": 300,
+    "activation_date": "2010-01-04",
+    "display_name": "Williams G",
+    "office_id": 2
+  },
+  {
+    "id": 5,
+    "account_no": "000000005",
+    "status_enum": 300,
+    "activation_date": "2010-01-04",
+    "display_name": "Harris P",
+    "office_id": 2
+  },
+  {
+    "id": 6,
+    "account_no": "000000006",
+    "status_enum": 300,
+    "activation_date": "2010-01-04",
+    "display_name": "Allen E",
+    "office_id": 2
+  },
+  {
+    "id": 7,
+    "account_no": "000000007",
+    "status_enum": 300,
+    "activation_date": "2010-01-04",
+    "display_name": "Scott C",
+    "office_id": 2
+  },
+  {
+    "id": 8,
+    "account_no": "000000008",
+    "status_enum": 300,
+    "activation_date": "2010-01-04",
+    "display_name": "Robinson R",
+    "office_id": 2
+  }
+]

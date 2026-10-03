@@ -1,0 +1,73 @@
+{
+  "knowledge_base_version": "1.0.0",
+  "last_updated": "2026-05-22T22:10:01.789142",
+  "total_products": 41,
+  "total_sources": 5,
+  "sync_frequency": "每周（生产环境）/ 按需更新（Demo）",
+  "data_lineage": "产品字段结构参照各平台官方登记格式。Demo数据为结构化示例，生产环境中通过平台API/文件导出+爬虫实现自动同步。",
+  "sources": {
+    "chinawealth.com.cn": {
+      "platform_name": "中国理财网",
+      "organization": "银行业理财登记托管中心",
+      "regulator": "国家金融监督管理总局",
+      "url": "https://www.chinawealth.com.cn",
+      "product_count": 18,
+      "sample_products": [
+        "活期盈",
+        "日盈宝",
+        "大额存单3年期"
+      ],
+      "sync_method": "API查询 + 定期文件导出"
+    },
+    "amac.org.cn": {
+      "platform_name": "中国证券投资基金业协会",
+      "organization": "AMAC",
+      "regulator": "中国证监会",
+      "url": "https://www.amac.org.cn",
+      "product_count": 15,
+      "sample_products": [
+        "沪深300指数增强",
+        "中证500指数增强",
+        "创业板指数基金"
+      ],
+      "sync_method": "API查询"
+    },
+    "nfra.gov.cn": {
+      "platform_name": "国家金融监督管理总局",
+      "organization": "NFRA",
+      "regulator": "国务院",
+      "url": "https://www.nfra.gov.cn",
+      "product_count": 3,
+      "sample_products": [
+        "稳盈年金险",
+        "增额终身寿险",
+        "万能险（灵活型）"
+      ],
+      "sync_method": "API查询"
+    },
+    "chinabond.com.cn": {
+      "platform_name": "中国债券信息网（中债登）",
+      "organization": "中央国债登记结算有限责任公司",
+      "regulator": "中国人民银行",
+      "url": "https://www.chinabond.com.cn",
+      "product_count": 4,
+      "sample_products": [
+        "储蓄国债3年期",
+        "储蓄国债5年期",
+        "地方政府债3年期"
+      ],
+      "sync_method": "API查询"
+    },
+    "chinatrc.com.cn": {
+      "platform_name": "中国信托登记有限责任公司",
+      "organization": "中信登",
+      "regulator": "国家金融监督管理总局",
+      "url": "https://www.chinatrc.com.cn",
+      "product_count": 1,
+      "sample_products": [
+        "基础设施信托计划"
+      ],
+      "sync_method": "API查询"
+    }
+  }
+}

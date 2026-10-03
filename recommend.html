@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Navren · 推荐中心</title>
+<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="stylesheet" href="css/style.css?v=ui-20261003-3">
+<link rel="stylesheet" href="css/bank.css?v=ui-20261003-3">
+<link rel="stylesheet" href="css/design.css?v=ui-20261003-3">
+</head>
+<body data-page="recommend">
+<a class="skip-link" href="#mainContent">跳到主要内容</a>
+
+<div class="app">
+  <nav class="sidebar" aria-label="Navren主导航">
+    <a class="logo" href="index.html" aria-label="Navren首页"><img src="assets/logo.png" alt=""></a>
+    <a class="nav-item" href="chat.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="nav-label">对话</span></a>
+    <a class="nav-item active" href="recommend.html" aria-current="page"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M16 3a8 8 0 0 1 5 5h-5z"/></svg><span class="nav-label">推荐</span></a>
+    <a class="nav-item" href="account.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 9h18m-5 5h3"/></svg><span class="nav-label">账户</span></a>
+    <a class="nav-item" href="mine.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="nav-label">我的</span></a>
+    <a class="nav-item nav-workbench" href="copilot.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V3h8v4M3 12h18m-11 0v3h4v-3"/></svg><span class="nav-label">工作台</span></a>
+  </nav>
+
+  <main class="main" id="mainContent" tabindex="-1">
+    <header class="header">
+      <div class="header-identity"><a class="brand" href="index.html" aria-label="Navren首页">Navren</a><span class="header-location">产品与建议</span></div>
+      <label class="mode-control"><span>界面模式</span><select id="interfaceMode" aria-label="界面模式"><option value="classic">经典版</option><option value="senior">关怀版</option><option value="youth">青春版</option></select></label>
+    </header>
+
+    <div class="page-scroll">
+    <div class="rec-page">
+      <div class="page-heading"><span class="eyebrow">财富建议</span><h1>让每一笔钱，都有合适的安排。</h1><p>先核对资金和风险，再比较产品。模拟申购需要您确认。</p></div>
+
+      <div id="bankRecommendations"></div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="hidden" style="text-align:center;padding:var(--s6) var(--s4);color:var(--ink-40)">
+        <div style="font-size:40px;margin-bottom:var(--s2);opacity:0.5">📊</div>
+        <h3 style="font-size:var(--font-size-base);font-weight:700;color:var(--ink);margin-bottom:8px">暂无推荐方案</h3>
+        <p style="font-size:var(--font-size-sm)">让Navren为您配置专属方案。返回聊天页，试试这样说：</p>
+        <div style="margin-top:var(--s2);display:flex;flex-wrap:wrap;gap:8px;justify-content:center">
+          <span class="preset-inline" style="margin:0"><span class="preset-chip" onclick="goTo('chat.html')">帮我配置一下资金</span></span>
+          <span class="preset-inline" style="margin:0"><span class="preset-chip" onclick="goTo('chat.html')">20万3年不用怎么配</span></span>
+          <span class="preset-inline" style="margin:0"><span class="preset-chip" onclick="goTo('chat.html')">推荐适合的投资组合</span></span>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div id="recContent">
+
+        <!-- 当前推荐 -->
+        <div class="mine-section">
+          <div class="sec-label">市场研究参考方案（不接入银行交易）</div>
+          <div class="rec-current" id="currentRec"></div>
+          <div style="text-align:right;margin-top:8px">
+            <button class="btn-outline" style="padding:6px 16px;font-size:var(--font-size-xs)" onclick="generateReport()">📋 生成配置报告</button>
+          </div>
+        </div>
+
+        <!-- 历史推荐 -->
+        <div class="mine-section">
+          <div class="collapsible" id="historyCollapse">
+            <div class="col-head" onclick="this.parentElement.classList.toggle('open')">
+              <div class="col-title">
+                <svg class="col-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                历史推荐
+              </div>
+              <span class="col-arrow">▼</span>
+            </div>
+            <div class="col-body" id="historyList"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 市场热点 · 始终可见 -->
+      <div class="mine-section">
+        <div class="sec-label">市场热点</div>
+        <div class="rec-current" id="marketHot"></div>
+      </div>
+
+      <!-- 每周市场周报 · 始终可见 -->
+      <div class="mine-section">
+        <div class="sec-label">每周市场周报</div>
+        <div class="rec-current" id="weeklyReport"></div>
+      </div>
+
+    </div>
+    </div>
+  </main>
+</div>
+
+<!-- Product Detail Modal -->
+<div class="modal-overlay hidden" id="productModal">
+  <div class="modal-box">
+    <div class="modal-head"><span id="productModalTitle">产品详情</span><button onclick="closeProductModal()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--ink-40)">✕</button></div>
+    <div class="modal-body" id="productModalBody"></div>
+    <div class="modal-foot"><button class="btn-outline" style="padding:8px 18px;border-radius:8px;font-size:var(--font-size-sm)" onclick="closeProductModal()">关闭</button><button class="btn-primary" style="padding:8px 18px;border-radius:8px;font-size:var(--font-size-sm)" id="productModalSend">发送至聊天 ↗</button></div>
+  </div>
+</div>
+
+<script src="js/storage.js?v=ui-20261003-3"></script>
+<script src="js/design.js?v=ui-20261003-3"></script>
+<script src="js/market_data.js?v=7"></script>
+<script src="js/market_news.js?v=7"></script>
+<script src="js/profile_engine.js?v=7"></script>
+<script src="js/bank_client.js?v=bank2"></script>
+<script src="js/bank_ui.js?v=ui-20261003-3"></script>
+<script src="js/recommend.js?v=ui-20261003-3"></script>
+</body>
+</html>

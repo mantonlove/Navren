@@ -1,0 +1,35 @@
+{
+  "evidence_level": "placeholder",
+  "title": "合规方案",
+  "description": "轻舟系统在银行合规框架下的责任边界与审计机制",
+  "status": "待构建",
+  "data": {
+    "responsibility_boundary": {
+      "financial_education_vs_advice": "",
+      "investment_recommendation_guardrails": "",
+      "transaction_authorization": "",
+      "user_agreement_draft": false,
+      "disclaimer_draft": false,
+      "privacy_policy_draft": false
+    },
+    "audit_mechanisms": {
+      "recommendation_traceability": false,
+      "model_call_logging": true,
+      "human_review_workflow": "",
+      "compliance_officer_dashboard": false
+    },
+    "regulatory_preparedness": {
+      "finra_2111_compliance": "",
+      "reg_bi_compliance": "",
+      "data_privacy_compliance": "",
+      "incident_response_plan": ""
+    }
+  },
+  "required_fields": [
+    "明确区分金融教育与投资建议的责任边界",
+    "适当性闭环留痕机制",
+    "人工复核机制",
+    "用户协议/免责声明/隐私政策草案"
+  ],
+  "collection_guide": "参考 FINRA 2026、Reg BI、中国银保监会相关规定设计合规框架"
+}

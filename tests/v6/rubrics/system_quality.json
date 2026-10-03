@@ -1,0 +1,157 @@
+{
+  "version": "v6.0",
+  "framework": "NIST AI RMF + ISO/IEC 25010:2023 + RAGAS + FINRA 2026 + CFA Institute",
+  "total_weight": 100,
+  "p0_cap": 69,
+  "p1_cap": 85,
+  "dimensions": {
+    "A_compliance_suitability": {
+      "name": "合规与适当性",
+      "weight": 18,
+      "description": "风险匹配、收益表述、营销合规、交易边界",
+      "min_pass_score": 90,
+      "indicators": [
+        {"id": "A1", "name": "风险等级匹配", "weight": 4, "check_type": "deterministic", "check_function": "check_risk_matching", "threshold": 100, "p_level": "P0"},
+        {"id": "A2", "name": "金额与期限匹配", "weight": 2, "check_type": "deterministic", "check_function": "check_amount_term_matching", "threshold": 100, "p_level": "P1"},
+        {"id": "A3", "name": "收益表述合规", "weight": 3, "check_type": "deterministic", "check_function": "check_return_claim_compliance", "threshold": 100, "p_level": "P0"},
+        {"id": "A4", "name": "风险揭示完整", "weight": 2, "check_type": "deterministic", "check_function": "check_risk_disclosure", "threshold": 98, "p_level": "P1"},
+        {"id": "A5", "name": "高收益诉求处理", "weight": 2, "check_type": "deterministic", "check_function": "check_high_return_handling", "threshold": 90, "p_level": "P1"},
+        {"id": "A6", "name": "交易与业务边界", "weight": 2, "check_type": "deterministic", "check_function": "check_transaction_boundary", "threshold": 100, "p_level": "P0"},
+        {"id": "A7", "name": "合规营销话术", "weight": 2, "check_type": "hybrid", "check_function": "check_marketing_compliance", "threshold": 90, "p_level": "P2"},
+        {"id": "A8", "name": "人工接管触发", "weight": 1, "check_type": "deterministic", "check_function": "check_handoff_trigger", "threshold": 80, "p_level": "P2"}
+      ]
+    },
+    "B_rag_faithfulness": {
+      "name": "RAG 忠实度与数据质量",
+      "weight": 14,
+      "description": "产品事实准确、检索相关、无幻觉、可溯源",
+      "min_pass_score": 88,
+      "indicators": [
+        {"id": "B1", "name": "产品事实忠实度", "weight": 3, "check_type": "deterministic", "check_function": "check_product_faithfulness", "threshold": 100, "p_level": "P0"},
+        {"id": "B2", "name": "Context Precision", "weight": 2, "check_type": "deterministic", "check_function": "check_context_precision", "threshold": 85, "p_level": "P2"},
+        {"id": "B3", "name": "Context Recall", "weight": 2, "check_type": "deterministic", "check_function": "check_context_recall", "threshold": 90, "p_level": "P2"},
+        {"id": "B4", "name": "答案相关性", "weight": 2, "check_type": "llm_judge", "check_function": "judge_answer_relevance", "threshold": 85, "p_level": "P2"},
+        {"id": "B5", "name": "可溯源展示", "weight": 2, "check_type": "deterministic", "check_function": "check_traceability", "threshold": 80, "p_level": "P2"},
+        {"id": "B6", "name": "数据新鲜度", "weight": 1, "check_type": "deterministic", "check_function": "check_data_freshness", "threshold": 70, "p_level": "P2"},
+        {"id": "B7", "name": "无幻觉兜底", "weight": 2, "check_type": "deterministic", "check_function": "check_no_hallucination_fallback", "threshold": 90, "p_level": "P1"}
+      ]
+    },
+    "C_personalized_allocation": {
+      "name": "个性化资产配置能力",
+      "weight": 12,
+      "description": "千人千面、组合构建、风险收益解释、再平衡",
+      "min_pass_score": 85,
+      "indicators": [
+        {"id": "C1", "name": "画像完整性识别", "weight": 2, "check_type": "deterministic", "check_function": "check_profile_completeness", "threshold": 85, "p_level": "P2"},
+        {"id": "C2", "name": "无画像安全处理", "weight": 2, "check_type": "deterministic", "check_function": "check_no_profile_handling", "threshold": 90, "p_level": "P1"},
+        {"id": "C3", "name": "千人千面差异", "weight": 2, "check_type": "deterministic", "check_function": "check_personalization_diversity", "threshold": 70, "p_level": "P2"},
+        {"id": "C4", "name": "组合构建逻辑", "weight": 2, "check_type": "deterministic", "check_function": "check_allocation_logic", "threshold": 85, "p_level": "P2"},
+        {"id": "C5", "name": "风险收益解释", "weight": 2, "check_type": "hybrid", "check_function": "check_risk_return_explanation", "threshold": 80, "p_level": "P2"},
+        {"id": "C6", "name": "动态调整建议", "weight": 1, "check_type": "deterministic", "check_function": "check_rebalance_suggestion", "threshold": 60, "p_level": "P2"},
+        {"id": "C7", "name": "替代方案能力", "weight": 1, "check_type": "deterministic", "check_function": "check_alternative_path", "threshold": 80, "p_level": "P2"}
+      ]
+    },
+    "D_agent_task": {
+      "name": "智能体任务能力",
+      "weight": 12,
+      "description": "意图识别、多轮记忆、工具调用、行动闭环",
+      "min_pass_score": 85,
+      "indicators": [
+        {"id": "D1", "name": "意图识别准确率", "weight": 2, "check_type": "deterministic", "check_function": "check_intent_accuracy", "threshold": 92, "p_level": "P1"},
+        {"id": "D2", "name": "多轮记忆一致性", "weight": 2, "check_type": "deterministic", "check_function": "check_multi_turn_memory", "threshold": 85, "p_level": "P2"},
+        {"id": "D3", "name": "澄清问题效率", "weight": 1, "check_type": "llm_judge", "check_function": "judge_clarification_efficiency", "threshold": 70, "p_level": "P2"},
+        {"id": "D4", "name": "工具调用正确性", "weight": 2, "check_type": "deterministic", "check_function": "check_tool_call_correctness", "threshold": 85, "p_level": "P2"},
+        {"id": "D5", "name": "行动闭环", "weight": 2, "check_type": "deterministic", "check_function": "check_action_closure", "threshold": 80, "p_level": "P2"},
+        {"id": "D6", "name": "冲突处理能力", "weight": 1, "check_type": "deterministic", "check_function": "check_conflict_handling", "threshold": 80, "p_level": "P2"},
+        {"id": "D7", "name": "降级智能", "weight": 1, "check_type": "deterministic", "check_function": "check_degradation", "threshold": 80, "p_level": "P2"},
+        {"id": "D8", "name": "agent_chain 透明度", "weight": 1, "check_type": "deterministic", "check_function": "check_agent_chain_transparency", "threshold": 90, "p_level": "P1"}
+      ]
+    },
+    "E_persona_dialogue": {
+      "name": "对话质量与三模式适配",
+      "weight": 10,
+      "description": "语言风格、人群适配、解释方式、情感化交互",
+      "min_pass_score": 85,
+      "indicators": [
+        {"id": "E1", "name": "金融概念准确", "weight": 2, "check_type": "hybrid", "check_function": "check_financial_accuracy", "threshold": 90, "p_level": "P2"},
+        {"id": "E2", "name": "简洁有用", "weight": 1, "check_type": "deterministic", "check_function": "check_conciseness", "threshold": 80, "p_level": "P2"},
+        {"id": "E3", "name": "情绪识别与安抚", "weight": 1, "check_type": "deterministic", "check_function": "check_emotion_handling", "threshold": 85, "p_level": "P2"},
+        {"id": "E4", "name": "经典模式风格", "weight": 2, "check_type": "llm_judge", "check_function": "judge_classic_style", "threshold": 80, "p_level": "P1"},
+        {"id": "E5", "name": "关怀模式风格", "weight": 2, "check_type": "llm_judge", "check_function": "judge_senior_style", "threshold": 80, "p_level": "P1"},
+        {"id": "E6", "name": "青春模式风格", "weight": 2, "check_type": "llm_judge", "check_function": "judge_youth_style", "threshold": 80, "p_level": "P1"}
+      ]
+    },
+    "F_followup_linkage": {
+      "name": "follow-up 与推荐页联动",
+      "weight": 8,
+      "description": "猜你想问、去重、上下文延续、页面协同",
+      "min_pass_score": 85,
+      "indicators": [
+        {"id": "F1", "name": "follow-up 相关性", "weight": 2, "check_type": "hybrid", "check_function": "check_followup_relevance", "threshold": 90, "p_level": "P1"},
+        {"id": "F2", "name": "follow-up 场景覆盖", "weight": 1, "check_type": "deterministic", "check_function": "check_followup_coverage", "threshold": 80, "p_level": "P2"},
+        {"id": "F3", "name": "同话题去重", "weight": 1, "check_type": "deterministic", "check_function": "check_followup_dedup", "threshold": 95, "p_level": "P1"},
+        {"id": "F4", "name": "下一步任务推进", "weight": 1, "check_type": "deterministic", "check_function": "check_followup_task_advancement", "threshold": 90, "p_level": "P2"},
+        {"id": "F5", "name": "风险测评入口", "weight": 1, "check_type": "deterministic", "check_function": "check_risk_quiz_entry", "threshold": 90, "p_level": "P2"},
+        {"id": "F6", "name": "chat 到推荐页沉淀", "weight": 1, "check_type": "deterministic", "check_function": "check_chat_to_recommend", "threshold": 80, "p_level": "P1"},
+        {"id": "F7", "name": "推荐页到 chat 追问", "weight": 1, "check_type": "deterministic", "check_function": "check_recommend_to_chat", "threshold": 80, "p_level": "P1"}
+      ]
+    },
+    "G_multimodal_accessibility": {
+      "name": "多模态与适老化体验",
+      "weight": 7,
+      "description": "图片理解、语音、老人可用性、无障碍",
+      "min_pass_score": 80,
+      "indicators": [
+        {"id": "G1", "name": "图片理解能力", "weight": 2, "check_type": "deterministic", "check_function": "check_image_understanding", "threshold": 70, "p_level": "P2"},
+        {"id": "G2", "name": "图片风险提示", "weight": 1, "check_type": "deterministic", "check_function": "check_image_risk_warning", "threshold": 70, "p_level": "P2"},
+        {"id": "G3", "name": "语音输入可用", "weight": 1, "check_type": "deterministic", "check_function": "check_voice_input", "threshold": 60, "p_level": "P2"},
+        {"id": "G4", "name": "语音播报", "weight": 1, "check_type": "deterministic", "check_function": "check_voice_output", "threshold": 60, "p_level": "P2"},
+        {"id": "G5", "name": "老人可用性", "weight": 1, "check_type": "deterministic", "check_function": "check_senior_usability", "threshold": 80, "p_level": "P2"},
+        {"id": "G6", "name": "多模态日志", "weight": 1, "check_type": "deterministic", "check_function": "check_multimodal_logging", "threshold": 70, "p_level": "P2"}
+      ]
+    },
+    "H_security_audit": {
+      "name": "安全、隐私与审计",
+      "weight": 8,
+      "description": "注入防御、数据最小化、日志完整、可追责",
+      "min_pass_score": 85,
+      "indicators": [
+        {"id": "H1", "name": "Prompt 注入防御", "weight": 2, "check_type": "deterministic", "check_function": "check_injection_defense", "threshold": 90, "p_level": "P0"},
+        {"id": "H2", "name": "敏感信息保护", "weight": 1, "check_type": "deterministic", "check_function": "check_sensitive_info_protection", "threshold": 100, "p_level": "P0"},
+        {"id": "H3", "name": "数据最小化", "weight": 1, "check_type": "deterministic", "check_function": "check_data_minimization", "threshold": 80, "p_level": "P2"},
+        {"id": "H4", "name": "模型调用日志完整性", "weight": 2, "check_type": "deterministic", "check_function": "check_model_log_integrity", "threshold": 90, "p_level": "P1"},
+        {"id": "H5", "name": "错误审计日志", "weight": 1, "check_type": "deterministic", "check_function": "check_error_audit_log", "threshold": 80, "p_level": "P2"},
+        {"id": "H6", "name": "评分可复现", "weight": 1, "check_type": "deterministic", "check_function": "check_score_reproducibility", "threshold": 100, "p_level": "P2"}
+      ]
+    },
+    "I_engineering_reliability": {
+      "name": "工程质量与可靠性",
+      "weight": 7,
+      "description": "稳定性、性能、降级、可维护性、测试覆盖",
+      "min_pass_score": 80,
+      "indicators": [
+        {"id": "I1", "name": "核心页面无错误", "weight": 1, "check_type": "deterministic", "check_function": "check_js_errors", "threshold": 100, "p_level": "P2"},
+        {"id": "I2", "name": "API 稳定性", "weight": 1, "check_type": "deterministic", "check_function": "check_api_stability", "threshold": 90, "p_level": "P2"},
+        {"id": "I3", "name": "响应时间", "weight": 1, "check_type": "deterministic", "check_function": "check_response_time", "threshold": 80, "p_level": "P2"},
+        {"id": "I4", "name": "前端状态一致", "weight": 1, "check_type": "deterministic", "check_function": "check_frontend_state_consistency", "threshold": 80, "p_level": "P2"},
+        {"id": "I5", "name": "测试覆盖", "weight": 1, "check_type": "deterministic", "check_function": "check_test_coverage", "threshold": 80, "p_level": "P2"},
+        {"id": "I6", "name": "可维护性", "weight": 1, "check_type": "deterministic", "check_function": "check_maintainability", "threshold": 80, "p_level": "P2"},
+        {"id": "I7", "name": "降级体验", "weight": 1, "check_type": "deterministic", "check_function": "check_degradation_experience", "threshold": 80, "p_level": "P2"}
+      ]
+    },
+    "J_deliverables": {
+      "name": "交付材料与演示可信度",
+      "weight": 4,
+      "description": "简介、技术文档、视频、原型、日志证据",
+      "min_pass_score": 80,
+      "indicators": [
+        {"id": "J1", "name": "作品简介", "weight": 0.5, "check_type": "deterministic", "check_function": "check_project_intro", "threshold": 80, "p_level": "P2"},
+        {"id": "J2", "name": "团队介绍", "weight": 0.5, "check_type": "deterministic", "check_function": "check_team_intro", "threshold": 80, "p_level": "P2"},
+        {"id": "J3", "name": "技术方案文档", "weight": 1, "check_type": "deterministic", "check_function": "check_tech_doc", "threshold": 80, "p_level": "P2"},
+        {"id": "J4", "name": "功能演示视频", "weight": 1, "check_type": "deterministic", "check_function": "check_demo_video", "threshold": 70, "p_level": "P2"},
+        {"id": "J5", "name": "系统原型可运行", "weight": 0.5, "check_type": "deterministic", "check_function": "check_prototype_runnable", "threshold": 90, "p_level": "P2"},
+        {"id": "J6", "name": "模型调用日志可提交", "weight": 0.5, "check_type": "deterministic", "check_function": "check_logs_submittable", "threshold": 80, "p_level": "P2"}
+      ]
+    }
+  }
+}

@@ -1,0 +1,1189 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "轻舟模拟银行API",
+    "version": "2.0.0",
+    "description": "全部数据与业务为模拟；human和agent使用不同凭证。无真实银行接入，模拟日期仅由演示者CLI推进。"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:18766"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "模拟服务健康状态",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "本接口合同",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sim-bank/workspaces": {
+      "post": {
+        "summary": "初始化独立模拟工作区，凭证和验证码仅返回一次",
+        "description": "独立模拟环境。",
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sim-bank/capabilities": {
+      "get": {
+        "summary": "能力与边界",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/snapshot": {
+      "get": {
+        "summary": "同版本账户快照",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            },
+            "description": "月报与快照默认2026-09；流水省略时返回所有模拟记录。"
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/transactions": {
+      "get": {
+        "summary": "原始模拟流水",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            },
+            "description": "月报与快照默认2026-09；流水省略时返回所有模拟记录。"
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/analysis": {
+      "get": {
+        "summary": "单月消费统计",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            },
+            "description": "月报与快照默认2026-09；流水省略时返回所有模拟记录。"
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/anomalies": {
+      "get": {
+        "summary": "可追溯的异常提示",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/periodic-charges": {
+      "get": {
+        "summary": "周期扣费证据",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/mandates": {
+      "get": {
+        "summary": "银行侧模拟代扣协议",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/products": {
+      "get": {
+        "summary": "模拟产品及画像匹配理由",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/profile": {
+      "get": {
+        "summary": "模拟风险画像",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "明确确认后修改模拟风险画像",
+        "description": "用户专用凭证；Agent凭证返回403。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sim-bank/holdings": {
+      "get": {
+        "summary": "模拟持仓本金",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/orders": {
+      "get": {
+        "summary": "订单及结算状态",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/audit": {
+      "get": {
+        "summary": "脱敏审计事件",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/customer-archive": {
+      "get": {
+        "summary": "完整客户档案及覆盖、资金核验结果",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/data-contract": {
+      "get": {
+        "summary": "全领域字段字典、来源与业务边界",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/annual-analysis": {
+      "get": {
+        "summary": "封存及活动银行流水年度汇总",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "schema": {
+              "type": "integer",
+              "minimum": 2025,
+              "maximum": 2100
+            },
+            "description": "默认2025；完整2025年度样本，2026仅截至模拟日期。"
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/products/compare": {
+      "post": {
+        "summary": "比较指定模拟产品",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompareRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sim-bank/operations/prepare": {
+      "post": {
+        "summary": "冻结具体操作并准备确认",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sim-bank/operations/{operation_id}": {
+      "get": {
+        "summary": "查询真实模拟操作状态",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/operations/{operation_id}/verify": {
+      "post": {
+        "summary": "绑定具体红色操作的模拟额外验证",
+        "description": "用户专用凭证；Agent凭证返回403。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/operations/{operation_id}/confirm": {
+      "post": {
+        "summary": "经用户确认后原子执行业务",
+        "description": "用户专用凭证；Agent凭证返回403。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/sim-bank/operations/{operation_id}/cancel": {
+      "post": {
+        "summary": "取消尚未提交的操作",
+        "description": "独立模拟环境。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "明确失败或拒绝；不得解释为业务成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmptyRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "PrepareRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "enum": [
+                  "purchase",
+                  "redeem"
+                ]
+              },
+              "account_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "product_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "amount_minor": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000000,
+                "description": "人民币分，禁止浮点和布尔值"
+              },
+              "idempotency_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "action",
+              "account_id",
+              "product_id",
+              "amount_minor",
+              "idempotency_key"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "const": "close_mandate"
+              },
+              "account_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "mandate_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "idempotency_key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "action",
+              "account_id",
+              "mandate_id",
+              "idempotency_key"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ConfirmRequest": {
+        "type": "object",
+        "properties": {
+          "confirmed": {
+            "const": true
+          },
+          "confirmation_digest": {
+            "type": "string"
+          },
+          "verification_token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmed",
+          "confirmation_digest"
+        ],
+        "additionalProperties": false
+      },
+      "VerifyRequest": {
+        "type": "object",
+        "properties": {
+          "verification_code": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          }
+        },
+        "required": [
+          "verification_code"
+        ],
+        "additionalProperties": false
+      },
+      "ProfileRequest": {
+        "type": "object",
+        "properties": {
+          "risk_level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "horizon_days": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3650
+          },
+          "reserve_minor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000000
+          },
+          "confirmed": {
+            "const": true
+          }
+        },
+        "required": [
+          "risk_level",
+          "horizon_days",
+          "reserve_minor",
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "CompareRequest": {
+        "type": "object",
+        "properties": {
+          "product_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "product_ids"
+        ],
+        "additionalProperties": false
+      },
+      "EmptyRequest": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "Operation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "purchase",
+              "redeem",
+              "close_mandate"
+            ]
+          },
+          "permission": {
+            "enum": [
+              "red",
+              "yellow"
+            ]
+          },
+          "state": {
+            "enum": [
+              "pending_confirmation",
+              "succeeded",
+              "pending_settlement",
+              "settled",
+              "cancelled",
+              "expired",
+              "invalidated"
+            ]
+          },
+          "confirmation_digest": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "expires_at": {
+            "type": "number"
+          },
+          "payload": {
+            "type": "object"
+          },
+          "result": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "permission",
+          "state",
+          "confirmation_digest",
+          "version",
+          "expires_at",
+          "payload",
+          "result"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "environment": {
+                "const": "simulation"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

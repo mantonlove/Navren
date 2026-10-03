@@ -1,0 +1,2616 @@
+{
+  "schema_version": 2,
+  "dataset_version": "customer-bank-2026-10-03-v2",
+  "sources": [
+    {
+      "id": "fineract",
+      "name": "Apache Fineract",
+      "version": "4684c663805560d5b6948045224440441fa4485c",
+      "url": "https://github.com/apache/fineract",
+      "license": "Apache-2.0",
+      "use": "核心银行实体概念、字段映射及7条官方示例客户；不是运行完整Fineract"
+    },
+    {
+      "id": "ibm",
+      "name": "IBM Synthetic Data Sets schemas",
+      "version": "4cbd5aab7d8a18600ee0f4b622c225d44918ecd1 / v1.1.0",
+      "url": "https://github.com/IBM/IBM-Synthetic-Data-Sets",
+      "license": "Apache-2.0 repository",
+      "use": "公开数据结构和文档；没有购买或取得其商业完整数据集"
+    },
+    {
+      "id": "openbanking",
+      "name": "Open Banking UK Read Write API",
+      "version": "484a1795680d9852600247878b9fd2bfe584c0aa / 4.0.1",
+      "url": "https://github.com/OpenBankingUK/read-write-api-specs",
+      "license": "Open Licence - reference only",
+      "use": "资源概念参照；不复制客户数据，不把Open Licence PDF当成本仓库代码的Apache许可"
+    },
+    {
+      "id": "qingzhou",
+      "name": "轻舟补充模拟场景",
+      "version": "customer-bank-2026-10-03-v2",
+      "url": "local:simulated_bank/customer_seed.py",
+      "license": "项目原创模拟资料",
+      "use": "全部演示客户、金融产品、现金金额、卡片和场景记录由本项目生成"
+    }
+  ],
+  "entities": [
+    {
+      "table": "bank_branches",
+      "domain": "客户与机构",
+      "schema_reference": "fineract:m_office",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "bank_name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "bank_code",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "city",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "channel",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "customers",
+      "domain": "客户与机构",
+      "schema_reference": "fineract:m_client",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "branch_id",
+          "kind": "@bank_branches",
+          "nullable": false,
+          "target": "bank_branches"
+        },
+        {
+          "name": "display_name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "birth_date",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "nationality",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|closed)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "opened_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "segment",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "identifiers",
+      "domain": "身份与授权",
+      "schema_reference": "fineract:m_client_identifier",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "document_type",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "masked_number",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "issued_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "expires_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "verified",
+          "kind": "bool",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "contacts",
+      "domain": "身份与授权",
+      "schema_reference": "ibm:users",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "kind",
+          "kind": "status(mobile|email|emergency)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "masked_value",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "verified",
+          "kind": "bool",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "preferred",
+          "kind": "bool",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "addresses",
+      "domain": "身份与授权",
+      "schema_reference": "fineract:m_address",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "kind",
+          "kind": "status(home|mailing)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "country",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "city",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "postal_code",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "masked_address",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "relationships",
+      "domain": "客户与机构",
+      "schema_reference": "fineract:m_family_members",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "display_name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "relationship",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "birthday",
+          "kind": "date",
+          "nullable": true,
+          "target": null
+        },
+        {
+          "name": "beneficiary_id",
+          "kind": "@beneficiaries",
+          "nullable": true,
+          "target": "beneficiaries"
+        }
+      ]
+    },
+    {
+      "table": "employment",
+      "domain": "身份与授权",
+      "schema_reference": "ibm:users",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "occupation",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "employer",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "annual_income_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "income_source",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "verified_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "tax_residencies",
+      "domain": "身份与授权",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "country",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "masked_tax_id",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "crs_status",
+          "kind": "status(declared|review_required)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "declared_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "kyc_reviews",
+      "domain": "身份与授权",
+      "schema_reference": "fineract:m_client",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "reviewed_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "expires_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "risk_band",
+          "kind": "status(low|medium|high)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(passed|pending|expired)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "pep",
+          "kind": "bool",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "sanctions_match",
+          "kind": "bool",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "documents",
+      "domain": "身份与授权",
+      "schema_reference": "fineract:m_document",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "document_type",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "title",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "issued_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "expires_on",
+          "kind": "date",
+          "nullable": true,
+          "target": null
+        },
+        {
+          "name": "content_hash",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "storage_ref",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "consents",
+      "domain": "身份与授权",
+      "schema_reference": "openbanking:account-access-consents",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "scope",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|revoked|expired)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "granted_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "expires_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "revoked_on",
+          "kind": "date",
+          "nullable": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "account_details",
+      "domain": "账户与存款",
+      "schema_reference": "fineract:m_savings_account",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "branch_id",
+          "kind": "@bank_branches",
+          "nullable": false,
+          "target": "bank_branches"
+        },
+        {
+          "name": "masked_number",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "type",
+          "kind": "status(current|savings)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|frozen|closed)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "opened_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "interest_bps",
+          "kind": "int",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "overdraft_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "signatories",
+      "domain": "账户与存款",
+      "schema_reference": "openbanking:parties",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "role",
+          "kind": "status(owner|authorized)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|revoked)",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "account_limits",
+      "domain": "账户与存款",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "kind",
+          "kind": "status(transfer_daily|transfer_single|cash_daily)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "limit_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "used_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "effective_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "account_restrictions",
+      "domain": "账户与存款",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "kind",
+          "kind": "status(debit|credit|all)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(proposed|released)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "reason",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "created_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "expires_on",
+          "kind": "date",
+          "nullable": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "deposit_contracts",
+      "domain": "账户与存款",
+      "schema_reference": "fineract:m_deposit_account_term_and_preclosure",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "principal_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "interest_bps",
+          "kind": "int",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "started_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "matures_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|matured|closed)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "interest_paid_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "beneficiaries",
+      "domain": "转账与收款",
+      "schema_reference": "openbanking:beneficiaries",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "display_name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "alias",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "masked_mobile",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "masked_account",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "bank_name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "currency",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "verified",
+          "kind": "bool",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|blocked)",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "transfer_templates",
+      "domain": "转账与收款",
+      "schema_reference": "openbanking:standing-orders",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "beneficiary_id",
+          "kind": "@beneficiaries",
+          "nullable": false,
+          "target": "beneficiaries"
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "amount_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "remark",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "payment_instructions",
+      "domain": "转账与收款",
+      "schema_reference": "ibm:bank_xfers",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "beneficiary_id",
+          "kind": "@beneficiaries",
+          "nullable": false,
+          "target": "beneficiaries"
+        },
+        {
+          "name": "amount_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "currency",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(draft|awaiting_confirmation|failed)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "requested_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "reference",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "failure_reason",
+          "kind": "text",
+          "nullable": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "scheduled_payments",
+      "domain": "转账与收款",
+      "schema_reference": "openbanking:scheduled-payments",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "beneficiary_id",
+          "kind": "@beneficiaries",
+          "nullable": false,
+          "target": "beneficiaries"
+        },
+        {
+          "name": "amount_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "frequency",
+          "kind": "status(once|monthly)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "next_due_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(draft|cancelled)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "end_on",
+          "kind": "date",
+          "nullable": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "split_bills",
+      "domain": "转账与收款",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "title",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "total_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(draft|cancelled)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "due_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "split_participants",
+      "domain": "转账与收款",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "split_id",
+          "kind": "@split_bills",
+          "nullable": false,
+          "target": "split_bills"
+        },
+        {
+          "name": "display_name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "share_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "paid_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(unrequested|cancelled)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "request_ref",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "merchants",
+      "domain": "账单与订阅",
+      "schema_reference": "ibm:trans",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "mcc",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "category",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "channel",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "archived_transactions",
+      "domain": "账单与订阅",
+      "schema_reference": "fineract:m_savings_account_transaction",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "occurred_at",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "merchant_id",
+          "kind": "@merchants",
+          "nullable": false,
+          "target": "merchants"
+        },
+        {
+          "name": "amount_minor",
+          "kind": "positive",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "delta_minor",
+          "kind": "signed",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "kind",
+          "kind": "status(income|expense|refund|transfer)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "category",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "reference",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "statement_periods",
+      "domain": "账单与订阅",
+      "schema_reference": "openbanking:statements",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "period_start",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "period_end",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "opening_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "closing_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "credits_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "debits_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(complete)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "coverage",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "subscriptions",
+      "domain": "账单与订阅",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "mandate_id",
+          "kind": "@mandates",
+          "nullable": false,
+          "target": "mandates"
+        },
+        {
+          "name": "merchant_id",
+          "kind": "@merchants",
+          "nullable": false,
+          "target": "merchants"
+        },
+        {
+          "name": "plan_name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "amount_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "cycle",
+          "kind": "status(monthly|yearly)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "next_renewal_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "merchant_status",
+          "kind": "status(active|cancelled)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "cancellation_route",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "subscription_events",
+      "domain": "账单与订阅",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "subscription_id",
+          "kind": "@subscriptions",
+          "nullable": false,
+          "target": "subscriptions"
+        },
+        {
+          "name": "event_type",
+          "kind": "status(renewed|reminder|cancellation_requested)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "occurred_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(recorded|draft)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "amount_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "cards",
+      "domain": "卡片与信用",
+      "schema_reference": "ibm:cards",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "type",
+          "kind": "status(debit|credit)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "network",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "last_four",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|lost|expired)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "issued_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "expires_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "credit_limit_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "outstanding_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "card_controls",
+      "domain": "卡片与信用",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "card_id",
+          "kind": "@cards",
+          "nullable": false,
+          "target": "cards"
+        },
+        {
+          "name": "control_type",
+          "kind": "status(online|overseas|contactless|single_limit)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "enabled",
+          "kind": "bool",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "limit_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "updated_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "card_applications",
+      "domain": "卡片与信用",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "card_id",
+          "kind": "@cards",
+          "nullable": true,
+          "target": "cards"
+        },
+        {
+          "name": "requested_type",
+          "kind": "status(debit|credit)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "requested_limit_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(issued|draft|declined)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "requested_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "decision_reason",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "card_limit_requests",
+      "domain": "卡片与信用",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "card_id",
+          "kind": "@cards",
+          "nullable": false,
+          "target": "cards"
+        },
+        {
+          "name": "requested_limit_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(draft|declined)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "requested_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "reason",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "card_events",
+      "domain": "卡片与信用",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "card_id",
+          "kind": "@cards",
+          "nullable": false,
+          "target": "cards"
+        },
+        {
+          "name": "event_type",
+          "kind": "status(issued|lost|blocked|unblocked)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "occurred_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(recorded)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "reason",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "credit_statements",
+      "domain": "卡片与信用",
+      "schema_reference": "openbanking:statements",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "card_id",
+          "kind": "@cards",
+          "nullable": false,
+          "target": "cards"
+        },
+        {
+          "name": "period_start",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "period_end",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "total_due_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "minimum_due_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "due_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "paid_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(open|paid)",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "credit_statement_lines",
+      "domain": "卡片与信用",
+      "schema_reference": "ibm:trans",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "statement_id",
+          "kind": "@credit_statements",
+          "nullable": false,
+          "target": "credit_statements"
+        },
+        {
+          "name": "merchant_id",
+          "kind": "@merchants",
+          "nullable": false,
+          "target": "merchants"
+        },
+        {
+          "name": "occurred_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "amount_minor",
+          "kind": "positive",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "kind",
+          "kind": "status(purchase|fee|refund)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "reference",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "loans",
+      "domain": "贷款与负债",
+      "schema_reference": "fineract:m_loan",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "repayment_account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "loan_type",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "original_principal_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "outstanding_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "annual_rate_bps",
+          "kind": "int",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "started_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "matures_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|closed)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "overdue_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "loan_installments",
+      "domain": "贷款与负债",
+      "schema_reference": "fineract:m_loan_repayment_schedule",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "loan_id",
+          "kind": "@loans",
+          "nullable": false,
+          "target": "loans"
+        },
+        {
+          "name": "due_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "principal_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "interest_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "fees_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "paid_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(paid|scheduled|overdue)",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "loan_repayments",
+      "domain": "贷款与负债",
+      "schema_reference": "fineract:m_loan_transaction",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "loan_id",
+          "kind": "@loans",
+          "nullable": false,
+          "target": "loans"
+        },
+        {
+          "name": "installment_id",
+          "kind": "@loan_installments",
+          "nullable": false,
+          "target": "loan_installments"
+        },
+        {
+          "name": "occurred_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "amount_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(archived)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "external_reference",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "collateral",
+      "domain": "贷款与负债",
+      "schema_reference": "fineract:m_loan_collateral",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "loan_id",
+          "kind": "@loans",
+          "nullable": false,
+          "target": "loans"
+        },
+        {
+          "name": "description",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "value_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "valued_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "product_terms",
+      "domain": "理财与适当性",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "product_id",
+          "kind": "@products",
+          "nullable": false,
+          "target": "products"
+        },
+        {
+          "name": "issuer",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "asset_class",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "fee_bps",
+          "kind": "int",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "risk_disclosure",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "valuation_mode",
+          "kind": "status(principal_only)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "document_id",
+          "kind": "@documents",
+          "nullable": false,
+          "target": "documents"
+        }
+      ]
+    },
+    {
+      "table": "risk_assessments",
+      "domain": "理财与适当性",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "assessed_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "expires_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "risk_level",
+          "kind": "level",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "horizon_days",
+          "kind": "int",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "reserve_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(initial|superseded|current)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "answers_json",
+          "kind": "json",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "wealth_goals",
+      "domain": "理财与适当性",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "target_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "saved_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "due_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "priority",
+          "kind": "int",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|completed)",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "budgets",
+      "domain": "理财与适当性",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "period",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "category",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "limit_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|archived)",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "advice_records",
+      "domain": "理财与适当性",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "assessment_id",
+          "kind": "@risk_assessments",
+          "nullable": false,
+          "target": "risk_assessments"
+        },
+        {
+          "name": "created_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(draft)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "recommendation_json",
+          "kind": "json",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "rationale",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "liquidity_floor_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "service_providers",
+      "domain": "跨场景任务",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "service_type",
+          "kind": "status(flowers|cake)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "city",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "booking_mode",
+          "kind": "status(simulation_only)",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "service_quotes",
+      "domain": "跨场景任务",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "provider_id",
+          "kind": "@service_providers",
+          "nullable": false,
+          "target": "service_providers"
+        },
+        {
+          "name": "item",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "price_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "valid_until",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "currency",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(illustrative)",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "orchestration_tasks",
+      "domain": "跨场景任务",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "title",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "budget_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "due_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(draft|cancelled)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "approval_policy",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "task_steps",
+      "domain": "跨场景任务",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "task_id",
+          "kind": "@orchestration_tasks",
+          "nullable": false,
+          "target": "orchestration_tasks"
+        },
+        {
+          "name": "sequence",
+          "kind": "int",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "action",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "amount_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(planned|cancelled)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "dependency_id",
+          "kind": "@task_steps",
+          "nullable": true,
+          "target": "task_steps"
+        }
+      ]
+    },
+    {
+      "table": "fund_holds",
+      "domain": "跨场景任务",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "account_id",
+          "kind": "@accounts",
+          "nullable": false,
+          "target": "accounts"
+        },
+        {
+          "name": "task_id",
+          "kind": "@orchestration_tasks",
+          "nullable": false,
+          "target": "orchestration_tasks"
+        },
+        {
+          "name": "amount_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(proposed|released)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "created_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "expires_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "reason",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "service_reservations",
+      "domain": "跨场景任务",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "task_id",
+          "kind": "@orchestration_tasks",
+          "nullable": false,
+          "target": "orchestration_tasks"
+        },
+        {
+          "name": "quote_id",
+          "kind": "@service_quotes",
+          "nullable": false,
+          "target": "service_quotes"
+        },
+        {
+          "name": "delivery_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(draft|cancelled)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "amount_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "external_reference",
+          "kind": "text",
+          "nullable": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "notifications",
+      "domain": "提醒与服务",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "kind",
+          "kind": "status(subscription|loan_due|goal|security)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "related_entity",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "due_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(draft|read)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "channel",
+          "kind": "status(in_app)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "message",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "disputes",
+      "domain": "提醒与服务",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "transaction_id",
+          "kind": "@transactions",
+          "nullable": false,
+          "target": "transactions"
+        },
+        {
+          "name": "reason",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "opened_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(draft|resolved)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "requested_refund_minor",
+          "kind": "money",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "support_cases",
+      "domain": "提醒与服务",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "topic",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "opened_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(draft|closed)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "resolution",
+          "kind": "text",
+          "nullable": true,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "security_devices",
+      "domain": "安全与审计",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "device_type",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(registered|revoked)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "registered_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "last_seen_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "login_events",
+      "domain": "安全与审计",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "device_id",
+          "kind": "@security_devices",
+          "nullable": false,
+          "target": "security_devices"
+        },
+        {
+          "name": "occurred_at",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "result",
+          "kind": "status(success|denied)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "channel",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "reason",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    },
+    {
+      "table": "permission_grants",
+      "domain": "安全与审计",
+      "schema_reference": "qingzhou:extension",
+      "record_origin": "qingzhou_synthetic",
+      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "columns": [
+        {
+          "name": "customer_id",
+          "kind": "@customers",
+          "nullable": false,
+          "target": "customers"
+        },
+        {
+          "name": "scope",
+          "kind": "text",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "permission",
+          "kind": "status(read|prepare)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "status",
+          "kind": "status(active|revoked)",
+          "nullable": false,
+          "target": null
+        },
+        {
+          "name": "expires_on",
+          "kind": "date",
+          "nullable": false,
+          "target": null
+        }
+      ]
+    }
+  ],
+  "null_means": "未知或不适用，不表示零；有无关系由覆盖报告明确说明",
+  "scope": "一个虚构零售银行客户及银行可知的账户、借贷、理财与服务信息；不模拟整个银行内部数据仓库",
+  "excluded": [
+    "密钥/支付密码/CVV/完整身份证号",
+    "银行内部资金池与总账全库",
+    "监管报送全库",
+    "不在银行托管的外部资产",
+    "真实医疗/司法/征信报告"
+  ],
+  "money": "人民币分；只读信用/贷款档案不并入活期现金账本；持仓以本金计量",
+  "future_change": "已知范围覆盖完整；新增业务通过版本化迁移扩展，不承诺永不调整结构"
+}

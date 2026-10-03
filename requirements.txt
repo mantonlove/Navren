@@ -1,0 +1,2 @@
+# 元景语音 WebSocket 客户端；文字服务可在未安装时启动。
+websocket-client==1.9.0

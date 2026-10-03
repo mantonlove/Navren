@@ -1,0 +1,32 @@
+{
+  "evidence_level": "placeholder",
+  "title": "部署方案",
+  "description": "轻舟系统在银行环境中的部署架构与接入方案",
+  "status": "待构建",
+  "data": {
+    "deployment_modes": [],
+    "architecture": {
+      "has_architecture_diagram": false,
+      "supports_private_deployment": false,
+      "supports_intranet": false,
+      "data_residency_plan": ""
+    },
+    "integration": {
+      "product_data_integration": "",
+      "account_system_integration": "",
+      "market_data_source": "",
+      "crm_integration": ""
+    },
+    "sla": {
+      "availability_target": null,
+      "response_time_p95": null,
+      "disaster_recovery_rto": null
+    }
+  },
+  "required_fields": [
+    "至少一种明确的部署形态（本地/私有化/银行内网/云API）",
+    "产品数据接入方案",
+    "SLA 草案"
+  ],
+  "collection_guide": "参考银行IT架构规范，设计安全合规的部署方案"
+}

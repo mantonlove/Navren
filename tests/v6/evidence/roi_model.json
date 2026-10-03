@@ -1,0 +1,26 @@
+{
+  "evidence_level": "placeholder",
+  "title": "ROI 模型",
+  "description": "量化轻舟为银行带来的投资回报率测算",
+  "status": "待构建",
+  "data": {
+    "revenue_sources": [],
+    "cost_savings": [],
+    "metrics": {
+      "customer_acquisition_cost": null,
+      "customer_lifetime_value": null,
+      "conversion_rate_improvement": null,
+      "customer_service_cost_reduction": null,
+      "customer_manager_time_saved_per_day_min": null,
+      "annual_roi_pct": null,
+      "payback_period_months": null
+    }
+  },
+  "required_fields": [
+    "annual_roi_pct",
+    "payback_period_months",
+    "customer_service_cost_reduction",
+    "customer_manager_time_saved_per_day_min"
+  ],
+  "collection_guide": "需要与试点银行沟通获取业务基线数据，或使用行业公开数据做保守估算"
+}

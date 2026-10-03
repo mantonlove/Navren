@@ -1,0 +1,20 @@
+{
+  "evidence_level": "placeholder",
+  "title": "银行客户经理反馈",
+  "description": "至少5名客户经理或银行业务人员对轻舟系统的使用反馈",
+  "status": "待收集",
+  "target_sample": "5名以上客户经理或银行业务人员",
+  "data": {
+    "feedbacks": [],
+    "summary": "尚未收集银行从业人员反馈。建议联系银行客户经理进行试用和访谈。"
+  },
+  "required_fields": {
+    "sample_size": 0,
+    "target": "≥5",
+    "time_saved_pct": null,
+    "compliance_usability_pct": null,
+    "willing_to_use_pct": null,
+    "reduces_repetitive_queries_pct": null
+  },
+  "collection_guide": "参考 项目市场化生存评价体系-最高标准.md §14.2 银行业务价值实验"
+}

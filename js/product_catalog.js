@@ -1,0 +1,2 @@
+const PRODUCT_CATALOG = {"保险理财": {"var": "P_保险", "file": "products_保险.js", "kb": 55.154296875}, "信托": {"var": "P_信托", "file": "products_信托.js", "kb": 14.6328125}, "债券": {"var": "P_债券", "file": "products_债券.js", "kb": 54.015625}, "公募基金": {"var": "P_公募", "file": "products_公募.js", "kb": 262.333984375}, "券商资管": {"var": "P_券商", "file": "products_券商.js", "kb": 15.4111328125}, "银行理财": {"var": "P_银行", "file": "products_银行.js", "kb": 281.521484375}};
+const PRODUCT_TOTAL = 1260;

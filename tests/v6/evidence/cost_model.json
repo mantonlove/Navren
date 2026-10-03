@@ -1,0 +1,23 @@
+{
+  "evidence_level": "placeholder",
+  "title": "成本模型",
+  "description": "轻舟系统的单位经济成本测算",
+  "status": "待构建",
+  "data": {
+    "per_conversation_cost": null,
+    "per_user_monthly_cost": null,
+    "deployment_cost_per_bank": null,
+    "maintenance_cost_monthly": null,
+    "compliance_audit_cost": null,
+    "model_api_cost_per_1k_tokens": null,
+    "estimated_monthly_active_users": null,
+    "gross_margin_pct": null
+  },
+  "required_fields": [
+    "per_conversation_cost",
+    "per_user_monthly_cost",
+    "deployment_cost_per_bank",
+    "gross_margin_pct"
+  ],
+  "collection_guide": "基于 deepseek-v3_2 API 定价 + 估算的服务器/运维人力成本构建模型"
+}

@@ -1,0 +1,96 @@
+{
+  "upstream_manifest": "upstream-manifest.json",
+  "attribution": "../THIRD_PARTY_NOTICES.md",
+  "files": [
+    {
+      "path": "upstream-manifest.json",
+      "bytes": 10483,
+      "sha256": "2e7a6dd1c9bcfc585fbd47dbbb6091f85b6754f2e16db44fa4fade90d6c2ddf0"
+    },
+    {
+      "path": "open-banking-resources.json",
+      "bytes": 1056,
+      "sha256": "266bec92c276c2551b0a926ad183ee7e81a42f68dad0f3fc7397e281b1f7a24b"
+    },
+    {
+      "path": "fineract-client-examples.json",
+      "bytes": 1160,
+      "sha256": "b2cbf9e7d6045f83014d35da64f715a51e1a3e7b6b5c108b316309aec08c2afc"
+    },
+    {
+      "path": "FINERACT-LICENSE_SOURCE",
+      "bytes": 12315,
+      "sha256": "7e3b13f42d05b1da02165c5b0e200c9496a3e22f5642afa6b6909f3b1298cc98"
+    },
+    {
+      "path": "IBM-LICENSE",
+      "bytes": 11358,
+      "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+    },
+    {
+      "path": "IBM-README.md",
+      "bytes": 3146,
+      "sha256": "ec74a11d06a746efec3b942bbfc1216e5aa0acf9717d710e1080675f3b236989"
+    },
+    {
+      "path": "fineract-selected-models.json",
+      "bytes": 45323,
+      "sha256": "207305ab75c1a3e8e09491028a087743bcb04ee16fdab6078d99aa2b29e32745"
+    },
+    {
+      "path": "FINERACT-NOTICE_SOURCE",
+      "bytes": 169,
+      "sha256": "3e9b097df85708ed2f323ec56c2692e2dcce686a5e30969c5c096caae6fd05ca"
+    },
+    {
+      "path": "ibm/schemas/Payment Cards/v1.1.0/trans.md",
+      "bytes": 5207,
+      "sha256": "4a2ca9b7297aef0344ca09609e939750401d0a82794b0637ab3adbcfcd3c7427"
+    },
+    {
+      "path": "ibm/schemas/Payment Cards/v1.1.0/README.md",
+      "bytes": 4342,
+      "sha256": "df3ccba00822a03928750176b88b26ed6f2063cba1bf92c2482bd5d805e85a32"
+    },
+    {
+      "path": "ibm/schemas/Payment Cards/v1.1.0/users.md",
+      "bytes": 2239,
+      "sha256": "70bb4b6a18a52f2e3db49a0d6f6f755ff0e68f48dc81dfadaacd9054c4da8ab2"
+    },
+    {
+      "path": "ibm/schemas/Payment Cards/v1.1.0/cards.md",
+      "bytes": 2758,
+      "sha256": "1b3059543ae7f4f361fb668dc05e97add7c678fad6644df385459c5fd88ef16b"
+    },
+    {
+      "path": "ibm/schemas/Core Banking and Money Laundering/v1.1.0/bank_xfers.md",
+      "bytes": 4472,
+      "sha256": "9a78886a8dda30819cb2d4b284ee5b1a55576184cfd3eda5415c50f63b9d510d"
+    },
+    {
+      "path": "ibm/schemas/Core Banking and Money Laundering/v1.1.0/banks.md",
+      "bytes": 1040,
+      "sha256": "43e9e50b3f2860023f22e11d20c5abbdfda8eb47ef69273a16ca33fca12ed8e0"
+    },
+    {
+      "path": "ibm/schemas/Core Banking and Money Laundering/v1.1.0/liquid_accts_companies.md",
+      "bytes": 2024,
+      "sha256": "c748ffd124a89ea9207e4a3935877bb9582ec8fa42e62024381f213e87d44e10"
+    },
+    {
+      "path": "ibm/schemas/Core Banking and Money Laundering/v1.1.0/liquid_accts_people.md",
+      "bytes": 1995,
+      "sha256": "b86c8c5353600950d795cd3de20e1a255961c5b9a7f1dea540bb112faa33cbd3"
+    },
+    {
+      "path": "ibm/schemas/Core Banking and Money Laundering/v1.1.0/README.md",
+      "bytes": 3650,
+      "sha256": "0bcd939a27810251b36b4080b0ff35c4d27d7e5f462ddafaafcfe31555947eb7"
+    },
+    {
+      "path": "ibm/schemas/Core Banking and Money Laundering/v1.1.0/b2b.md",
+      "bytes": 2841,
+      "sha256": "772c9d6e366c16384116d198e3ca9bb686744ff70e0a050d3a88d5920227b723"
+    }
+  ]
+}

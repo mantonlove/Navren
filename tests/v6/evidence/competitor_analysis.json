@@ -1,0 +1,38 @@
+{
+  "evidence_level": "placeholder",
+  "title": "竞品分析",
+  "description": "与银行现有APP理财模块、通用大模型、客户经理工具等的差异化分析",
+  "status": "待构建",
+  "data": {
+    "competitors": [
+      {
+        "name": "招商银行APP摩羯智投",
+        "type": "银行智能投顾",
+        "strengths": [],
+        "weaknesses": [],
+        "differentiation": ""
+      },
+      {
+        "name": "ChatGPT/通用大模型",
+        "type": "通用AI助手",
+        "strengths": [],
+        "weaknesses": [],
+        "differentiation": ""
+      },
+      {
+        "name": "传统客户经理服务",
+        "type": "人工服务",
+        "strengths": [],
+        "weaknesses": [],
+        "differentiation": ""
+      }
+    ],
+    "summary": "尚未进行系统竞品分析。需要调研银行理财AI助手市场格局。"
+  },
+  "required_fields": [
+    "至少3个竞品的详细对比分析",
+    "每个竞品的优劣势分析",
+    "轻舟的差异化论证"
+  ],
+  "collection_guide": "调研银行APP理财板块、智能投顾产品、金融AI应用市场"
+}

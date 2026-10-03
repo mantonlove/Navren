@@ -1,0 +1,376 @@
+/* Navren · 浅色界面。参考 Pegasus 2026-10-03 的冷白、青蓝与柔和表面层级。 */
+:root {
+  color-scheme: light;
+  --ink: #191c23;
+  --ink-70: #3a404c;
+  --ink-50: #646b7a;
+  --ink-40: #646b7a;
+  --ink-30: #949ba9;
+  --ink-15: #d2d6dd;
+  --surface: #f8f9fb;
+  --surface-card: #fff;
+  --surface-raised: #f1f3f7;
+  --border: #e2e6ed;
+  --primary: #5d77ad;
+  --primary-deep: #3f568a;
+  --primary-soft: #edf1f8;
+  /* 兼容原有组件的语义色，统一到青蓝。 */
+  --gold: var(--primary);
+  --gold-dark: var(--primary-deep);
+  --gold-light: var(--primary-soft);
+  --body: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --display: var(--body);
+  --r-sm: 12px;
+  --r-md: 18px;
+  --r-lg: 24px;
+  --shadow-xs: 0 1px 3px rgba(25,28,35,.03);
+  --shadow-sm: 0 3px 15px rgba(25,28,35,.035);
+  --shadow-md: 0 10px 32px rgba(25,28,35,.07);
+  --shadow-lg: 0 24px 70px rgba(25,28,35,.12);
+  --page-padding: 32px;
+  --section-gap: 24px;
+  --control-height: 42px;
+  --content-width: 1120px;
+}
+body.mode-classic { --page-padding: 32px; }
+body.mode-senior {
+  --ink-40: #4d5665;
+  --ink-50: #4d5665;
+  --primary: #435f98;
+  --primary-deep: #304b7e;
+  --page-padding: 36px;
+  --section-gap: 32px;
+  --control-height: 52px;
+  line-height: 1.8;
+}
+body.mode-youth {
+  --surface: #fff;
+  --surface-card: #fff;
+  --surface-raised: #f6f7fa;
+  --page-padding: 28px;
+  --section-gap: 20px;
+  --control-height: 42px;
+}
+body { line-height: 1.65; }
+button, input, textarea, select { font-family: var(--body); }
+button, a, [role=button] { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 3px solid var(--primary); outline-offset: 4px; }
+button:disabled { cursor: default; }
+svg { flex-shrink: 0; }
+.app { height: 100vh; height: 100dvh; overflow: hidden; }
+.main { min-height: 0; }
+.page-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.skip-link { position: fixed; top: -100px; left: 24px; z-index: 2000; padding: 12px 20px; background: #fff; border-radius: 12px; box-shadow: var(--shadow-md); }
+.skip-link:focus { top: 16px; }
+
+/* 所有页面共用导航；窄屏移至底部，保持各页面可到达。 */
+.sidebar {
+  width: 96px; min-width: 96px; gap: 8px; padding: 24px 10px;
+  background: var(--surface-raised); border-right: 1px solid var(--border);
+}
+.sidebar .logo { width: 42px; height: 42px; background: #fff; border-radius: 14px; margin-bottom: 24px; }
+.sidebar .logo img { object-fit: contain; }
+.sidebar .nav-item {
+  min-height: 70px; width: 100%; padding: 12px 4px; gap: 6px;
+  border-radius: 14px; color: var(--ink-40); line-height: 1.3;
+}
+.sidebar .nav-item svg { width: 21px; height: 21px; stroke-width: 1.6; }
+.sidebar .nav-item .nav-label { font-size: var(--font-size-xs); letter-spacing: 0; white-space: nowrap; }
+.sidebar .nav-item:hover { background: rgba(255,255,255,.7); color: var(--primary-deep); }
+.sidebar .nav-item.active { background: #fff; color: var(--primary-deep); box-shadow: var(--shadow-sm); }
+.sidebar .nav-item.active .nav-label { font-weight: 650; }
+.sidebar .nav-workbench { margin-top: auto; }
+.header {
+  min-height: 76px; padding: 16px var(--page-padding); gap: 20px;
+  background: rgba(255,255,255,.92); border-bottom: 1px solid var(--border);
+}
+.header-identity { display: flex; align-items: center; gap: 22px; min-width: 0; }
+.header .brand { font-size: 20px; letter-spacing: .08em; white-space: nowrap; color: var(--primary-deep); gap: 8px; }
+.header .brand span { color: inherit; }
+.header .brand img { display: none; }
+.header-location { font-size: var(--font-size-sm); font-weight: 500; padding-left: 22px; border-left: 1px solid var(--border); color: var(--ink-70); }
+.mode-control { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.mode-control > span { font-size: var(--font-size-xs); color: var(--ink-40); }
+.mode-control select { appearance: auto; color: var(--ink-70); background: var(--surface-raised); border: 0; border-radius: 10px; padding: 8px 12px; font-size: var(--font-size-sm); min-height: 40px; cursor: pointer; }
+.mode-senior .sidebar { width: 114px; min-width: 114px; }
+.mode-senior .sidebar .nav-item { min-height: 84px; }
+.mode-senior .header { min-height: 86px; }
+
+/* 阅读宽度、标题与分区，不让长表格和短说明贴住屏幕边缘。 */
+.rec-page, .mine-page {
+  width: 100%; max-width: var(--content-width); margin: 0 auto;
+  padding: var(--page-padding) var(--page-padding) 56px;
+}
+.page-heading { margin-bottom: 30px; }
+.page-heading .eyebrow { display: block; font-size: var(--font-size-xs); color: var(--primary-deep); font-weight: 600; margin-bottom: 8px; }
+.page-heading h1 { font-size: clamp(26px, 2.3vw, 34px); font-weight: 620; letter-spacing: -.025em; line-height: 1.3; }
+.page-heading p { color: var(--ink-40); font-size: var(--font-size-sm); margin-top: 10px; max-width: 650px; }
+.mode-senior .page-heading h1 { font-size: 36px; }
+.mine-section { margin-bottom: var(--section-gap); min-width: 0; }
+.mine-section .sec-label { font-size: var(--font-size-sm); letter-spacing: 0; text-transform: none; color: var(--ink-70); font-weight: 600; margin: 0 0 12px; }
+.card, .rec-current { padding: 24px; background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-xs); }
+.col-head { border-radius: 12px; background: var(--surface-raised); border-color: var(--border); padding: 16px 18px; }
+.col-title { font-size: var(--font-size-sm); }
+.col-body { line-height: 1.8; }
+.collapsible.open .col-body { padding: 20px; }
+.collapsible.open .col-head { border-radius: 12px 12px 0 0; }
+.collapsible { margin-top: 12px; }
+.col-arrow { font-size: 10px; }
+.btn-primary, .btn-outline, .p-btn, .retry-btn, .font-opt, .mode-opt, .voice-card .vc-test {
+  min-height: var(--control-height); border-radius: 12px; padding: 10px 16px; font-size: var(--font-size-sm); font-weight: 500;
+}
+.btn-primary { background: var(--primary-deep); border: 1px solid var(--primary-deep); color: #fff; }
+.btn-primary:hover { background: var(--primary); }
+.btn-outline { color: var(--ink-70); }
+.p-btn { background: #fff; border: 1px solid var(--border); color: var(--ink-70); }
+.p-btn:hover { background: var(--primary-soft); }
+.font-opt.active { background: var(--primary-deep); border-color: var(--primary-deep); }
+.mode-opt.active { background: var(--primary-soft); border-color: var(--primary); }
+.mode-opt { display: block; font: inherit; color: inherit; }
+.mode-opt .m-label { font-size: var(--font-size-sm); }
+.toggle { width: 46px; height: 28px; border-radius: 20px; border: 0; }
+.toggle::after { width: 22px; height: 22px; top: 3px; left: 3px; }
+.toggle.on { background: var(--primary-deep); }
+.toggle.on::after { transform: translateX(18px); }
+.trow { gap: 20px; padding: 16px 0; }
+.trow .tl { font-weight: 550; }
+.trow .td { margin-top: 6px; max-width: 400px; line-height: 1.7; }
+.toast { max-width: calc(100vw - 32px); width: max-content; font-size: var(--font-size-sm); background: var(--ink-70); line-height: 1.6; }
+
+/* 对话保持居中阅读；输入区有独立表面，不挤占正文。 */
+.chat-messages { padding: 36px max(var(--page-padding), calc((100% - 850px) / 2)); gap: 24px; background: var(--surface); }
+.message { width: 100%; max-width: 850px; min-width: 0; }
+.message > div:not(.avatar) { min-width: 0; max-width: calc(100% - 48px); }
+.message .avatar { width: 32px; height: 32px; border-radius: 10px; background: #fff; border: 1px solid var(--border); margin-top: 4px; }
+.message.ai .avatar img { object-fit: contain; }
+.message.user { width: auto; max-width: min(80%, 680px); }
+.message.user .avatar { display: none; }
+.message.user > div:not(.avatar) { max-width: 100%; }
+.message .bubble { padding: 20px 24px; max-width: 100%; font-size: var(--font-size-msg); line-height: 1.85; overflow-wrap: anywhere; }
+.message.ai .bubble { border: 1px solid var(--border); box-shadow: var(--shadow-xs); border-radius: 4px 20px 20px 20px; }
+.message.user .bubble { background: var(--primary-soft); color: var(--ink); border-radius: 18px 4px 18px 18px; padding: 12px 20px; box-shadow: none; }
+.message.ai .sender { color: var(--primary-deep); font-weight: 600; font-size: var(--font-size-xs); margin-bottom: 10px; letter-spacing: .02em; }
+.preset-inline { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.preset-inline .preset-chip { display: inline-flex; align-items: center; text-align: left; min-height: 40px; padding: 8px 12px; margin: 0; color: var(--primary-deep); background: var(--surface-raised); border: 0; border-radius: 10px; font: inherit; font-size: var(--font-size-sm); line-height: 1.5; }
+.preset-chip:hover { background: var(--primary-soft); }
+.chat-input-area { padding: 16px max(var(--page-padding), calc((100% - 850px) / 2)) 22px; background: var(--surface); border: 0; }
+.input-row { display: flex; gap: 8px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 20px; background: #fff; padding: 12px; box-shadow: var(--shadow-sm); }
+.input-row textarea { width: 100%; flex: 1 0 100%; order: -1; min-height: 50px; padding: 6px 8px; background: transparent; font-size: var(--font-size-base); border: 0; border-radius: 8px; line-height: 1.6; color: var(--ink); }
+.input-row .ib-btn { width: 40px; height: 40px; border: 0; border-radius: 12px; background: var(--surface-raised); color: var(--ink-70); }
+.input-row .ib-btn svg { width: 20px; height: 20px; }
+.input-row .send-btn { margin-left: auto; background: var(--primary-deep); color: #fff; }
+.input-row .send-btn:hover { background: var(--primary); }
+.input-row .send-btn:disabled { background: var(--surface-raised); color: var(--ink-30); opacity: 1; }
+.mode-senior .bubble { padding: 24px; line-height: 1.9; }
+.mode-senior .input-row .ib-btn { width: 48px; height: 48px; }
+.privacy-guide { padding: 20px 24px; margin: 0 max(var(--page-padding), calc((100% - 850px) / 2)) 8px; max-height: 28vh; overflow: auto; flex-shrink: 0; }
+.privacy-guide h4 { font-size: var(--font-size-sm); }
+.privacy-guide p, .privacy-guide li { font-size: var(--font-size-xs); }
+.privacy-actions button { min-height: var(--control-height); font-size: var(--font-size-sm); border-radius: 10px; }
+
+/* 银行资金、产品、表格与确认框同一套字号，不依赖固定小字。 */
+.bank-banner { min-height: 46px; padding: 8px var(--page-padding); gap: 12px; background: var(--surface); border-color: var(--border); font-size: var(--font-size-xs); flex-shrink: 0; }
+.bank-banner strong { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+.bank-banner strong::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+.bank-banner > span { flex: 1; color: var(--ink-40); }
+.bank-banner .bank-button { min-height: 30px; padding: 4px 10px; font-size: var(--font-size-xs); background: transparent; }
+.bank-panel { margin: 0 0 var(--section-gap); padding: 24px; border-color: var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-xs); min-width: 0; }
+.bank-panel h2, .bank-panel h3 { font-size: var(--font-size-lg); font-weight: 600; line-height: 1.4; margin-bottom: 14px; }
+.bank-panel p { margin: 10px 0; }
+.bank-note, .bank-plan-status, .bank-error { font-size: var(--font-size-xs); color: var(--ink-40); line-height: 1.75; }
+.bank-error { color: #a72929; }
+.bank-success { color: #21674e; }
+.bank-usable { font-size: var(--font-size-lg); font-weight: 550; font-variant-numeric: tabular-nums; }
+.bank-details { margin: 14px 0; }
+.bank-details summary { width: fit-content; font-size: var(--font-size-sm); color: var(--primary-deep); cursor: pointer; padding: 8px 0; }
+.bank-intro { display: grid; grid-template-columns: 1fr auto; gap: 0 24px; align-items: center; }
+.bank-intro h3 { margin-bottom: 8px; }
+.bank-intro p { margin: 0; }
+.bank-intro > .bank-button { grid-column: 2; grid-row: 1 / 3; }
+.bank-button { min-height: var(--control-height); font-size: var(--font-size-sm); border-color: var(--border); border-radius: 12px; padding: 10px 14px; }
+.bank-button:hover:enabled { background: var(--primary-soft); border-color: #b9c7e0; }
+.bank-button.primary { background: var(--primary-deep); border-color: var(--primary-deep); color: #fff; }
+.bank-button.primary:hover:enabled { background: var(--primary); }
+.bank-row { gap: 16px; padding: 12px 0; margin: 0; border-bottom: 1px solid var(--border); }
+.bank-row:last-child { border-bottom: 0; }
+.bank-table-wrap { border-radius: 12px; margin: 14px 0; border: 1px solid var(--border); }
+.bank-table { font-size: var(--font-size-sm); line-height: 1.65; font-variant-numeric: tabular-nums; }
+.bank-table th { background: var(--surface-raised); font-size: var(--font-size-xs); font-weight: 550; color: var(--ink-70); }
+.bank-table td, .bank-table th { padding: 12px 14px; border-color: var(--border); }
+.bank-table tr:last-child td { border-bottom: 0; }
+.bank-table td { white-space: normal; overflow-wrap: anywhere; }
+.bank-table tbody tr:hover { background: #fafbfe; }
+.bank-tag { background: var(--primary-soft); color: var(--primary-deep); border-radius: 6px; font-size: var(--font-size-xs); }
+.bank-form { gap: 18px; }
+.bank-form label { gap: 8px; font-size: var(--font-size-sm); }
+.bank-form input, .bank-form select { padding: 12px 14px; min-height: var(--control-height); border-radius: 12px; border-color: var(--ink-15); font-size: var(--font-size-base); }
+.bank-form input[type=checkbox] { min-height: 20px; width: 20px; height: 20px; accent-color: var(--primary-deep); flex-shrink: 0; }
+.bank-dialog { padding: 28px; width: min(600px, calc(100% - 32px)); max-height: calc(100dvh - 40px); border-color: var(--border); border-radius: 24px; box-shadow: var(--shadow-lg); }
+.bank-dialog h2 { font-size: var(--font-size-lg); font-weight: 600; }
+.bank-dialog .bank-panel { padding: 18px; background: var(--surface); box-shadow: none; }
+.bank-dialog .bank-actions { bottom: -28px; padding: 16px 0; margin-bottom: -12px; border-color: var(--border); }
+.bank-dialog::backdrop { background: rgba(25,28,35,.3); backdrop-filter: blur(5px); }
+.bank-dialog > .bank-row { padding-top: 0; border: 0; }
+.bank-metric { background: #fff; padding: 20px; }
+.bank-metric strong { font-size: clamp(23px,2vw,30px); font-weight: 600; letter-spacing: -.035em; font-variant-numeric: tabular-nums; line-height: 1.4; }
+.bank-metric .bank-note { margin: 0 0 12px; }
+#assetOverview { gap: 14px !important; grid-template-columns: repeat(4,minmax(0,1fr)) !important; margin-bottom: 0 !important; }
+#assetOverview .bank-panel { margin: 0; }
+#assetOverview .bank-panel:first-child { background: var(--primary-soft); border-color: #d6deee; }
+#assetOverview .bank-panel:first-child strong { color: var(--primary-deep); }
+#quickActions { gap: 12px !important; padding: 16px; }
+#quickActions .bank-button { border: 0; background: var(--surface-raised); }
+#bankBudget { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+#holdingsList { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+#holdingsList > .bank-panel { margin: 0; }
+#bankReports > .bank-panel > .bank-form { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; }
+.bank-product-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; margin: 20px 0; }
+.bank-product-card { display: flex; flex-direction: column; padding: 20px; border-radius: 16px; background: var(--surface-raised); min-width: 0; }
+.bank-product-card h4 { font-size: var(--font-size-base); font-weight: 600; margin: 12px 0 18px; }
+.bank-product-card dl { display: grid; grid-template-columns: 1fr auto; gap: 10px 16px; font-size: var(--font-size-sm); }
+.bank-product-card dt { color: var(--ink-40); }
+.bank-product-card dd { text-align: right; font-variant-numeric: tabular-nums; }
+.bank-product-card .bank-note { margin-top: 18px; margin-bottom: 16px; }
+.bank-product-card .bank-button { margin-top: auto; width: 100%; }
+.bank-product-status { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: var(--font-size-xs); color: var(--ink-40); }
+.bank-product-status .matched { color: #21674e; }
+
+/* 我的、顾问工作台和资料弹窗。 */
+.mine-page { display: grid; grid-template-columns: 1.1fr 1fr; column-gap: 24px; align-items: start; }
+.mine-page > .page-heading, .mine-page > .profile-card { grid-column: 1 / -1; }
+.profile-completion { padding: 18px 20px; background: var(--surface-card); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 12px; }
+.archive-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,220px),1fr)); gap: 12px; }
+.profile-card { background: #fff; color: var(--ink); border: 1px solid var(--border); padding: 24px; gap: 20px; box-shadow: var(--shadow-xs); }
+.profile-card .p-avatar { background: var(--surface-raised); color: var(--primary-deep); border-radius: 16px; }
+.profile-card .p-actions { flex-wrap: wrap; gap: 8px; }
+.profile-card .p-name { font-weight: 600; }
+.voice-card { padding: 20px 12px; }
+.voice-card .vc-desc { line-height: 1.6; }
+.mode-row { gap: 10px; }
+.voice-grid { grid-template-columns: 1fr; }
+.voice-card { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; text-align: left; }
+.voice-card .vc-desc { margin: 0; }
+.voice-card .vc-test { margin-left: auto; }
+.workbench-page { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; align-items: start; }
+.workbench-page > .page-heading, .workbench-page > .mine-section:first-of-type { grid-column: 1 / -1; }
+.modal-box { width: 520px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; border-radius: 20px; }
+.modal-head { padding: 20px 24px; font-size: var(--font-size-lg); }
+.modal-body { padding: 24px; overflow-y: auto; min-height: 0; }
+.modal-body label { font-size: var(--font-size-sm); }
+.modal-foot { padding: 16px 24px; flex-wrap: wrap; flex-shrink: 0; }
+.modal-head button { width: 40px; min-height: 40px; border-radius: 12px; }
+.mode-senior .card, .mode-senior .bank-panel { padding: 28px; }
+.mode-senior .bank-product-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+
+/* 入口：以排版呈现三个模式，不用年龄或金融知识给用户贴标签。 */
+.welcome-page { max-width: 1160px; padding: 48px 32px 56px; text-align: left; }
+.welcome-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--primary-deep); font-size: 21px; font-weight: 600; letter-spacing: .08em; margin-bottom: 68px; }
+.welcome-brand img { width: 36px; height: 36px; object-fit: contain; border-radius: 12px; }
+.welcome-page .wl-tag { margin-bottom: 16px; font-weight: 500; font-size: 14px; color: var(--primary-deep); letter-spacing: 0; }
+.welcome-page h1 { font-size: clamp(32px,4.6vw,54px); max-width: 680px; font-weight: 580; letter-spacing: -.04em; line-height: 1.3; margin-bottom: 18px; }
+.welcome-page .wl-sub { max-width: 620px; line-height: 1.9; font-size: 16px; margin-bottom: 40px; }
+.welcome-page .wl-cards { gap: 20px; }
+.welcome-page .wl-card { padding: 28px; text-align: left; border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-xs); display: flex; flex-direction: column; cursor: default; }
+.welcome-page .wl-card:hover { transform: translateY(-3px); border-color: #b9c7e0; box-shadow: var(--shadow-md); }
+.welcome-page .wc-icon { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 14px; background: var(--primary-soft); }
+.welcome-page .wl-card .wc-icon svg { width: 24px; height: 24px; color: var(--primary-deep); }
+.welcome-page .wl-card .wc-name { font-size: 22px; font-weight: 600; margin-top: 8px; }
+.welcome-page .wl-card .wc-who { font-size: 14px; margin: 8px 0 24px; color: var(--ink-40); }
+.welcome-page .wl-card .wc-features { font-size: 15px; margin-bottom: 28px; line-height: 2; }
+.welcome-page .wl-card .wc-btn { margin-top: auto; background: var(--primary-soft); color: var(--primary-deep); min-height: 48px; padding: 12px 16px; width: 100%; font-size: 15px; }
+.welcome-page .wl-card:first-child .wc-btn { background: var(--primary-deep); color: #fff; }
+.welcome-page .wl-card .wc-btn:hover { background: var(--primary-deep); color: #fff; }
+.welcome-note { margin-top: 24px; font-size: 13px; color: var(--ink-40); }
+
+@media (max-width: 1100px) {
+  .bank-product-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #bankBudget, #holdingsList { grid-template-columns: 1fr; }
+  .mine-page, .workbench-page { grid-template-columns: 1fr; }
+  #assetOverview { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .welcome-page .wl-card { padding: 24px; }
+}
+@media (max-width: 768px) {
+  body.mode-classic, body.mode-senior, body.mode-youth { --page-padding: 20px; --section-gap: 20px; }
+  .app { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .sidebar, .mode-senior .sidebar {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+    width: 100%; min-width: 0; flex-direction: row; justify-content: space-around;
+    gap: 0; padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    min-height: 72px; border: 0; border-top: 1px solid var(--border); background: rgba(255,255,255,.97);
+  }
+  .sidebar .logo { display: none; }
+  .sidebar .nav-item, .mode-senior .sidebar .nav-item { min-height: 58px; padding: 7px 2px; width: 20%; gap: 4px; border-radius: 12px; }
+  .sidebar .nav-item .nav-label { font-size: 12px; }
+  .mode-senior .sidebar .nav-item .nav-label { font-size: 14px; }
+  .sidebar .nav-workbench { margin-top: 0; }
+  .sidebar .nav-item.active { background: var(--primary-soft); box-shadow: none; }
+  .header, .mode-senior .header { min-height: 68px; padding: 12px 20px; gap: 12px; }
+  .header-identity { gap: 12px; }
+  .header-location { padding-left: 12px; font-size: 13px; }
+  .mode-control > span { display: none; }
+  .mode-control select { max-width: 100px; font-size: 13px; padding: 8px; }
+  .bank-banner { padding: 8px 20px; gap: 8px; }
+  .bank-banner > span { font-size: 12px; }
+  .mode-senior .bank-banner > span { font-size: 15px; }
+  .rec-page, .mine-page { padding: 24px 20px 40px; }
+  .page-heading { margin-bottom: 24px; }
+  .page-heading h1 { font-size: 28px; }
+  .mode-senior .page-heading h1 { font-size: 32px; }
+  .card, .rec-current, .bank-panel, .mode-senior .card, .mode-senior .bank-panel { padding: 20px; }
+  .bank-product-grid, .mode-senior .bank-product-grid { grid-template-columns: 1fr; }
+  .bank-intro { display: block; }
+  .bank-intro > .bank-button { margin-top: 16px; }
+  #bankReports > .bank-panel > .bank-form { grid-template-columns: 1fr; }
+  #quickActions { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .bank-metric, .mode-senior .bank-metric { padding: 16px; }
+  .bank-metric strong { font-size: 24px; }
+  .bank-dialog { padding: 20px; border-radius: 20px; }
+  .bank-dialog .bank-actions { bottom: -20px; }
+  .chat-messages { padding: 24px 16px; gap: 20px; }
+  .message.ai .avatar { display: none; }
+  .message > div:not(.avatar) { max-width: 100%; width: 100%; }
+  .message .bubble, .mode-senior .bubble { padding: 18px 20px; }
+  .chat-input-area { padding: 10px 16px 16px; }
+  .privacy-guide { margin: 0 16px 8px; padding: 16px; }
+  .preset-inline { flex-direction: column; align-items: stretch; }
+  .preset-chip { font-size: var(--font-size-sm); padding: 10px 12px; }
+  .profile-card { padding: 20px; gap: 16px; align-items: flex-start; }
+  .profile-card .p-actions { gap: 6px; }
+  .profile-card .p-btn { padding: 8px 12px; }
+  .mode-opt { padding: 14px 6px; }
+  .mode-opt .m-label { font-size: var(--font-size-xs); }
+  .welcome-page { padding: 28px 20px 40px; }
+  .welcome-brand { margin-bottom: 44px; }
+  .welcome-page .wl-cards { max-width: none; grid-template-columns: 1fr; gap: 16px; }
+  .welcome-page .wl-card { padding: 24px; }
+  .toast { bottom: calc(88px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 560px) {
+  /* 单元格保留表头语义，移动端按行阅读，不裁切金融字段。 */
+  .bank-table-wrap { border: 0; overflow: visible; }
+  .bank-table, .bank-table tbody { display: block; }
+  .bank-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .bank-table tbody tr { display: block; background: var(--surface); padding: 10px 14px; border-radius: 12px; margin-bottom: 10px; }
+  .bank-table td { display: grid; grid-template-columns: minmax(84px,35%) minmax(0,1fr); gap: 12px; padding: 8px 0; border: 0; text-align: right; }
+  .bank-table td::before { content: attr(data-label); text-align: left; color: var(--ink-40); font-size: var(--font-size-xs); }
+  .bank-table td .bank-button { width: 100%; }
+  .header-location { display: none; }
+  .bank-banner { gap: 8px; padding: 6px 16px; }
+  .bank-banner > span { flex-basis: auto; font-size: 12px; }
+  .mode-senior .bank-banner > span { font-size: 13px; }
+  .bank-banner .bank-button { min-height: 40px; }
+  .bank-banner .bank-button { margin-left: auto; }
+  .profile-card .p-avatar { width: 44px; height: 44px; font-size: 24px; }
+  .bank-metric strong { font-size: 22px; }
+}
+@media (max-width: 360px) {
+  .bank-metric strong { font-size: 19px; }
+  .mode-senior #assetOverview { grid-template-columns: 1fr !important; }
+  .mode-senior .bank-metric strong { font-size: 26px; }
+  .mode-opt .m-label { font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
