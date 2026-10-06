@@ -1,0 +1,89 @@
+/* 发现：首页只保留封面和少量预览，研究与对照在主内容内。 */
+.discover-page { min-width:0; }
+/* 左右同宽侧列，导航组始终占舞台中轴，历史入口不会推歪页码。 */
+.market-deck-controls { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:12px; align-items:center; }
+.market-deck-navigation { grid-column:2; display:flex; align-items:center; justify-content:center; gap:14px; min-width:0; }
+.market-deck-counter { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.market-deck { container-type:inline-size; container-name:market-cover; }
+.market-history-entry { grid-column:3; justify-self:end; display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:7px 10px; border-radius:10px; font-size:var(--font-size-sm); line-height:1.5; color:var(--primary-deep); text-decoration:none; background:transparent; }
+.market-history-entry:hover { background:var(--primary-soft); }
+.market-history-entry svg { width:19px; height:19px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.market-hot-heading { justify-content:space-between; flex-wrap:wrap; }
+.market-edition-date { font-size:var(--font-size-sm); color:var(--ink-50); }
+.market-refresh-notice { flex-basis:100%; font-size:var(--font-size-xs); color:var(--ink-50); margin:0; }
+.mode-senior .market-history-entry { min-height:48px; }
+@media(max-width:520px) { .market-deck-controls { grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:4px; } .market-deck-navigation { gap:8px; } .market-history-entry { gap:5px; padding:7px 4px; } }
+@media(max-width:390px) { html[data-language="en"] .market-history-entry,.mode-senior .market-history-entry { grid-column:1/-1; } }
+@media(max-width:340px) { .market-history-entry { grid-column:1/-1; } }
+/* 看舞台的实际可用宽度；大字号和侧栏不会把右侧入口压到导航上。 */
+@container market-cover (max-width:560px) { html[data-language="en"] .market-history-entry,.mode-senior .market-history-entry { grid-column:1/-1; } }
+@container market-cover (max-width:420px) { .market-history-entry { grid-column:1/-1; } }
+.discover-section-head { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:18px; }
+.discover-section-head h2,.discover-section-title { font-size:var(--font-size-base); font-weight:650; margin:0 0 16px; }
+.discover-section-head h2 { margin:0; }
+.discover-page a,.discover-text-action { color:var(--primary-deep); text-underline-offset:4px; }
+.discover-section-head>a { display:inline-flex; align-items:center; min-height:44px; font-size:var(--font-size-sm); }
+.discover-preview-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.discover-preview,.discover-plan-cover { display:flex; flex-direction:column; gap:12px; padding:22px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-card); text-decoration:none; color:var(--ink)!important; min-width:0; box-shadow:var(--shadow-xs); }
+.discover-preview h3,.discover-plan-cover h3 { margin:0; font-size:var(--font-size-base); line-height:1.65; }
+.discover-preview:hover,.discover-plan-cover:hover { border-color:var(--primary-border); background:var(--surface-raised); }
+.discover-meta,.discover-note { color:var(--ink-50); font-size:var(--font-size-sm); line-height:1.85; overflow-wrap:anywhere; }
+.discover-identity { color:var(--primary-deep); font-size:var(--font-size-xs); font-weight:600; }
+.discover-empty { padding:18px 22px; background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r-md); color:var(--ink-50); line-height:1.9; }
+.discover-subview { min-width:0; }
+.discover-subview[hidden],#discoverHome[hidden] { display:none!important; }
+.discover-back,.discover-action { border:1px solid var(--border); background:var(--surface-card); color:var(--primary-deep); padding:10px 16px; min-height:44px; border-radius:12px; cursor:pointer; font:inherit; line-height:1.5; }
+.discover-action.primary { background:var(--primary-deep); color:var(--on-primary); border-color:var(--primary-deep); }
+.discover-back { margin-bottom:20px; }
+.discover-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:20px 0; }
+.discover-action:disabled { opacity:.55; cursor:default; }
+.discover-error { border:1px solid var(--border); border-left:4px solid var(--primary-deep); padding:18px; color:var(--ink-70); background:var(--surface-card); border-radius:12px; line-height:1.8; }
+.discover-toolbar { display:flex; align-items:end; gap:14px; flex-wrap:wrap; margin:20px 0; }
+.discover-field { display:flex; flex-direction:column; gap:7px; min-width:140px; max-width:100%; color:var(--ink-70); font-size:var(--font-size-sm); }
+.discover-field.grow { flex:1; min-width:220px; }
+.discover-field input,.discover-field select { width:100%; min-height:44px; box-sizing:border-box; background:var(--surface-card); color:var(--ink); border:1px solid var(--border); padding:10px 12px; border-radius:12px; font:inherit; }
+.discover-results { display:flex; flex-direction:column; gap:10px; }
+.discover-product-row { display:grid; grid-template-columns:36px minmax(0,1fr); align-items:center; gap:12px; padding:18px 20px; background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r-md); min-width:0; }
+.discover-product-row .discover-product-link { display:block; padding:4px 0; min-height:44px; text-decoration:none; color:var(--ink); }
+.discover-product-row h3 { margin:0 0 5px; font-size:var(--font-size-base); overflow-wrap:anywhere; }
+.discover-select-cell { width:36px; min-height:44px; display:flex; align-items:center; justify-content:center; }
+.discover-select-cell input { width:20px; height:20px; accent-color:var(--primary-deep); }
+.discover-select-cell[hidden] { visibility:hidden; display:flex; }
+.discover-selection { position:sticky; bottom:12px; z-index:5; margin-top:20px; padding:16px 18px; background:var(--surface-card); border:1px solid var(--primary-border); border-radius:var(--r-md); box-shadow:var(--shadow-sm); }
+.discover-selection .discover-actions { margin:12px 0 0; }
+.discover-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); background:var(--primary-soft); color:var(--primary-deep); border-radius:10px; padding:7px 10px; min-height:44px; font:inherit; cursor:pointer; }
+.discover-detail { padding:24px; background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r-md); min-width:0; }
+.discover-specs { display:grid; grid-template-columns:minmax(120px,.32fr) minmax(0,1fr); gap:0; margin:18px 0; }
+.discover-specs dt,.discover-specs dd { padding:14px 0; margin:0; border-bottom:1px solid var(--border); line-height:1.9; overflow-wrap:anywhere; }
+.discover-specs dt { color:var(--ink-50); padding-right:20px; }
+.discover-specs dd { color:var(--ink); white-space:pre-wrap; }
+.discover-compare-wrap { max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-card); }
+.discover-compare { border-collapse:separate; border-spacing:0; min-width:680px; width:100%; font-size:var(--font-size-sm); table-layout:fixed; }
+.discover-compare.has-third { min-width:960px; }
+.discover-compare th,.discover-compare td { padding:16px 18px; text-align:left; vertical-align:top; border-right:1px solid var(--border); border-bottom:1px solid var(--border); white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.85; }
+.discover-compare th:first-child { width:128px; position:sticky; left:0; z-index:1; background:var(--surface-raised); color:var(--ink-70); }
+.discover-compare thead th { background:var(--primary-soft); }
+.discover-compare td:last-child,.discover-compare th:last-child { border-right:none; }
+.discover-compare tr:last-child td,.discover-compare tr:last-child th { border-bottom:none; }
+.discover-compare th>a { display:block; min-height:44px; color:var(--ink); }
+.discover-compare-help { margin:12px 0; color:var(--ink-50); line-height:1.8; }
+.discover-plan-items { display:grid; gap:12px; }
+.discover-plan-item { padding:18px; border:1px solid var(--border); border-radius:12px; min-width:0; background:var(--surface-raised); }
+.discover-plan-item h3 { margin:0 0 8px; font-size:var(--font-size-base); }
+.discover-weekly-cover { display:block; padding:26px 28px; border:1px solid var(--primary-border); border-radius:var(--r-lg); background:linear-gradient(115deg,var(--primary-soft),var(--surface-card)); color:var(--ink)!important; text-decoration:none; box-shadow:var(--shadow-xs); }
+.discover-weekly-cover h3 { font-size:var(--font-size-xl); font-weight:650; line-height:1.55; margin:18px 0; }
+.discover-weekly-cover ul { padding-left:22px; margin:12px 0 18px; display:grid; gap:10px; color:var(--ink-70); line-height:1.8; }
+.discover-weekly-cover:hover { border-color:var(--primary-deep); }
+.discover-weekly-cover .discover-cover-read { display:block; color:var(--primary-deep); padding-top:16px; border-top:1px solid var(--border); }
+.discover-weekly-reader { max-width:920px; margin:0 auto; }
+.discover-weekly-reader .market-panel-section { padding:24px 0; border-top:1px solid var(--border); }
+.discover-weekly-reader .market-panel-section h3 { font-size:var(--font-size-base); line-height:1.7; }
+.discover-weekly-reader p { line-height:2; text-indent:2em; margin:18px 0; overflow-wrap:anywhere; }
+.discover-weekly-reader .discover-note,.discover-weekly-reader .market-source { text-indent:0; }
+.discover-weekly-history { margin-top:28px; }
+.discover-weekly-history a { display:block; padding:12px 0; min-height:44px; }
+html[data-language="en"] .discover-weekly-reader p { text-indent:0; }
+.mode-senior .discover-action,.mode-senior .discover-back,.mode-senior .discover-field input,.mode-senior .discover-field select { min-height:48px; }
+.mode-senior .discover-preview-grid { grid-template-columns:1fr; }
+@media(max-width:800px) { .discover-preview-grid { grid-template-columns:1fr; } .discover-detail { padding:18px; } .discover-specs { grid-template-columns:minmax(100px,.36fr) minmax(0,1fr); } .discover-weekly-cover { padding:22px; } .discover-compare-wrap { margin:0; } }
+@media(prefers-reduced-motion:reduce) { .discover-page * { scroll-behavior:auto!important; } }

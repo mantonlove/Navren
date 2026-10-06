@@ -1,0 +1,46 @@
+{
+  "schema_version": "navren.synthetic-service-benefits.v1",
+  "environment": "synthetic",
+  "notice": "以下服务优惠、费用和资格均为 Navren 演示用合成数据，不代表微众银行或任何真实机构的政策、报价、合同或承诺。",
+  "offers": [
+    {
+      "offer_id": "SYNTH-E-STATEMENT-FEE-90D",
+      "title": "电子账单服务费减免（3个月）",
+      "benefit_type": "simulated_service_fee_waiver",
+      "monthly_value_minor": 500,
+      "duration_months": 3,
+      "max_cost_minor": 1500,
+      "currency": "CNY",
+      "eligibility": {"active_account_required": true},
+      "conditions": ["提交申请后启用电子账单通知"],
+      "requires_salary_deposit": false,
+      "minimum_monthly_salary_minor": 0,
+      "salary_months_required": 0,
+      "requires_investment_purchase": false,
+      "valid_from": "2026-10-01",
+      "valid_through": "2026-12-31",
+      "application_status_on_accept": "submitted_simulation_pending_eligibility"
+    },
+    {
+      "offer_id": "SYNTH-PAYROLL-FEE-180D",
+      "title": "工资入账服务费减免（6个月）",
+      "benefit_type": "simulated_service_fee_waiver",
+      "monthly_value_minor": 1000,
+      "duration_months": 6,
+      "max_cost_minor": 6000,
+      "currency": "CNY",
+      "eligibility": {"active_account_required": true, "salary_intent_required": true},
+      "conditions": [
+        "需连续3个月每月工资入账不少于人民币6,000元",
+        "资格须经模拟规则核验后生效"
+      ],
+      "requires_salary_deposit": true,
+      "minimum_monthly_salary_minor": 600000,
+      "salary_months_required": 3,
+      "requires_investment_purchase": false,
+      "valid_from": "2026-10-01",
+      "valid_through": "2026-11-30",
+      "application_status_on_accept": "submitted_simulation_pending_eligibility"
+    }
+  ]
+}

@@ -7,135 +7,82 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Navren · 我的</title>
+<link rel="icon" type="image/png" href="assets/brand/navren-icon.png">
 <link rel="stylesheet" href="css/style.css?v=ui-20261003-3">
-<link rel="stylesheet" href="css/design.css?v=ui-20261003-3">
+<link rel="stylesheet" href="css/design.css?ui=0833fdeb0038">
+<link rel="stylesheet" href="css/mine_workspace.css">
+<link rel="stylesheet" href="css/account_switcher.css">
 </head>
 <body data-page="mine">
 <a class="skip-link" href="#mainContent">跳到主要内容</a>
 
 <div class="app">
   <nav class="sidebar" aria-label="Navren主导航">
-    <a class="logo" href="index.html" aria-label="Navren首页"><img src="assets/logo.png" alt=""></a>
+    <a class="logo" href="chat.html" aria-label="Navren对话"><img class="brand-icon" src="assets/brand/navren-icon.png" width="1254" height="1254" alt=""></a>
     <a class="nav-item" href="chat.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="nav-label">对话</span></a>
-    <a class="nav-item" href="recommend.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M16 3a8 8 0 0 1 5 5h-5z"/></svg><span class="nav-label">推荐</span></a>
     <a class="nav-item" href="account.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 9h18m-5 5h3"/></svg><span class="nav-label">账户</span></a>
+    <a class="nav-item" href="recommend.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M16 3a8 8 0 0 1 5 5h-5z"/></svg><span class="nav-label">发现</span></a>
     <a class="nav-item active" href="mine.html" aria-current="page"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="nav-label">我的</span></a>
-    <a class="nav-item nav-workbench" href="copilot.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V3h8v4M3 12h18m-11 0v3h4v-3"/></svg><span class="nav-label">工作台</span></a>
   </nav>
 
   <main class="main" id="mainContent" tabindex="-1">
     <header class="header">
-      <div class="header-identity"><a class="brand" href="index.html" aria-label="Navren首页">Navren</a><span class="header-location">偏好与设置</span></div>
-      <label class="mode-control"><span>界面模式</span><select id="interfaceMode" aria-label="界面模式"><option value="classic">经典版</option><option value="senior">关怀版</option><option value="youth">青春版</option></select></label>
+      <div class="header-identity"><a class="brand" href="chat.html" aria-label="Navren对话"><img class="brand-wordmark" src="assets/brand/navren-wordmark.png" width="2172" height="724" alt=""></a><h1 class="header-location" id="mineViewTitle" tabindex="-1" data-view-heading>我的</h1><span id="mineViewEyebrow" hidden>长期安排与个人理解</span></div>
+
     </header>
+    <section id="accountSwitcher" aria-label="演示账户" class="account-switcher" hidden></section>
 
     <div class="page-scroll">
-    <div class="mine-page">
-      <div class="page-heading"><span class="eyebrow">我的 Navren</span><h1>按你的习惯，调整 Navren。</h1><p>选择阅读方式、管理个人档案，让每次使用都更顺手。</p></div>
-
-
-      <div class="profile-card">
-        <div class="p-avatar" id="profileAvatar" onclick="document.getElementById('avatarInput').click()" title="点击上传头像">👤</div>
-        <input type="file" id="avatarInput" accept="image/*" onchange="handleAvatarUpload(event)" style="display:none;">
-        <div style="flex:1">
-          <div class="p-name" id="profileName">张三</div>
-          <div class="p-actions">
-            <button class="p-btn" onclick="editProfile()">编辑资料</button>
-            <button class="p-btn" onclick="switchAccount()">切换账号</button>
-            <button class="p-btn" onclick="logout()">退出</button>
-          </div>
-        </div>
+      <div class="mine-page mine-workspace" id="mineWorkspace">
+        <div class="mine-view-heading"><a class="mine-back" href="mine.html" data-mine-back hidden>‹ 返回我的</a></div>
+        <section id="mineHome" data-mine-view="home">
+<section id="mineAccountSection" class="mine-home-section" aria-labelledby="mineAccountSectionTitle"><div class="mine-section-heading"><h2 id="mineAccountSectionTitle" data-home-section-title="账户资料">账户资料</h2></div><div class="mine-identity"><span class="mine-identity-mark" aria-hidden="true">N</span><div><strong id="mineHomeName">我的安排</strong><p>把目标、责任和本人确认的条件放在一起。</p></div><button type="button" class="p-btn" onclick="editProfile()">编辑资料</button></div><div id="mineFinancialProfile" aria-live="polite"></div></section>
+<section id="mineRelationsSection" class="mine-home-section" aria-labelledby="mineRelationsTitle"><div class="mine-section-heading"><h2 id="mineRelationsTitle" data-i18n-skip>财务关系</h2><a href="mine.html?view=graph" data-mine-open="graph">进入关系概览 ›</a></div><div class="mine-domain-grid" id="mineDomainOverview"></div></section>
+<section id="mineRiskSection" class="mine-home-section" aria-labelledby="mineRiskSectionTitle"><div class="mine-section-heading"><h2 id="mineRiskSectionTitle" data-home-section-title="资金与风险">资金与风险</h2></div><div class="mine-risk-grid"><article class="card" id="riskCard"><h3>聊天中的风险态度</h3><div id="riskDetail"></div></article><article class="card" id="mineBusinessRisk"><h3>模拟业务风险配置</h3><p>正在核对来源…</p></article><article class="card"><h3>正式风险测评</h3><p>未取得可核验的正式测评结果，状态与有效期未知。</p></article></div></section>
+<section id="minePreferencesSection" class="mine-home-section" aria-labelledby="minePreferencesSectionTitle"><div class="mine-section-heading"><h2 id="minePreferencesSectionTitle" data-home-section-title="偏好与授权">偏好与授权</h2></div><a class="mine-view-link" href="mine.html?view=settings" data-mine-open="settings">管理数据授权 ›</a><section class="mine-section"><div class="mine-section-heading"><h2>聊天陈述与待核实资料</h2></div><div id="mineObservationList" class="mine-observation-list" aria-live="polite"></div></section><section class="mine-section finance-memory-section" aria-labelledby="financeMemoryTitle"><div class="mine-section-heading"><h2 id="financeMemoryTitle">本人保存的记忆</h2><button type="button" class="p-btn" id="addMemoryButton" onclick="openFinancialMemoryEditor()">添加记忆</button></div><div class="card finance-memory-card"><p class="memory-intro">可仅保存目标或偏好，随时修改或删除。业务目标在上方目标工作区维护，这里的文字陈述不会自动新建或覆盖目标。</p><p id="memoryStatus" role="status" aria-live="polite">正在读取记忆设置…</p><div id="financialMemoryList" class="financial-memory-list" aria-live="polite"></div></div></section><details class="mine-legacy-profile"><summary>历史本机资料</summary><p>旧浏览器资料按原来源保留，不当作当前银行事实、正式风险测评或新记忆。</p><div id="archiveContent"></div></details><details class="profile-disclosure"><summary>需要我核实</summary><div id="mineReviewList" class="mine-review-list" aria-live="polite"></div></details></section>
+<section id="mineSavedSection" class="mine-home-section" aria-labelledby="mineSavedSectionTitle"><div class="mine-section-heading"><h2 id="mineSavedSectionTitle" data-home-section-title="收藏阅读">收藏阅读</h2></div><div id="bookmarksList" class="mine-saved-list"></div><section class="mine-section mine-continue-section"><h2>继续阅读</h2><div id="mineContinueReading"></div></section></section>
+</section>
+        <section id="mineGoals" data-mine-view="goals" hidden><div class="mine-section-heading"><p>同一目标在关系图和日历中引用，保存不会冻结或划转资金。</p><button type="button" class="mine-primary" data-goal-create>创建目标</button></div><div id="mineGoalList" class="mine-goal-grid" aria-live="polite"></div></section>
+        <section id="mineGoalDetail" data-mine-view="goal" hidden aria-live="polite"></section>
+        <section class="mine-section mine-graph-view" id="graph" data-mine-view="graph" hidden><div id="mineGraphHost"></div></section>
+        
+        <section id="appearance" data-mine-view="settings" hidden>
+          <section class="mine-section"><h2>外观与阅读</h2><div class="card"><h3>阅读模式</h3><div class="mode-row" id="modeSelector"></div><h3>字体大小</h3><div class="font-row" id="fontSizeRow"></div></div></section><section class="settings-group settings-sound" aria-labelledby="settingsSoundTitle"><div class="settings-group-heading"><h2 id="settingsSoundTitle">声音与提醒</h2><span>本设备 · 聊天语音共用</span></div><div class="settings-sound-grid"><article class="settings-sound-card"><div class="settings-sound-card-heading"><h3>自动朗读</h3><button type="button" class="toggle" id="voiceToggle" onclick="toggleVoice()" role="switch" aria-label="自动朗读文字回复" aria-checked="false"></button></div><p>文字回复自动朗读；语音提问沿用语音回答。</p></article><article class="settings-sound-card"><div class="settings-sound-card-heading"><h3>语音音色</h3></div><p id="settingsVoiceStatus" class="settings-status" role="status">点击试听才生成声音，进入页面不会播放。</p><div id="voicePresetRow" class="settings-voice-control"></div></article></div><details class="settings-details settings-sound-disclosure"><summary>发现页展示偏好</summary><div id="prefsBody"></div><p class="settings-status">展示开关不订阅推送。市场提醒服务尚未接入。</p></details></section>
+          <section class="mine-section"><h2>数据与记忆授权</h2><div class="card"><div class="trow memory-toggle-row"><div><div class="tl">允许 Navren 读取已保存的财务记忆</div><div class="td">开启后可在已接入的资金分析中参考，并可整理本人陈述的待核实资料。关闭后保留已保存内容，立即使旧上下文失效。</div></div><button type="button" class="toggle" id="memoryToggle" onclick="toggleFinancialMemory()" aria-label="允许 Navren 读取已保存的财务记忆" aria-checked="false" role="switch"></button></div><p id="mineConsentStatus" class="mine-source" role="status"></p><a href="mine.html?view=home&amp;focustarget=minePreferencesSection" data-mine-open="profile">管理已保存内容 ›</a></div></section>
+          
+          <section class="mine-section"><h2>本机身份与视角</h2><div class="profile-card"><button type="button" class="p-avatar" id="profileAvatar" onclick="document.getElementById('avatarInput').click()" aria-label="更换头像">👤</button><input type="file" id="avatarInput" accept="image/*" onchange="handleAvatarUpload(event)" hidden><div class="mine-profile-identity"><div class="p-name" id="profileName">我的账户</div><div class="p-actions"><button type="button" class="p-btn" onclick="editProfile()">编辑昵称</button><button type="button" class="p-btn" onclick="switchAccount()">创建独立演示账户</button></div></div></div><p class="mine-source">头像与昵称仅保存在当前浏览器，不改变银行客户身份。</p><a class="mine-advisor-link" href="copilot.html">顾问演示视角 ›</a></section>
+        </section>
+        
       </div>
-
-      <div class="mine-section">
-        <div class="sec-label">阅读与语音</div>
-        <div class="card">
-          <div style="font-size:var(--font-size-xs);color:var(--ink-40);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700">界面模式</div>
-          <div class="mode-row" id="modeSelector" style="margin-bottom:var(--s2)"></div>
-          <div style="font-size:var(--font-size-xs);color:var(--ink-40);margin:14px 0 10px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700">字体大小</div>
-          <div class="font-row" id="fontSizeRow" style="margin-bottom:var(--s2)"></div>
-          <div class="trow">
-            <div><div class="tl">语音播报</div><div class="td">AI 回复自动朗读，朗读完毕自动续听</div></div>
-            <div class="toggle" id="voiceToggle" onclick="toggleVoice()"></div>
-          </div>
-          <div class="collapsible" style="margin-top:12px">
-            <div class="col-head" onclick="this.parentElement.classList.toggle('open')">
-              <div class="col-title">
-                <svg class="col-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                语音音色
-              </div>
-              <span class="col-arrow">▼</span>
-            </div>
-            <div class="col-body" id="voicePresetRow"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="mine-section">
-        <div class="sec-label">理财偏好</div>
-        <div class="card" id="riskCard">
-          <div class="sec-label">聊天风险偏好</div>
-          <div id="riskDetail"></div>
-        </div>
-        <div class="collapsible">
-          <div class="col-head" onclick="this.parentElement.classList.toggle('open')">
-            <div class="col-title">
-              <svg class="col-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-              个性化推荐
-            </div>
-            <span class="col-arrow">▼</span>
-          </div>
-          <div class="col-body" id="prefsBody"></div>
-        </div>
-      </div>
-
-      <div class="mine-section">
-        <div class="sec-label">个人档案</div>
-        <div id="profileCompletion"></div>
-        <div class="collapsible">
-          <div class="col-head" onclick="this.parentElement.classList.toggle('open')">
-            <div class="col-title">
-              <svg class="col-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              个人档案
-            </div>
-            <span class="col-arrow">▼</span>
-          </div>
-          <div class="col-body" id="archiveContent"></div>
-        </div>
-      </div>
-
-      <!-- 我的收藏 -->
-      <div class="mine-section">
-        <div class="sec-label">我的收藏</div>
-        <div class="collapsible">
-          <div class="col-head" onclick="this.parentElement.classList.toggle('open')">
-            <div class="col-title">
-              <svg class="col-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-              我的收藏
-            </div>
-            <span class="col-arrow">▼</span>
-          </div>
-          <div class="col-body" id="bookmarksList"></div>
-        </div>
-      </div>
-
-
-    </div>
     </div>
   </main>
 </div>
 
 <div class="modal-overlay hidden" id="modalOverlay">
-  <div class="modal-box">
-    <div class="modal-head"><span id="modalTitle">编辑</span><button onclick="closeModal()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--ink-40)">✕</button></div>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
+    <div class="modal-head"><span id="modalTitle">编辑</span><button type="button" aria-label="关闭编辑" onclick="closeModal()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--ink-40)">✕</button></div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-foot"><button class="btn-outline" style="padding:8px 18px;border-radius:8px;font-size:var(--font-size-sm)" onclick="closeModal()">取消</button><button class="btn-primary" style="padding:8px 18px;border-radius:8px;font-size:var(--font-size-sm)" id="modalConfirm">确认</button></div>
   </div>
 </div>
 
 <script src="js/storage.js?v=ui-20261003-3"></script>
-<script src="js/design.js?v=ui-20261003-3"></script>
-<script src="js/profile_engine.js?v=7"></script>
-<script src="js/mine.js?v=ui-20261003-3"></script>
+<script src="js/market_ui.js"></script>
+<script src="js/bank_client.js"></script>
+<script src="js/financial_data.js?dq=9b3c0fd6c9b4"></script>
+<script src="js/account_switcher.js"></script>
+<script src="js/view_context.js"></script>
+<script src="js/speech.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/design.js?ui=a7ba89e189e9"></script>
+<script src="js/help.js"></script>
+<script src="js/mine.js?dq=1159dff020b4"></script>
+<script src="assets/vendor/3d-force-graph.min.js"></script>
+<script src="assets/vendor/node-text.min.js"></script>
+<script src="js/calendar_client.js?dq=afda29dc9d12"></script>
+<script src="js/calendar_ui.js"></script>
+<script src="js/personal_graph.js"></script>
+<script src="js/mine_workspace.js?dq=e1e1232f1634"></script>
+<script src="js/lifecycle.js"></script>
 </body>
 </html>

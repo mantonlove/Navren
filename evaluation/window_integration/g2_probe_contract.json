@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "stage": "G2",
+  "status": "FROZEN_NOT_RUN",
+  "frozen_at": "2026-10-05T20:18:45.122401+00:00",
+  "approved_increment_plan": "/Users/manton/CC/projects/Navren/outputs/window-progress/finance/solution-review/solution-v2.md",
+  "plan_sha256": "7e3ffe6996588cdd55733926ae294fff72a6e6b23454134ee9fa0708d2f100e8",
+  "original_finance_dataset": {
+    "path": "/Users/manton/CC/projects/Navren/evaluation/navren_skill_semantic_cases.json",
+    "sha256": "f92627f6dcd96a979d17d805dc5a219a47fcacc0a9e647c6f6e1a421f62ec0e6"
+  },
+  "public_probes": {
+    "artifact": "outputs/window-progress/integration/execution-handoff/evidence-g2-public-probes-v1.json",
+    "sha256": "e237157cbeb9d05fe549e756c4d918632e1942b0d392a6233cffe4666a6c7cf1",
+    "order": [
+      "P10",
+      "P02"
+    ]
+  },
+  "financial_probes": [
+    {
+      "id": "S01_emergency_floor_once",
+      "prompt": "只看模拟日常账户和未来60天，当前可安排多少钱？已确认支出以及续费候选都发生时，会不会跌破已设置的应急底线？请简短说明。",
+      "original_case_canonical_sha256": "157b9533d967af36f3dd0c5dca508a550d0dc51dc4b35aca176d182cb668f7f0",
+      "fixture": "default_temp",
+      "grading_source": "original case must_convey/forbidden_conclusions/human_judgment, never model input",
+      "status": "FROZEN_NOT_RUN"
+    },
+    {
+      "id": "S02_future_zero_not_missing_history",
+      "prompt": "核对2026年9月的收入和未来60天：时间轴里已确认未来入账为0，是不是说明我没收入，或者收入档案缺失？",
+      "original_case_canonical_sha256": "6659e156df87821f2b2e4d011927f84db43813a139aec26aa9706965e8127272",
+      "fixture": "default_temp",
+      "grading_source": "original case must_convey/forbidden_conclusions/human_judgment, never model input",
+      "status": "FROZEN_NOT_RUN"
+    },
+    {
+      "id": "S03_buffer_adequacy_unknown",
+      "prompt": "只基于当前资金和未来60天已记录事项，能不能说我的应急缓冲很薄、实际压力肯定比账面更大？我还没有确认必要生活支出、收入稳定性或目标优先级。",
+      "original_case_canonical_sha256": "fdff372c2530830cd6715c60fdd583e572bcb29a68b712039315d94da5e53eec",
+      "fixture": "default_temp",
+      "grading_source": "original case must_convey/forbidden_conclusions/human_judgment, never model input",
+      "status": "FROZEN_NOT_RUN"
+    },
+    {
+      "id": "S10_linked_reserve_dedup",
+      "prompt": "主账户本期信用卡应还款已经被预算计入了。我想把这同一笔款的目标留款定为2500元，帮我看去重后还能安排多少；只做规划，不实际预留或付款。",
+      "original_case_canonical_sha256": "758dd94e9b74e3eb435cbc690dddc815664f97c158de709049023ae72cbb2cdf",
+      "fixture": "default_temp",
+      "grading_source": "original case must_convey/forbidden_conclusions/human_judgment, never model input",
+      "status": "FROZEN_NOT_RUN"
+    }
+  ],
+  "financial_probe_order": [
+    "S01_emergency_floor_once",
+    "S02_future_zero_not_missing_history",
+    "S03_buffer_adequacy_unknown",
+    "S10_linked_reserve_dedup"
+  ],
+  "per_task_limits": {
+    "wall_seconds": 105,
+    "primary_reviewer_tokens": 100000,
+    "native_output_max": 4000,
+    "model_rounds": 8,
+    "tool_attempts": 12
+  },
+  "serial_stage_limits": {
+    "public_seconds": 300,
+    "finance_seconds": 600,
+    "concurrency": 1
+  },
+  "gates": [
+    "all relevant actual G1 groups pass on one immutable candidate; zero skip/expected failure/timeouts",
+    "Agent/RAG/Base module stable SHA handoff matches same candidate; no parallel cloud owner batch",
+    "public input fixed or new compatible handoff explicitly frozen",
+    "trusted runner only sends literal prompt and ordinary application evidence, never oracle"
+  ],
+  "stops": [
+    "first critical protocol/side effect/source drift failure stops entire sequence",
+    "any budget failure, truncation, or missing/inconsistent actual usage stops later paid same-source tasks; no unchanged giant retry",
+    "each child actual exit and HTTP/model runtime checked before next task; collector exit0 alone cannot continue"
+  ],
+  "independent_final_semantic_judgment_required": true,
+  "actual_model_calls": 0,
+  "full_integration_release_authorized": false
+}

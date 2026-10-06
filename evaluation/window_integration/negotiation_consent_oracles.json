@@ -1,0 +1,47 @@
+{
+  "schema_version": "navren.window-integration.negotiation-consent.v1",
+  "frozen_on": "2026-10-06",
+  "freeze_stage": "before_implementing_test_negotiation_consent.py",
+  "purpose": "具体已发现的服务协商同意识别与接受前条款回查问题的独立验收；保留首次失败，不按实现结果修改预期。",
+  "evaluation_boundary": {
+    "formal_original_ten_questions_three_rounds": false,
+    "real_model_semantic_quality": false,
+    "real_bank_contract_or_benefit": false,
+    "fixtures": "TemporaryDirectory 临时 FinanceGateway、独立个人密钥、合成账户及可信合成规则的临时副本；实际 HTTP 分派及服务实现。",
+    "network": "仅 loopback；禁止真实模型、外网、現役库和私人资料。",
+    "unavailable_interface_policy": "缺少真实接口时 SkipTest 并给出具体接口名；既有接口违反人类预期应失败。"
+  },
+  "independent_judgment": {
+    "consent": "用户明确拒绝迁工资优先于同一句中对电子账单的同意。不得将否定中的愿意/同意或工资与迁入词共现当作工资迁入授权。",
+    "acceptance": "本人只确认已展示的同一方案。受信条款或资格在 accept 前改变，即使规则 schema_version 和 offer_id 保持相同，也必须拒绝旧草案；不能隐形重建并接受新条款。",
+    "state": "以临时 SQLite 的服务申请与草案行、真实返回条款、财务原始行及 operations 数量为裁判。沿用原 WI-02/07/11 及 U09/10 的用户底线、本人确认和无资金副作用合同。"
+  },
+  "responsibility": {
+    "business_owner": "基座窗口（service_negotiation.py，原 navren-personal-store-20261005 的后续归属）",
+    "agent_collaborator": "Agent窗口（用户底线与服务协商工具协议）",
+    "acceptance_owner": "06-集成验收窗口（独立验收文件）"
+  },
+  "cases": [
+    {
+      "id": "NC01",
+      "test": "test_explicit_salary_refusals_never_become_salary_consent",
+      "requests": [
+        "我不愿意迁入工资，但愿意开通电子账单服务费减免；拒绝购买理财。",
+        "我不同意转入工资，但同意电子账单服务费减免；拒绝购买理财。",
+        "我拒绝工资迁入，只同意电子账单服务费减免；拒绝购买理财。",
+        "我只同意电子账单，不愿迁入工资；请减免服务费，拒绝购买理财。"
+      ],
+      "expected": ["salary_deposit_intent 为 false", "不出现 requires_salary_deposit 为 true 的方案", "不需要迁工资的电子账单方案仍可展示", "预览0申请、0金融操作、全部资金和业务原始行不变"]
+    },
+    {
+      "id": "NC02",
+      "test": "test_changed_trusted_terms_or_eligibility_reject_original_draft",
+      "request": "我愿意迁入工资，愿意电子账单服务费减免；拒绝购买理财。先展示条件申请方案。",
+      "faults": [
+        {"id":"benefit_terms_changed", "description":"草案展示后改变选中电子账单优惠的 monthly_value_minor、duration_months 与一致的 max_cost_minor，保持规则 schema_version 与 offer_id。"},
+        {"id":"salary_eligibility_changed", "description":"草案展示后把工资方案最低月薪与连续工资月数提高，保持规则 schema_version 与 offer_id。"}
+      ],
+      "expected": ["旧草案 accept HTTP409并有明确拒绝码，不限制新增实现的具体拒绝码命名", "0服务申请、0提交审计、0金融操作、全部资金和业务原始行不变", "草案数不增加、未创建替代草案，不以旧确认隐形接受新条款"]
+    }
+  ]
+}

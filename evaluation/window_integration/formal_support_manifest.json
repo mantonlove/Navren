@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "contract": "navren.formal_support_inputs.v1",
+  "status": "FROZEN_INPUT_CONTRACT_NOT_EXECUTED",
+  "basis": {
+    "path": "evaluation/window_integration/formal_business_tasks.json",
+    "sha256": "99eaeba3d2519f63c130b50c8a696809d60e68486e578546104e78a70a4e1d24",
+    "json_pointer": "/fixture_contract/new_closed_seed_v1"
+  },
+  "classification": "additional_formal_support_separate_from_canonical_source_data_aux",
+  "canonical_data_contract": "The existing exact 43 data map is unchanged. These 8 support files are a separately enumerated immutable input contract.",
+  "canonical_aux_contract": "The existing exact 3 auxiliary map is unchanged. Do not add these support files to AUXILIARY.",
+  "copy_policy": [
+    "Copy all 8 original bytes with exact SHA into both immutable prepared-source and its actual G1 candidate, preserving project-relative paths.",
+    "Check live source/support before and after preparation; check prepared support before/after candidate copying and every execution stage plus final.",
+    "Missing, symlinked, changed or unexpected support entries block execution; no fallback to active production seed or newly generated data.",
+    "Archived seed-generation sources are immutable independent expected-state authorities; repaired active service.py does not replace the archived original."
+  ],
+  "file_count": 8,
+  "files": [
+    {
+      "path": "outputs/window-progress/integration/formal-business-design/fixture-core-v1.json",
+      "sha256": "b28622224b065a7760ed079b86769a1614b33c8f7cf188312b4ddd99f0f368bd",
+      "classification": "closed_seed_initial_fixture",
+      "basis_pointer": "/fixture_contract/new_closed_seed_v1/core_sha256"
+    },
+    {
+      "path": "outputs/window-progress/integration/formal-business-design/seed-generation-sources/simulated_bank/service.py",
+      "sha256": "33e4a95882cbaff67ad3fd1bbea3112814aa528771a71bca89b53d19b4436313",
+      "classification": "archived_closed_seed_generation_source",
+      "original_relative_name": "simulated_bank/service.py",
+      "basis_pointer": "/fixture_contract/new_closed_seed_v1/generation_source_sha256/simulated_bank~1service.py"
+    },
+    {
+      "path": "outputs/window-progress/integration/formal-business-design/seed-generation-sources/simulated_bank/customer_seed.py",
+      "sha256": "fc0d6823f50387eaed49c1b890a9b33a6bf69ead8c993e91390d5a505d2239ca",
+      "classification": "archived_closed_seed_generation_source",
+      "original_relative_name": "simulated_bank/customer_seed.py",
+      "basis_pointer": "/fixture_contract/new_closed_seed_v1/generation_source_sha256/simulated_bank~1customer_seed.py"
+    },
+    {
+      "path": "outputs/window-progress/integration/formal-business-design/seed-generation-sources/simulated_bank/customer_schema.py",
+      "sha256": "738df24ea03f19871bb6ab4c5db4044646fc822702f40a6c5420df02fee354bc",
+      "classification": "archived_closed_seed_generation_source",
+      "original_relative_name": "simulated_bank/customer_schema.py",
+      "basis_pointer": "/fixture_contract/new_closed_seed_v1/generation_source_sha256/simulated_bank~1customer_schema.py"
+    },
+    {
+      "path": "outputs/window-progress/integration/formal-business-design/seed-generation-sources/simulated_bank/customer_archive.py",
+      "sha256": "5bc07c60ae27eeb5e962f4b455b7f0ff68061f107e30404001da093484854833",
+      "classification": "archived_closed_seed_generation_source",
+      "original_relative_name": "simulated_bank/customer_archive.py",
+      "basis_pointer": "/fixture_contract/new_closed_seed_v1/generation_source_sha256/simulated_bank~1customer_archive.py"
+    },
+    {
+      "path": "outputs/window-progress/integration/formal-business-design/seed-generation-sources/simulated_bank/agent_guard.py",
+      "sha256": "c5074d51f5371e84020cc7f6a3910b3507682fdf47a47f008e9818f05d4e32ff",
+      "classification": "archived_closed_seed_generation_source",
+      "original_relative_name": "simulated_bank/agent_guard.py",
+      "basis_pointer": "/fixture_contract/new_closed_seed_v1/generation_source_sha256/simulated_bank~1agent_guard.py"
+    },
+    {
+      "path": "outputs/window-progress/integration/formal-business-design/seed-generation-sources/simulated_bank/fixtures/demo.json",
+      "sha256": "03498e514aa5689fa6020cb4d0560710b77b0ba88a5d094b6445f25876e7ac1a",
+      "classification": "archived_closed_seed_generation_source",
+      "original_relative_name": "simulated_bank/fixtures/demo.json",
+      "basis_pointer": "/fixture_contract/new_closed_seed_v1/generation_source_sha256/simulated_bank~1fixtures~1demo.json"
+    },
+    {
+      "path": "outputs/window-progress/integration/formal-business-design/seed-generation-sources/simulated_bank/reference/fineract-client-examples.json",
+      "sha256": "b2cbf9e7d6045f83014d35da64f715a51e1a3e7b6b5c108b316309aec08c2afc",
+      "classification": "archived_closed_seed_generation_source",
+      "original_relative_name": "simulated_bank/reference/fineract-client-examples.json",
+      "basis_pointer": "/fixture_contract/new_closed_seed_v1/generation_source_sha256/simulated_bank~1reference~1fineract-client-examples.json"
+    }
+  ],
+  "model_configuration_support_files": [],
+  "model_configuration_policy": "No extra model-config file is declared by this support contract. Static runtime/config/skill sources and three formal evaluation JSON inputs remain in canonical source; cloud credentials remain environment-only. Additional dependencies must be separately evidenced, never guessed into this fixed 8-file map.",
+  "execution_status": "not_run",
+  "model_or_service_calls": 0
+}

@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "retrieved_at": "2026-10-05T14:03:07.968497+00:00",
+  "sources": [
+    {
+      "repository": "anthropics/knowledge-work-plugins",
+      "commit": "8444efcd48f7012f09797778a36a33e73d0861f4",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/anthropics/knowledge-work-plugins/blob/8444efcd48f7012f09797778a36a33e73d0861f4/LICENSE",
+          "local_path": "skills/upstream/knowledge-work-plugins/LICENSE",
+          "sha256": "a6946284993aeec75c7d75906064b66210c46051e562077efb30eb6dcfe72e26"
+        },
+        {
+          "path": "enterprise-search/skills/search-strategy/SKILL.md",
+          "source_url": "https://github.com/anthropics/knowledge-work-plugins/blob/8444efcd48f7012f09797778a36a33e73d0861f4/enterprise-search/skills/search-strategy/SKILL.md",
+          "local_path": "skills/upstream/knowledge-work-plugins/enterprise-search/skills/search-strategy/SKILL.md",
+          "sha256": "71d5ba2d219a72d696e079885cba2fb5455ba5da6b1404491f8b945bdd8694c6"
+        },
+        {
+          "path": "enterprise-search/skills/knowledge-synthesis/SKILL.md",
+          "source_url": "https://github.com/anthropics/knowledge-work-plugins/blob/8444efcd48f7012f09797778a36a33e73d0861f4/enterprise-search/skills/knowledge-synthesis/SKILL.md",
+          "local_path": "skills/upstream/knowledge-work-plugins/enterprise-search/skills/knowledge-synthesis/SKILL.md",
+          "sha256": "8dc66c66ef0004010bbf2d569251163e90a6675b982e0cb99ef26b4dd1c5a0f6"
+        },
+        {
+          "path": "data/skills/validate-data/SKILL.md",
+          "source_url": "https://github.com/anthropics/knowledge-work-plugins/blob/8444efcd48f7012f09797778a36a33e73d0861f4/data/skills/validate-data/SKILL.md",
+          "local_path": "skills/upstream/knowledge-work-plugins/data/skills/validate-data/SKILL.md",
+          "sha256": "1e424822043480375b80aef9416227b1c8083af749ca536568716265f79ca54b"
+        }
+      ]
+    },
+    {
+      "repository": "anthropics/claude-for-financial-advisors",
+      "commit": "96fbcb4797758186786c50dd1a09ce2feac6e18c",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "LICENSE",
+          "source_url": "https://github.com/anthropics/claude-for-financial-advisors/blob/96fbcb4797758186786c50dd1a09ce2feac6e18c/LICENSE",
+          "local_path": "skills/upstream/claude-for-financial-advisors/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "skills/prospect-intake/SKILL.md",
+          "source_url": "https://github.com/anthropics/claude-for-financial-advisors/blob/96fbcb4797758186786c50dd1a09ce2feac6e18c/skills/prospect-intake/SKILL.md",
+          "local_path": "skills/upstream/claude-for-financial-advisors/skills/prospect-intake/SKILL.md",
+          "sha256": "9dd398e5d715201e54c921769564abc87a0b50459aa81391da57f8c409de0b27"
+        },
+        {
+          "path": "skills/portfolio-rebalance-review/SKILL.md",
+          "source_url": "https://github.com/anthropics/claude-for-financial-advisors/blob/96fbcb4797758186786c50dd1a09ce2feac6e18c/skills/portfolio-rebalance-review/SKILL.md",
+          "local_path": "skills/upstream/claude-for-financial-advisors/skills/portfolio-rebalance-review/SKILL.md",
+          "sha256": "47abfb3e020c6c70c31a70ed1713e6a3c2e50f3f359698b5f1d78ada128bd2ed"
+        }
+      ]
+    }
+  ],
+  "adaptation_notice": "仅参考任务方法；Navren 衍生文件改写为中文、受限业务工具、人民币与中国个人银行流程，删除邮箱/CRM/任意SQL/自动交易及美国税务步骤。原文只供维护者溯源，不加入产品技能目录或直接执行。"
+}

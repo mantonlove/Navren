@@ -1,0 +1,36 @@
+{
+  "name": "three",
+  "version": "0.179.1",
+  "license": "MIT",
+  "source": "https://registry.npmjs.org/three/-/three-0.179.1.tgz",
+  "integrity": "sha512-5y/elSIQbrvKOISxpwXCR4sQqHtGiOI+MKLc3SsBdDXA2hz3Mdp3X59aUp8DyybMa34aeBwbFTpdoLJaUDEWSw==",
+  "retrievedAt": "2026-10-05T15:34:58.238886+00:00",
+  "files": [
+    {
+      "path": "build/three.module.js",
+      "bytes": 603380,
+      "sha256": "ce6be0cb5ead0027e1f6094dd82ad43bba0886c03324a3b21fd9a33ac93fc2b4"
+    },
+    {
+      "path": "build/three.core.js",
+      "bytes": 1401321,
+      "sha256": "3cd45beb4da9ce682bb7f5894dafd8a146379aa4b6b5aa3acd9ef5d47fdaaf92"
+    },
+    {
+      "path": "examples/jsm/objects/Water.js",
+      "bytes": 12912,
+      "sha256": "65e1f76c3c0e0726d5370c25e00e1c855365a942fa5490c639371cd4d10bfc74"
+    },
+    {
+      "path": "examples/jsm/objects/Sky.js",
+      "bytes": 7257,
+      "sha256": "a19982b69e496e52d4cd7072029f0a8e5277203cbebf2277a23267e90b705640"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1081,
+      "sha256": "bfe119ea4fd413f5f7ca3fcd63adb0c4a073ed39daa2fe7d3e6b769e21272601"
+    }
+  ],
+  "modifications": "none"
+}

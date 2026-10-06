@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "suite_id": "service-response-guards-20261006-v1",
+  "scope": "isolated_real_http_sse_ws_with_scripted_local_models_not_formal_semantic_score",
+  "basis": [
+    "设计文档/多窗口执行方案/06-集成验收执行任务.md:22-28",
+    "outputs/window-progress/integration/repair-plan-20261006.md:28-39",
+    "现有服务预览不是接受或优惠兑现；最终发布必须回查同轮服务规则、资格、预览有效期"
+  ],
+  "fixture": {
+    "request": "我明确愿意迁入工资，拒绝购买理财；请协商服务费减免，说明电子账单和工资方案的条件，先只预览，不提交申请。",
+    "approved_reply": "本轮合成服务条件仍可预览，电子账单与工资方案须本人另行接受，资格与优惠尚未兑现；公共测试条款说明可能损失本金。",
+    "public_text": "这是隔离合成公共条款：产品有风险，投资者可能损失本金。",
+    "public_product": "WI-P",
+    "public_as_of": "2026-10-06",
+    "preview_seconds": 900,
+    "expired_extra_seconds": 1,
+    "electronic_offer_id": "SYNTH-E-STATEMENT-FEE-90D",
+    "salary_offer_id": "SYNTH-PAYROLL-FEE-180D"
+  },
+  "expectations": {
+    "normal_json_http": 200,
+    "normal_sse_http": 200,
+    "changed_json_http": 409,
+    "expired_sse_http": 200,
+    "safe_service_errors": ["STALE_SERVICE_EVIDENCE", "METRIC_VERSION_CONFLICT"],
+    "applications": 0,
+    "submission_audits": 0,
+    "financial_operations": 0,
+    "financial_state_unchanged": true,
+    "old_audio_bytes": 0,
+    "voice_slots": 3,
+    "stale_reply_published": false,
+    "stale_speech_receipt_published": false,
+    "stale_operation_card_published": false
+  },
+  "fault_policy": {
+    "publication_window": "真实公共provider.db在base_runtime.evidence.public_guard调用栈中取得连接后、返回到公共锁核验前注入；response_guard/service_guard保持真实未替换",
+    "rules_change": "使用现有受信publish_rules CAS修改本题临时规则，保持schema_version和offer_id；必须证实实际规则摘要变化",
+    "expiry": "使用本题可控银行clock推进过实际SQL预览expires_at，不改资金/草案行；必须证实此前有效、此时已过期",
+    "empty_window": "没有成功进入窗口或没有实际改变来源不能计通过；缺真实接口记BLOCKED，不虚构API",
+    "receipt": "发布前阻断不要求缓存中从未分配凭据；要求客户端无旧凭据，旧缓存凭据不可用于TTS",
+    "guard_substitution": "不mock、跳过或替换待测response_guard、service evidence_guard、公共锁核验或WS发布守卫"
+  },
+  "cases": [
+    {
+      "id": "SRG01",
+      "test": "test_same_rules_allow_actual_json_and_sse_local_control",
+      "transports": ["json", "sse"],
+      "expect": "同规则真实HTTP主循环与本地审核正常允许；保留本轮答复、服务snapshot与有效语音凭据；不提交申请、不写资金"
+    },
+    {
+      "id": "SRG02",
+      "test": "test_late_rule_content_or_eligibility_change_withholds_json",
+      "faults": ["terms", "eligibility"],
+      "expect": "审核与初步验证后、最终JSON前同offer条款或工资资格规则摘要实际变化；拒绝旧文字/语音凭据/操作卡，0申请/提交审计/资金操作"
+    },
+    {
+      "id": "SRG03",
+      "test": "test_preview_expires_in_final_public_lock_window_withholds_sse",
+      "expect": "审核与初步验证后公共锁窗口跨过预览期限；SSE可有进度事件但最终navren.result只能安全拒绝，不发布旧结论、凭据或操作"
+    },
+    {
+      "id": "SRG04",
+      "test": "test_late_tts_pcm_after_service_rule_change_is_not_published",
+      "expect": "由真实正常/api/agent取得receipt；实际TTS握手后上游阻塞，规则CAS修订后旧PCM实际返回；WS必须明确拒绝、旧音频0字节、关闭上游并释放3槽；资金/申请不变"
+    }
+  ],
+  "limitations": [
+    "脚本主模型与审核仅证明真实工程链和正常允许对照，不构成模型中文金融语义评分",
+    "合成WS音频不是真实云TTS或麦克风设备验收",
+    "这是具体末端竞态回归，不混入原十题/十二题或正式三轮",
+    "源码/预期运行内变化使结果无效；首次失败保留，不改预期凑通过"
+  ]
+}

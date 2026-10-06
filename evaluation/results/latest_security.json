@@ -1,0 +1,191 @@
+{
+  "dataset_id": "navren-synthetic-security-fault-eval",
+  "dataset_version": "1.0.0",
+  "generated_at": "2026-10-04T04:46:16.285533+00:00",
+  "environment": "隔离模拟银行、合成客户数据与模拟语音上游",
+  "limitations": [
+    "每项通过表示对应的工程回归断言通过，不代表系统绝对安全、真实客户表现或比赛评分。",
+    "不连接真实银行、不执行真实资金操作；模型与语音供应商以本地替身或独立合成语音烟测验证。",
+    "本评测集不覆盖真实人工顾问处理回执、真实麦克风噪声和现场网络故障。"
+  ],
+  "summary": {
+    "case_count": 16,
+    "passed_cases": 16,
+    "failed_cases": 0,
+    "test_count": 26,
+    "failed_test_count": 0
+  },
+  "cases": [
+    {
+      "id": "ledger_note_prompt_injection",
+      "scenario": "流水备注包含要求忽略规则并执行操作的指令",
+      "status": "passed",
+      "expected_invariant": "流水备注作为不可信数据处理，不触发交易或权限变化。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_note_injection_does_not_execute_an_action"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "agent_cannot_self_authorize",
+      "scenario": "Agent 尝试使用自身凭证确认或验证写操作",
+      "status": "passed",
+      "expected_invariant": "Agent 只能准备草案，不能替用户确认、验证或执行。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_agent_tools_require_scoped_credentials",
+        "test_simulated_bank.HTTPTests.test_agent_can_prepare_but_cannot_self_confirm_or_verify"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "client_permission_escalation",
+      "scenario": "客户端伪造权限级别或提交未支持动作",
+      "status": "passed",
+      "expected_invariant": "服务端忽略客户端权限覆盖，并拒绝未登记的动作。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_unsupported_action_and_client_permission_override"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "confirmation_payload_tampering",
+      "scenario": "确认时篡改金额、操作摘要或增加字段",
+      "status": "passed",
+      "expected_invariant": "授权内容与执行内容不一致时拒绝，账户和订单不变。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_confirmation_digest_tampering_and_extra_amount",
+        "test_bank_integration.IntegrationTest.test_verification_wrong_digest_and_code_do_not_change_money"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "verification_token_replay",
+      "scenario": "把一笔操作的强验证凭证用于另一笔操作",
+      "status": "passed",
+      "expected_invariant": "验证令牌绑定具体操作，跨操作复用会被拒绝。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_verification_token_is_bound_to_operation"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "verification_failure_lockout",
+      "scenario": "连续输入错误的模拟验证码",
+      "status": "passed",
+      "expected_invariant": "失败次数按规则锁定，未通过验证前无账本变化。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_failed_verification_locks_then_recovers"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "stale_confirmation_after_state_change",
+      "scenario": "准备确认后用户画像或账户余额发生变化",
+      "status": "passed",
+      "expected_invariant": "旧确认失效，必须重新核对当前状态。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_changed_profile_invalidates_old_confirmation",
+        "test_simulated_bank.BankTests.test_changed_balance_invalidates_second_operation",
+        "test_bank_integration.IntegrationTest.test_stale_confirmation_and_cancellation"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "cross_workspace_credential_reuse",
+      "scenario": "在另一模拟工作区重放会话或 Agent 凭证",
+      "status": "passed",
+      "expected_invariant": "账户、操作和审计记录保持工作区隔离，越权读取或写入被拒绝。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_cross_workspace_isolation",
+        "test_simulated_bank.HTTPTests.test_scoped_token_profile_and_operation_denial",
+        "test_bank_integration.IntegrationTest.test_session_cookie_persistence_and_isolation"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "repeated_and_parallel_confirmation",
+      "scenario": "同一操作被重复或并发确认",
+      "status": "passed",
+      "expected_invariant": "相同幂等键只产生一次业务影响；并发操作不会透支。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_repeat_and_concurrent_confirmation_execute_once",
+        "test_bank_integration.IntegrationTest.test_parallel_confirmations_cannot_double_spend"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "transaction_rollback_on_storage_failure",
+      "scenario": "提交过程中模拟数据库写入失败",
+      "status": "passed",
+      "expected_invariant": "业务状态、账本和审计在事务内整体回滚，不留下半成功状态。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_sql_failure_rolls_back_every_business_change",
+        "test_statement_import.StatementImportTests.test_failed_row_write_rolls_back_dataset_batch_and_audit"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "commit_succeeded_response_lost",
+      "scenario": "服务端提交成功后连接断开且客户端未收到回执",
+      "status": "passed",
+      "expected_invariant": "重启后可查询原操作并幂等恢复回执，不重复记账。",
+      "tests": [
+        "test_bank_integration.IntegrationTest.test_commit_with_lost_response_survives_server_restart_and_replays_once"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "client_timeout_backend_continues",
+      "scenario": "客户端先超时，后端随后完成原操作",
+      "status": "passed",
+      "expected_invariant": "后端完成原操作后，客户端可查询并恢复实际回执；重试不创建第二笔操作。",
+      "tests": [
+        "test_bank_integration.IntegrationTest.test_http_timeout_while_backend_continues_recovers_receipt_without_duplicate"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "origin_and_csrf_forgery",
+      "scenario": "跨站来源或缺失 CSRF 凭证请求写操作及语音会话",
+      "status": "passed",
+      "expected_invariant": "请求在调用业务或模型前被拒绝。",
+      "tests": [
+        "test_bank_integration.IntegrationTest.test_auth_origin_and_csrf",
+        "test_voice_gateway.VoiceGatewayTest.test_csrf_and_foreign_origin_denied_before_model"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "single_use_speech_ticket",
+      "scenario": "重复使用或跨会话重放语音 WebSocket 一次性票据",
+      "status": "passed",
+      "expected_invariant": "票据绑定同源会话且只能使用一次。",
+      "tests": [
+        "test_voice_gateway.VoiceGatewayTest.test_ticket_single_use_and_session_binding"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "speech_cancel_resource_release",
+      "scenario": "用户取消正在进行的语音任务",
+      "status": "passed",
+      "expected_invariant": "上游连接关闭并释放并发容量，取消不泄露密钥或录音文件。",
+      "tests": [
+        "test_voice_gateway.VoiceGatewayTest.test_cancel_closes_upstream_and_releases_capacity",
+        "test_voice_gateway.VoiceGatewayTest.test_status_does_not_expose_key"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "audit_secret_exclusion",
+      "scenario": "检查模拟银行审计记录是否包含凭证",
+      "status": "passed",
+      "expected_invariant": "审计只保留业务必要字段，不写密钥、验证码或认证材料。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_audit_does_not_contain_credentials"
+      ],
+      "failed_tests": []
+    }
+  ],
+  "runner_output": "..........................\n----------------------------------------------------------------------\nRan 26 tests in 7.286s\n\nOK"
+}

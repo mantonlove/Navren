@@ -1,0 +1,50 @@
+{
+  "purpose": "local browser Markdown rendering; no runtime CDN requests",
+  "files": [
+    {
+      "package": "marked",
+      "version": "18.1.0",
+      "npm_url": "https://registry.npmjs.org/marked/-/marked-18.1.0.tgz",
+      "archive_sha256": "39a404686c55fc2d862216e0cbb70f6bedc456adaeb5fe57b642036455f9ffc0",
+      "package_path": "package/lib/marked.umd.js",
+      "file": "marked.umd.js",
+      "sha256": "f424dcb508fdf93e0137a970cfce8f3207ea2e3f37eca5f7556a52875683632a"
+    },
+    {
+      "package": "marked",
+      "version": "18.1.0",
+      "npm_url": "https://registry.npmjs.org/marked/-/marked-18.1.0.tgz",
+      "archive_sha256": "39a404686c55fc2d862216e0cbb70f6bedc456adaeb5fe57b642036455f9ffc0",
+      "package_path": "package/LICENSE",
+      "file": "marked.LICENSE.txt",
+      "sha256": "8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c"
+    },
+    {
+      "package": "dompurify",
+      "version": "3.4.16",
+      "npm_url": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.16.tgz",
+      "archive_sha256": "d288ced25e6bda3e5fc76d1fc9bca899260cf886e005e84f232e686ada57f1b4",
+      "package_path": "package/dist/purify.min.js",
+      "file": "purify.min.js",
+      "sha256": "2c90a9b46d6463f26038a29b686e82bc91de01fdac9d5229e7cfe3b360134ea2"
+    },
+    {
+      "package": "dompurify",
+      "version": "3.4.16",
+      "npm_url": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.16.tgz",
+      "archive_sha256": "d288ced25e6bda3e5fc76d1fc9bca899260cf886e005e84f232e686ada57f1b4",
+      "package_path": "package/LICENSE",
+      "file": "DOMPurify.LICENSE.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "package": "dompurify",
+      "version": "3.4.16",
+      "npm_url": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.16.tgz",
+      "archive_sha256": "d288ced25e6bda3e5fc76d1fc9bca899260cf886e005e84f232e686ada57f1b4",
+      "package_path": "package/LICENSE-MPL",
+      "file": "DOMPurify.LICENSE-MPL.txt",
+      "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+    }
+  ]
+}

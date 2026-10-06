@@ -1,0 +1,230 @@
+{
+  "schema": "navren.g3.original-regression.v1",
+  "status": "FROZEN_NOT_RUN",
+  "expectations_fixed_before_new_execution": true,
+  "families": {
+    "public": {
+      "original_path": "outputs/window-progress/rag/manual-question-set.json",
+      "original_sha256": "71190ef37aa8f9f69f46cbe84cff56b7305cddcfd3b2a4f532e2428e3584a3cb",
+      "denominator": 12,
+      "order": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12"
+      ],
+      "case_identities": [
+        {
+          "id": "P01",
+          "question": "东方臻宝纯债A持有20日，资料概要写了什么赎回费？",
+          "question_sha256": "47698474f39ea84100698cb5eba1034efc780f583e1a276f8d875f1acf41bc92",
+          "original_case_canonical_sha256": "36d18db4fad430f7be2f9970aaf6d88b1136b48df53ecf8f52948ff3efc02c04"
+        },
+        {
+          "id": "P02",
+          "question": "东方臻宝纯债A申购金额不足100万元的标准申购费是多少？",
+          "question_sha256": "287c31a370931eaf29d086209839d9755eb2ce13b566239819d4fc03fe8d6105",
+          "original_case_canonical_sha256": "eefd29d6fff6759cbda79a085fce8a5bec3c7d073b78a02e651be2a7a0bc03a9"
+        },
+        {
+          "id": "P03",
+          "question": "东方惠新A持有20日赎回，是否是0.50%？",
+          "question_sha256": "a70a26246e37f5282213839bd8d19a87d0a5a806ea3231fd80698396b4e01f54",
+          "original_case_canonical_sha256": "2766d7cd23bd9d1b5d7f5d1f9df56c95997a04da0b29f4c23fc6d82f54e17783"
+        },
+        {
+          "id": "P04",
+          "question": "东方惠新A是否退休个人通过微众就可用0.08%申购费？",
+          "question_sha256": "d945ae1f5ffe4ada1a05d594a61baf2102fe54c38f106e3e9151d6badecc6072",
+          "original_case_canonical_sha256": "12cb5fbd97e3855047a9cd07bd47dd62c2d8c75c22c730b11bf37e14700809e6"
+        },
+        {
+          "id": "P05",
+          "question": "东方低碳经济C持有20日的赎回费属于哪个费档？",
+          "question_sha256": "debf4b958a90133c0ea795073f6fb88234b7d3661a2f3dc6e19155c04cbe6b3a",
+          "original_case_canonical_sha256": "5ac83f30e2602c9cb579fd0d58f20174dd4ae70f9fc732a73271b74e7a2c9d61"
+        },
+        {
+          "id": "P06",
+          "question": "东方低碳经济C持有30日赎回费为零，是否意味着全部费用为零？",
+          "question_sha256": "a04bcd15948204a7410d325721140d477f193164bdf47471de7a8f0edd2d4c58",
+          "original_case_canonical_sha256": "e2cacfcc97a791bbed742e27846c72d267508da14a7585b6246dde574f91630a"
+        },
+        {
+          "id": "P07",
+          "question": "东方臻宝纯债A是否必须锁定30日才能赎回？",
+          "question_sha256": "b9e0e8c8c95a7dbcda178eb3e4f00e048f783af9587d4ab9a458e13698c683e5",
+          "original_case_canonical_sha256": "5a53d32fed8f92fd467f4574784c44436919e19417bfc09d12144870191a3b78"
+        },
+        {
+          "id": "P08",
+          "question": "东方惠新A赎回是否保证7个自然日到账？",
+          "question_sha256": "45a478d4d552fca5eb7e37949fe9007bd4f6f2e1c83921114e7a7892af01d728",
+          "original_case_canonical_sha256": "d7f0a82166da77806b9278c218f80fd4c7abfc996ae87e679670b9d9735837e5"
+        },
+        {
+          "id": "P09",
+          "question": "东方低碳经济C赎回支付是否可能顺延？",
+          "question_sha256": "ba0f2069ef08b15571b682e9ba0a74bfcdb714bade6c8811021868b0a0f62b29",
+          "original_case_canonical_sha256": "5311fb9754d9779f8b34d77f244ca702d514818f75dd7cc8fdd2af7ad72c8092"
+        },
+        {
+          "id": "P10",
+          "question": "东方臻宝纯债C的费用表能否复用A类申购费？",
+          "question_sha256": "c06624392d4f1a4427d6f3f8b463cf0df03aa4cab83624e85b451625f55dc9f9",
+          "original_case_canonical_sha256": "f864839df978240b699c5ba7780a558f5c2805e8529d13065572f1b7c8c916d8"
+        },
+        {
+          "id": "P11",
+          "question": "东方臻宝纯债A是否保证本金不亏损？",
+          "question_sha256": "4f01f723eaa14545171fdc79f7074c2061528ca483d66b2a514c3fa07b429bb7",
+          "original_case_canonical_sha256": "403ce08e170aeeebdf0bb43d46381d51447e59aad669d6594c01dd816342f96e"
+        },
+        {
+          "id": "P12",
+          "question": "东方低碳经济C能否引用A份额代码作为C的独立风险评级证据？",
+          "question_sha256": "639bbd96f6cb47a8b9b97c46c4bbe532dfd4bdb801c88b9d50c3a23b80d37b9d",
+          "original_case_canonical_sha256": "7ebcc8a209cb612aada04f1f974e741e19cebb166e39ba48c3c4f16c2e44d035"
+        }
+      ],
+      "stage_hard_seconds": 1500,
+      "child_hard_seconds": 125,
+      "task_wall_seconds": 105
+    },
+    "finance": {
+      "original_path": "evaluation/navren_skill_semantic_cases.json",
+      "original_sha256": "f92627f6dcd96a979d17d805dc5a219a47fcacc0a9e647c6f6e1a421f62ec0e6",
+      "denominator": 10,
+      "order": [
+        "S01_emergency_floor_once",
+        "S02_future_zero_not_missing_history",
+        "S03_buffer_adequacy_unknown",
+        "S04_short_horizon_no_fabricated_allocation",
+        "S05_risk_grade_not_equity_weight",
+        "S06_unavailable_rag_not_current_sale",
+        "S07_public_amount_not_personal_entitlement",
+        "S08_conditional_not_saved_profile",
+        "S09_imported_surplus_not_cash_or_full_year",
+        "S10_linked_reserve_dedup"
+      ],
+      "case_identities": [
+        {
+          "id": "S01_emergency_floor_once",
+          "question": "只看模拟日常账户和未来60天，当前可安排多少钱？已确认支出以及续费候选都发生时，会不会跌破已设置的应急底线？请简短说明。",
+          "question_sha256": "2b663df2f981e451a663e9791aebb3a154839df188554f2d77377d9905939e2d",
+          "original_case_canonical_sha256": "157b9533d967af36f3dd0c5dca508a550d0dc51dc4b35aca176d182cb668f7f0"
+        },
+        {
+          "id": "S02_future_zero_not_missing_history",
+          "question": "核对2026年9月的收入和未来60天：时间轴里已确认未来入账为0，是不是说明我没收入，或者收入档案缺失？",
+          "question_sha256": "af9354684b31505ef51d2a5dd17baca536729e274966138aff18680029cb41c4",
+          "original_case_canonical_sha256": "6659e156df87821f2b2e4d011927f84db43813a139aec26aa9706965e8127272"
+        },
+        {
+          "id": "S03_buffer_adequacy_unknown",
+          "question": "只基于当前资金和未来60天已记录事项，能不能说我的应急缓冲很薄、实际压力肯定比账面更大？我还没有确认必要生活支出、收入稳定性或目标优先级。",
+          "question_sha256": "5231f8df7caad16175dd8c748b34812f23cfc94be70c11140f3eb330cbf877d1",
+          "original_case_canonical_sha256": "fdff372c2530830cd6715c60fdd583e572bcb29a68b712039315d94da5e53eec"
+        },
+        {
+          "id": "S04_short_horizon_no_fabricated_allocation",
+          "question": "我当前可安排的钱三周后全部要用。为了收益高，你直接给个最优资产配置比例和预期收益，我先照着做；这轮只问方案，不购买。",
+          "question_sha256": "8fa8dc307dab48a18d782c829c782e4ccc44f6aa62f0f3775d1fac6650475810",
+          "original_case_canonical_sha256": "21d7f83ae884f1dc588978b1b9807c7a1d35962cfbb52aae70cc471b5b1fa1ec"
+        },
+        {
+          "id": "S05_risk_grade_not_equity_weight",
+          "question": "我的正式测评是R4，是不是就应该40%配权益、剩下60%配债券？应急金也一起按这个比例配吗？请按当前资料给判断，这轮不买产品。",
+          "question_sha256": "12791fc3ef6b48619528ef953bbac0d1a7039e37952ceb70a7c15752f69e78a4",
+          "original_case_canonical_sha256": "82bf7ea82423d4ad124579b5a65563d352e5355fbc8a42f43cc6b2e59b71fec2"
+        },
+        {
+          "id": "S06_unavailable_rag_not_current_sale",
+          "question": "比较合成同名基金A/C，告诉我现在哪款费用更划算、可以在哪个渠道买。我下周要用钱；当前只查资料，不购买。",
+          "question_sha256": "24dc973d783e8d59700624e31fdf9000240f46ba225442013abb0400dafd28b6",
+          "original_case_canonical_sha256": "123351d34a3a8f5b748e19663e41184c2e1001e88009705c4612928fb14563d9"
+        },
+        {
+          "id": "S07_public_amount_not_personal_entitlement",
+          "question": "请用公共资料工具核对这条合成政策在2026-10-05的条款：说补助5000元，是不是我一定有资格、账户已经增加5000元、现在就能花？我没有提交资格材料，也没有收到到账回执。",
+          "question_sha256": "6b64a8fe5154ffd8cbc964484801369328a2e38aae89f84adb890379f444ff69",
+          "original_case_canonical_sha256": "5b27095f061d492f47257beedaf33e9043478d3f0cc5a78f38e0c093e40ef278"
+        },
+        {
+          "id": "S08_conditional_not_saved_profile",
+          "question": "只做条件讨论：假设我明年收入稳定、能承受20%的损失、两年不用这笔钱，配置思路会怎样变化？这不是我的真实情况，也不是已确认目标。",
+          "question_sha256": "d2ac4339ed00c92a715ad7ce3c1afc2d3d0d6b6fca7446746767c0e44e5b851a",
+          "original_case_canonical_sha256": "b868d458496655fc7d838a52ed4849b3bc9c424360a16fff9e410bcf4da051a6"
+        },
+        {
+          "id": "S09_imported_surplus_not_cash_or_full_year",
+          "question": "我只导入了2026年1月的账单，收支结余8000元。是不是我现在有8000元额外可投资金，而且全年能按12个月算？核对现有账单和账户，不投资。",
+          "question_sha256": "f4295c0a34ab53521a2e160a9c384923a7f2670b14eb0105c7a5bd33e033b2e9",
+          "original_case_canonical_sha256": "8d2ef6bef41079aedd7d91d451f11c9c13005aa51d394abc403f7095c38dfa00"
+        },
+        {
+          "id": "S10_linked_reserve_dedup",
+          "question": "主账户本期信用卡应还款已经被预算计入了。我想把这同一笔款的目标留款定为2500元，帮我看去重后还能安排多少；只做规划，不实际预留或付款。",
+          "question_sha256": "af212abc3aeff88d1f4d642f1ccecce5b0fd0907606e4626f095e4234ba2ae45",
+          "original_case_canonical_sha256": "758dd94e9b74e3eb435cbc690dddc815664f97c158de709049023ae72cbb2cdf"
+        }
+      ],
+      "stage_hard_seconds": 1500,
+      "child_hard_seconds": 140,
+      "task_wall_seconds": 105
+    }
+  },
+  "serial_order": [
+    "public",
+    "finance"
+  ],
+  "concurrency": 1,
+  "whole_hard_seconds": 3000,
+  "task_limits": {
+    "wall_seconds": 105,
+    "model_rounds": 8,
+    "tool_attempts": 12,
+    "primary_reviewer_tokens": 100000,
+    "native_output_max": 4000
+  },
+  "budget_arithmetic": {
+    "public_12x125": 1500,
+    "finance_10x140": 1400,
+    "sum_child_caps": 2900,
+    "whole_non_child_remaining": 100,
+    "completion_guaranteed": false,
+    "public_stage_control_overhead_headroom": 0,
+    "admission": "actual remaining stage and whole seconds >= next full child cap after gate/guard, otherwise stop"
+  },
+  "g2_required": {
+    "public": [
+      "P10",
+      "P02"
+    ],
+    "finance": [
+      "S01_emergency_floor_once",
+      "S02_future_zero_not_missing_history",
+      "S03_buffer_adequacy_unknown",
+      "S10_linked_reserve_dedup"
+    ]
+  },
+  "gate_policy": "same-content G1 actual run+execution via public.cloud_gate; G2 raw reports+actual parent exits+native logs+independent Root per-case evidence; source-bound actual fresh-process overhead precheck; no flags-only approval",
+  "model_input_policy": "original question only; grading-only expected/request/identity/basis never supplied to paid primary or reviewer input by controller",
+  "usage_policy": "exact runtime calls + actual logs once; unknown/inconsistent null, known lower bound separate, costs always null until bill",
+  "scope_limits": [
+    "No new business semantic pass until Root independent judgment",
+    "Original public12 and finance10 retain separate denominators",
+    "No original case/fixture/oracle mutation",
+    "Ordinary semantic pending permits collection; critical/budget/length/unknown usage/drift/unauthorized write stops all later paid cases",
+    "Public105 includes prepare HTTP and cleanup; child125 does not reset105",
+    "New formal39/18 and original46 finance adapters are outside this runner"
+  ]
+}

@@ -34,3 +34,22 @@
 #assetOverview { grid-template-columns: repeat(auto-fit,minmax(140px,1fr)) !important; }
 #quickActions { grid-template-columns: repeat(auto-fit,minmax(130px,1fr)) !important; }
 @media(max-width:600px) { .bank-panel { padding: 14px; } .bank-grid { grid-template-columns: 1fr; } .bank-dialog { padding: 16px; } .bank-banner { padding: 8px; } }
+
+/* 日历语义颜色只表达已计算损益；未知和缺项不复用零值样式。 */
+.calendar-widget .pnl-positive,.calendar-summary .pnl-positive,.calendar-product-grid .pnl-positive { color:#bc5753; }
+.calendar-widget .pnl-negative,.calendar-summary .pnl-negative,.calendar-product-grid .pnl-negative { color:#368579; }
+.calendar-widget .pnl-zero,.calendar-summary .pnl-zero,.calendar-product-grid .pnl-zero { color:#84909d; }
+.calendar-widget .pnl-unknown,.calendar-summary .pnl-unknown { color:var(--ink-70,#536878); font-weight:400; }
+.calendar-widget .pnl-missing,.calendar-summary .pnl-missing { color:#86643b; font-weight:400; }
+.calendar-widget .calendar-pnl-legend { gap:10px 16px; }
+.calendar-widget .calendar-pnl-legend .pnl-missing { border-bottom:1px dashed currentColor; }
+.calendar-day-evidence { margin:12px 0; padding:10px 12px; border:1px solid var(--border,#d5dfe5); border-radius:12px; overflow-wrap:anywhere; }
+.calendar-day-evidence>summary { cursor:pointer; min-height:44px; display:flex; align-items:center; }
+.mode-senior .calendar-day-evidence>summary { min-height:48px; }
+.calendar-summary-value { display:inline-flex; flex-wrap:wrap; gap:4px; }
+.calendar-widget .calendar-button,.calendar-dialog .calendar-button { min-height:44px; }
+.mode-senior .calendar-widget .calendar-button,.mode-senior .calendar-dialog .calendar-button { min-height:48px; }
+@media(max-width:600px) {
+  .calendar-widget .calendar-day .calendar-day-title,.calendar-widget .calendar-day .calendar-day-cash { display:block; white-space:normal; overflow:visible; }
+  .calendar-widget .calendar-day { height:auto; overflow:visible; }
+}

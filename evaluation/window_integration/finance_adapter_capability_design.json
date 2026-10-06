@@ -1,0 +1,1141 @@
+{
+  "schema": "navren.finance-adapter-capability-design/1",
+  "status": "FROZEN_NOT_RUN",
+  "runner_status": "runner_pending_Base_formal_handoff",
+  "original_oracle_sha256": "04dde7576f4dec85ddf3ac2e0ecbc0940de16a3a52ef32c7bd79625ab513bb14",
+  "original_case_count": 5,
+  "minimal_test_method_count": 6,
+  "original_cases_planned_adapter_count": 2,
+  "additional_safety_method_count": 2,
+  "original_C16_adapter_passed": false,
+  "formal_46_passed": false,
+  "input_sha256": {
+    "evaluation/window_integration/finance_adapter_oracles.json": "04dde7576f4dec85ddf3ac2e0ecbc0940de16a3a52ef32c7bd79625ab513bb14",
+    "tests/window_integration/test_finance_adapter_handoff.py": "673a32ce981e568418673c15b80f6bcbdb6c90d4669b368ace66d0532f5ae351",
+    "outputs/window-progress/finance/implementation/adapter-contract.md": "4cce2b7a8f03db6ef8c9139419ba9ab9c82d847cc286f59b22c83e1eedc9da30",
+    "outputs/window-progress/finance/solution-review/solution-v2.md": "7e3ffe6996588cdd55733926ae294fff72a6e6b23454134ee9fa0708d2f100e8",
+    "simulated_bank/fixtures/demo.json": "03498e514aa5689fa6020cb4d0560710b77b0ba88a5d094b6445f25876e7ac1a",
+    "simulated_bank/reference/fineract-client-examples.json": "b2cbf9e7d6045f83014d35da64f715a51e1a3e7b6b5c108b316309aec08c2afc",
+    "simulated_bank/customer-contract.json": "fc024268ff756994c1bd92de81cb344a9bf35360fbca03e04bf4844137605453"
+  },
+  "wip_interface_observations_sha256": {
+    "base_runtime/finance_funding.py": "d676037c5f7d9b556b178e3e7befd39fe8e8c1da1c3cf3803b0202da166551dc",
+    "base_runtime/finance_qualification.py": "b65968e9803d7c63c4aeee59e2cafccc6b8ede6607fad8ec8b9dc0a43754dea1",
+    "base_runtime/finance_occupancy.py": "f089e2a299edf5b144214ba9ec61613404ab80f17d54d1c66d384d5a5c9611f6",
+    "base_runtime/finance_methods.py": "8fea9339e54c63c16838330136efd476200e64563bfc2cc80b3483d61c17fa20",
+    "financial_metrics.py": "b7d7fad005424d6e544f2d261670e7729c79ad97adcd520dee94d93edf3ab73e",
+    "goal_service.py": "5478976fedb1895c8fe6c1b76ee7018b63cc8bd2e96746c52236e9a3a404c3eb",
+    "finance_gateway.py": "f262bf226f2920b1d83f40bafc6c13e475a880e78d3be2c76e5cc15462c7cdb9",
+    "base_runtime/evidence.py": "725cfedcf1e53e2855444d87bf56e0eeadd50550cdcc52d89c60ca96c34e96e4",
+    "agent_runtime/metric_claims.py": "1a34db9d302cee75f3cd287c51d4c9147a77a8c20fb188bd05cb23942f104854",
+    "financial_methods/allocation.py": "cb5ff7866fa04a5110b5ea34b90d8811852ad7a4a639df79c78c5594d94d736c",
+    "financial_methods/funding.py": "f8811897d9ccb15880a4059145a439a1e5b13041a9010f2b5b63a01a712027ad",
+    "financial_methods/contracts.py": "135c616d83ac13600488167ff1733346a19a1d59a63c3a52589fb3b2d20e5b17",
+    "simulated_bank/service.py": "33e4a95882cbaff67ad3fd1bbea3112814aa528771a71bca89b53d19b4436313",
+    "simulated_bank/customer_schema.py": "738df24ea03f19871bb6ab4c5db4044646fc822702f40a6c5420df02fee354bc",
+    "simulated_bank/customer_seed.py": "fc0d6823f50387eaed49c1b890a9b33a6bf69ead8c993e91390d5a505d2239ca",
+    "simulated_bank/customer-contract.json": "fc024268ff756994c1bd92de81cb344a9bf35360fbca03e04bf4844137605453",
+    "simulated_bank/service_benefit_rules.json": "033510eb7bbd53ab0caa4d0a264c8185fa3aec5f15d5ad418bea261025645bb3"
+  },
+  "wip_sha_is_not_handoff_or_expected_output": true,
+  "original_cases": [
+    {
+      "case_id": "C06_unknown_budget",
+      "oracle_case_sha256": "f632cb796dfa45d7f1ffe05e9e47fbfe30e78e7c83ff93a9fb0728f4c4dd7303",
+      "resolved_input_sha256": "595f18230ac66122fe9398fd26ccf7912faace18017cd898d00ac514b19688ad",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": null,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "invest",
+            "amount_minor": 300000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:invest"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "identity_verified": true,
+            "current_sale_verified": true,
+            "terms_complete": true,
+            "risk_level": 1,
+            "minimum_minor": 1,
+            "step_minor": 1,
+            "entry_fixed_minor": 0,
+            "entry_rate": "0.01",
+            "exit_fixed_minor": 0,
+            "exit_rate": "0",
+            "fee_rounding": "half_up",
+            "fee_basis": "allocated_principal",
+            "exit_available_on": "2026-11-01",
+            "evidence_as_of": "2026-10-06",
+            "valid_through": "2026-10-06",
+            "input_refs": [
+              "adapter:terms"
+            ],
+            "source_versions": [
+              [
+                "terms",
+                "v1"
+              ]
+            ]
+          }
+        ],
+        "risk": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "level": 2,
+          "confirmed": true,
+          "effective_on": "2026-10-06",
+          "valid_through": "2027-10-06",
+          "input_refs": [
+            "adapter:formal-risk"
+          ],
+          "source_versions": [
+            [
+              "risk",
+              "v1"
+            ]
+          ]
+        },
+        "funds_calculation_status": "unavailable",
+        "funds_coverage_gaps": [
+          "missing_balance"
+        ]
+      },
+      "expected_sha256": "2314f88803e06fba25a19b9ec8019e1445c1669246d4494ad89d26ca04ee3e08",
+      "expected_literal": {
+        "plans": [
+          {
+            "plan_id": "retain_cash",
+            "calculation_status": "unavailable",
+            "feasibility": "pending_dependencies",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "funds_not_calculated"
+            ],
+            "execution_authority": false
+          },
+          {
+            "plan_id": "confirmed_uses",
+            "calculation_status": "unavailable",
+            "feasibility": "pending_dependencies",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "funds_not_calculated"
+            ],
+            "execution_authority": false
+          }
+        ]
+      },
+      "original_adapter_execution_status": "not_run",
+      "local_execution_status": "NOT_RUN",
+      "disposition": "runner_pending"
+    },
+    {
+      "case_id": "C07_occupied_once",
+      "oracle_case_sha256": "757d8821a65285c4c018fab4155a424dd8dc3835dc4cbb9fff9794ac716e3308",
+      "resolved_input_sha256": "472ef8e14f192e986e8c2122e48c66a0e34c52f91d0c57397026a6500641bd67",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 70000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "G",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:G"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ],
+              [
+                "hold-1",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 30000,
+            "occupancy_refs": [
+              "hold-1"
+            ],
+            "occupancy_verified_in_baseline": true
+          }
+        ],
+        "products": [],
+        "risk": null
+      },
+      "expected_sha256": "2dda2c16508c856e6661e78f9cf9dc1d77c33962192213681108a7e75e71fbb1",
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "calculated",
+          "feasibility": "feasible",
+          "metrics": {
+            "investment_principal": 0,
+            "assigned_cash": 70000,
+            "entry_fees": 0,
+            "exit_fee_reserve": 0,
+            "remaining_cash": 70000,
+            "unassigned_cash": 0
+          },
+          "conservation_difference_minor": 0,
+          "cash_partition_difference_minor": 0,
+          "future_proceeds_minor": null,
+          "execution_authority": false
+        },
+        "allocation_amount_minor": 70000,
+        "already_occupied_minor": 30000,
+        "occupancy_status": "coverage_only"
+      },
+      "original_adapter_execution_status": "not_run",
+      "local_execution_status": "NOT_RUN",
+      "disposition": "input_contract_ambiguity_adapter_pending_independent_capability_only"
+    },
+    {
+      "case_id": "C08_reused_occupancy",
+      "oracle_case_sha256": "75cffb17f62f009435298127c278f09136d8260f499a3a5584bc168b1d50ce06",
+      "resolved_input_sha256": "dc94f2be5c8d3069552b8bd59e860e6826100fe2dcfc544897d2ec8f367c8825",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 70000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "G1",
+            "amount_minor": 50000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:G1"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 30000,
+            "occupancy_refs": [
+              "hold-1"
+            ],
+            "occupancy_verified_in_baseline": true
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "G2",
+            "amount_minor": 50000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:G2"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 30000,
+            "occupancy_refs": [
+              "hold-1"
+            ],
+            "occupancy_verified_in_baseline": true
+          }
+        ],
+        "products": [],
+        "risk": null
+      },
+      "expected_sha256": "40de6c01a4ddb0df90cdd63e153963fba55a2b05d24d93a220c3d60df0b1d5ac",
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "infeasible",
+          "feasibility": "infeasible",
+          "metrics": {
+            "investment_principal": null,
+            "assigned_cash": null,
+            "entry_fees": null,
+            "exit_fee_reserve": null,
+            "remaining_cash": null,
+            "unassigned_cash": null
+          },
+          "coverage_gaps_contains": [
+            "occupancy_reused:hold-1"
+          ],
+          "execution_authority": false
+        }
+      },
+      "original_adapter_execution_status": "not_run",
+      "local_execution_status": "NOT_RUN",
+      "disposition": "input_contract_ambiguity_adapter_pending_independent_capability_only"
+    },
+    {
+      "case_id": "C14_simulated_risk_not_formal",
+      "oracle_case_sha256": "dc80ce745e13254902f6836396659cd1927c6232a89269dc58dff5c3db5346d1",
+      "resolved_input_sha256": "93d63f0030dc4ae340524ec4e8d6d0338c5b96d26f08e0acb020cd6ac9e14375",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 500000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "invest",
+            "amount_minor": 300000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:invest"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "identity_verified": true,
+            "current_sale_verified": true,
+            "terms_complete": true,
+            "risk_level": 1,
+            "minimum_minor": 1,
+            "step_minor": 1,
+            "entry_fixed_minor": 0,
+            "entry_rate": "0.01",
+            "exit_fixed_minor": 0,
+            "exit_rate": "0",
+            "fee_rounding": "half_up",
+            "fee_basis": "allocated_principal",
+            "exit_available_on": "2026-11-01",
+            "evidence_as_of": "2026-10-06",
+            "valid_through": "2026-10-06",
+            "input_refs": [
+              "adapter:terms"
+            ],
+            "source_versions": [
+              [
+                "terms",
+                "v1"
+              ]
+            ]
+          }
+        ],
+        "risk": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "level": 2,
+          "confirmed": true,
+          "effective_on": "2026-10-06",
+          "valid_through": "2027-10-06",
+          "input_refs": [
+            "adapter:formal-risk"
+          ],
+          "source_versions": [
+            [
+              "risk",
+              "v1"
+            ]
+          ]
+        },
+        "risk_source": {
+          "configuration_source": "navren_synthetic",
+          "not_real_risk_assessment": true
+        }
+      },
+      "expected_sha256": "9f0efc86ee60756d066db0fee3565ff9f69eae61b2ea1f0525777cd268539ba1",
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "unavailable",
+          "feasibility": "pending_dependencies",
+          "metrics": {
+            "investment_principal": null,
+            "assigned_cash": null,
+            "entry_fees": null,
+            "exit_fee_reserve": null,
+            "remaining_cash": null,
+            "unassigned_cash": null
+          },
+          "coverage_gaps_contains": [],
+          "execution_authority": false
+        },
+        "required_reason_semantics": "缺正式测评与本人资格来源"
+      },
+      "original_adapter_execution_status": "not_run",
+      "local_execution_status": "NOT_RUN",
+      "disposition": "runner_pending"
+    },
+    {
+      "case_id": "C16_wrong_funds_basis",
+      "oracle_case_sha256": "0e4b5d0c6c2441d3315337ef8137385b3d099fc0827b2b5664af2191f01c772b",
+      "resolved_input_sha256": "ed648ec9f9de487eea9e1aecc5e05e49d6fcbd96a58d107697da8a6d770dee9d",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 500000,
+        "funds_basis": "account_balance",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "invest",
+            "amount_minor": 300000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:invest"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "identity_verified": true,
+            "current_sale_verified": true,
+            "terms_complete": true,
+            "risk_level": 1,
+            "minimum_minor": 1,
+            "step_minor": 1,
+            "entry_fixed_minor": 0,
+            "entry_rate": "0.01",
+            "exit_fixed_minor": 0,
+            "exit_rate": "0",
+            "fee_rounding": "half_up",
+            "fee_basis": "allocated_principal",
+            "exit_available_on": "2026-11-01",
+            "evidence_as_of": "2026-10-06",
+            "valid_through": "2026-10-06",
+            "input_refs": [
+              "adapter:terms"
+            ],
+            "source_versions": [
+              [
+                "terms",
+                "v1"
+              ]
+            ]
+          }
+        ],
+        "risk": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "level": 2,
+          "confirmed": true,
+          "effective_on": "2026-10-06",
+          "valid_through": "2027-10-06",
+          "input_refs": [
+            "adapter:formal-risk"
+          ],
+          "source_versions": [
+            [
+              "risk",
+              "v1"
+            ]
+          ]
+        }
+      },
+      "expected_sha256": "09014e47bb1c6f28c449f9a603f9f6e1ee14f778e3a9a360c6106b6c6a0bfdb5",
+      "expected_literal": {
+        "plans": [
+          {
+            "plan_id": "retain_cash",
+            "calculation_status": "infeasible",
+            "feasibility": "infeasible",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "funds_basis_mismatch"
+            ],
+            "execution_authority": false
+          },
+          {
+            "plan_id": "confirmed_uses",
+            "calculation_status": "infeasible",
+            "feasibility": "infeasible",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "funds_basis_mismatch"
+            ],
+            "execution_authority": false
+          }
+        ]
+      },
+      "original_adapter_execution_status": "not_run",
+      "local_execution_status": "NOT_RUN",
+      "disposition": "original_adapter_uncovered_entry_stage_mismatch"
+    }
+  ],
+  "positive_control": {
+    "case_id": "C01_cash_investment_fee",
+    "expected_literal": {
+      "plans": [
+        {
+          "plan_id": "retain_cash",
+          "calculation_status": "calculated",
+          "feasibility": "feasible",
+          "metrics": {
+            "investment_principal": 0,
+            "assigned_cash": 0,
+            "entry_fees": 0,
+            "exit_fee_reserve": 0,
+            "remaining_cash": 500000,
+            "unassigned_cash": 500000
+          },
+          "conservation_difference_minor": 0,
+          "cash_partition_difference_minor": 0,
+          "execution_authority": false
+        },
+        {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "calculated",
+          "feasibility": "feasible",
+          "metrics": {
+            "investment_principal": 300000,
+            "assigned_cash": 100000,
+            "entry_fees": 3000,
+            "exit_fee_reserve": 0,
+            "remaining_cash": 197000,
+            "unassigned_cash": 97000
+          },
+          "conservation_difference_minor": 0,
+          "cash_partition_difference_minor": 0,
+          "future_proceeds_minor": null,
+          "execution_authority": false
+        }
+      ],
+      "metric_kind": "planning_scenario"
+    },
+    "expected_sha256": "f3f31aacd64b4dbed8c4d45214441a6783c1b076b8f38657a36978e9e5d830e0",
+    "not_new_original_case_coverage": true
+  },
+  "methods": [
+    {
+      "method": "test_C06_unknown_budget",
+      "case_id": "C06_unknown_budget",
+      "kind": "original_oracle_adapter",
+      "expected_literal": {
+        "plans": [
+          {
+            "plan_id": "retain_cash",
+            "calculation_status": "unavailable",
+            "feasibility": "pending_dependencies",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "funds_not_calculated"
+            ],
+            "execution_authority": false
+          },
+          {
+            "plan_id": "confirmed_uses",
+            "calculation_status": "unavailable",
+            "feasibility": "pending_dependencies",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "funds_not_calculated"
+            ],
+            "execution_authority": false
+          }
+        ]
+      },
+      "service_path": [
+        "trusted SQLite funding source",
+        "FinancialMetrics.snapshot(days=31)",
+        "resolve_budget_metric",
+        "FinanceGateway.financial_method_report(allocation_preview)",
+        "HMAC",
+        "MetricEvidenceObserver",
+        "MetricRegistry",
+        "response_guard"
+      ],
+      "extra_requirements": [
+        "cash.balance_minor=null while actual isolated ledger balance=1000000; source is explicitly trusted_source",
+        "issuer current_budget value null/status unavailable/gap missing_balance; never invent JSON metric",
+        "original risk.confirmed=true is retained in source; no model receives expected values"
+      ]
+    },
+    {
+      "method": "test_C07_occupied_once",
+      "case_id": "C07_occupied_once",
+      "kind": "independent_service_capability_not_original_same_input_adapter",
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "calculated",
+          "feasibility": "feasible",
+          "metrics": {
+            "investment_principal": 0,
+            "assigned_cash": 70000,
+            "entry_fees": 0,
+            "exit_fee_reserve": 0,
+            "remaining_cash": 70000,
+            "unassigned_cash": 0
+          },
+          "conservation_difference_minor": 0,
+          "cash_partition_difference_minor": 0,
+          "future_proceeds_minor": null,
+          "execution_authority": false
+        },
+        "allocation_amount_minor": 70000,
+        "already_occupied_minor": 30000,
+        "occupancy_status": "coverage_only"
+      },
+      "service_path": [
+        "raw wealth_goals.id=G, fund_holds.id=hold-1, orchestration_tasks.id=capability-task",
+        "GoalService.prepare(update G, real expected_version, occupancy hold-1)",
+        "GoalService.confirm(real draft digest, true, priority=0, funding_kind=cash)",
+        "GoalService.constraints",
+        "FinancialMetrics.snapshot(days=31) bank_ledger",
+        "resolve_budget_baseline",
+        "FinanceGateway allocation_preview with native goals/G",
+        "HMAC/Observer/Registry/final"
+      ],
+      "extra_requirements": [
+        "real draft begins unconfirmed; mismatched confirmation digest refused without changing financial state",
+        "goal ID G survives; actual receipt/draft/link IDs and hash versions captured, never guessed",
+        "before issuing budget: balance 300000-floor 200000-held 30000=70000; no outflows; hold valid Oct6 through Nov6",
+        "canonical budget references accounts/<actual main> and fund_holds/hold-1 at actual bank version; linked receipt proves hold coverage",
+        "source verified boolean starts false; real adapter derives verified; 70000 assigned once, occupied 30000 coverage_only",
+        "Independent300000-200000-30000 issuer bridge differs from inherited original C01 upstream; passing this method cannot cover original same-input C07/C08 adapter."
+      ],
+      "not_original_same_input_adapter_pass": true
+    },
+    {
+      "method": "test_C08_reused_occupancy",
+      "case_id": "C08_reused_occupancy",
+      "kind": "independent_service_capability_not_original_same_input_adapter",
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "infeasible",
+          "feasibility": "infeasible",
+          "metrics": {
+            "investment_principal": null,
+            "assigned_cash": null,
+            "entry_fees": null,
+            "exit_fee_reserve": null,
+            "remaining_cash": null,
+            "unassigned_cash": null
+          },
+          "coverage_gaps_contains": [
+            "occupancy_reused:hold-1"
+          ],
+          "execution_authority": false
+        }
+      },
+      "service_path": [
+        "real G1 and G2 own confirmations preserving original IDs/amounts/priorities/date",
+        "only G1 may associate actual hold-1; G2 attempted duplicate association rejected GOAL_OCCUPANCY_REUSED 409",
+        "G2 confirmed without link; independent SQLite method source retains original duplicate claim for diagnostics, not verified credit",
+        "real bank-ledger issuer 70000",
+        "real Gateway/HMAC/Observer/Registry/final"
+      ],
+      "extra_requirements": [
+        "never forge two committed hold links; link PK and receipt must remain real",
+        "claim-only G2 occupancy_verified_in_baseline=false; original resolved_input true remains preserved as grading literal, not promoted as evidence",
+        "actual adapter must emit exact occupancy_reused:fund_holds/hold-1; it cannot pass merely on missing/unverified occupancy",
+        "original literal occupancy_reused:hold-1 is mapped only by the frozen raw hold id and explicit canonical source path; record original and service diagnostics separately",
+        "Independent300000-200000-30000 issuer bridge differs from inherited original C01 upstream; passing this method cannot cover original same-input C07/C08 adapter."
+      ],
+      "not_original_same_input_adapter_pass": true
+    },
+    {
+      "method": "test_C14_simulated_risk_not_formal",
+      "case_id": "C14_simulated_risk_not_formal",
+      "kind": "original_oracle_adapter_with_separate_positive_control",
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "unavailable",
+          "feasibility": "pending_dependencies",
+          "metrics": {
+            "investment_principal": null,
+            "assigned_cash": null,
+            "entry_fees": null,
+            "exit_fee_reserve": null,
+            "remaining_cash": null,
+            "unassigned_cash": null
+          },
+          "coverage_gaps_contains": [],
+          "execution_authority": false
+        },
+        "required_reason_semantics": "缺正式测评与本人资格来源"
+      },
+      "service_path": [
+        "isolated real issuer current_budget=500000",
+        "independent SQLite original C01 goals/products/risk with C14 risk_source navren_synthetic/not_real true",
+        "real qualification classification path -> Gateway/HMAC/Observer/Registry/final",
+        "separate SQLite formal_assessment source fixture with assessment and subject_confirmation refs/version, original C01 positive expected, separate fresh Observer/Registry/final"
+      ],
+      "extra_requirements": [
+        "do not null risk or flip original risk.confirmed=true to simulate refusal",
+        "negative classification personal_simulation/formal_qualification_verified=false/reason risk_source_not_formal; confirmed_uses all null/unavailable",
+        "positive control uses original C01 levels/dates/amounts/product identity; all added risk-source fields are contract-declared fixture facts",
+        "formal fixture classification does not certify external institution or current real customer suitability; no real risk API exists here",
+        "client allocation arguments risk_source=\"formal\" or risk_confirmed=true are independently refused 422 METRIC_ARGUMENTS_INVALID; cannot add qualification",
+        "server fixture source configuration_source=formal_assessment without assessment/confirmation original contract is refused 422 METRIC_ARGUMENTS_INVALID",
+        "complete formal source declaring assessment source_version=v2 while actual frozen assessment/context source=v1 is refused 409 METRIC_VERSION_CONFLICT",
+        "all refusal substeps retain real issued budget, produce no new signed batch/Registry entry and pass empty-current-round final guard after source changes; original risk.confirmed=true is never overwritten"
+      ],
+      "additional_rejection_expectations": [
+        {
+          "substep": "client_self_claim_risk_source",
+          "argument": {
+            "risk_source": "formal"
+          },
+          "error_code": "METRIC_ARGUMENTS_INVALID",
+          "http_status": 422
+        },
+        {
+          "substep": "client_self_claim_risk_confirmed",
+          "argument": {
+            "risk_confirmed": true
+          },
+          "error_code": "METRIC_ARGUMENTS_INVALID",
+          "http_status": 422
+        },
+        {
+          "substep": "formal_classification_without_original_contract",
+          "risk_source": {
+            "configuration_source": "formal_assessment"
+          },
+          "error_code": "METRIC_ARGUMENTS_INVALID",
+          "http_status": 422
+        },
+        {
+          "substep": "formal_assessment_source_version_mismatch",
+          "mutated_field": "risk_source.source_version",
+          "claimed": "v2",
+          "actual_context_version": "v1",
+          "error_code": "METRIC_VERSION_CONFLICT",
+          "http_status": 409
+        }
+      ]
+    },
+    {
+      "method": "test_C16_source_basis_rejected_422",
+      "case_id": "C16_wrong_funds_basis",
+      "kind": "additional_service_safety_rejection_not_original_adapter",
+      "expected_literal": {
+        "error_code": "METRIC_ARGUMENTS_INVALID",
+        "http_status": 422,
+        "stage": "trusted_cash_source_normalization",
+        "issued_budget": false,
+        "observer_batches": 0,
+        "registry_count": 0,
+        "financial_state_unchanged": true
+      },
+      "service_path": [
+        "trusted SQLite cash snapshot basis=account_balance",
+        "real FinancialMetrics.snapshot",
+        "real empty Registry/Observer/final guard"
+      ],
+      "extra_requirements": [
+        "do not issue wrong-basis budget, write issuance registry, or invoke pure arrange_funds with forged metric",
+        "original C16 plans infeasible/funds_basis_mismatch remain NOT_RUN/uncovered by this safety test"
+      ]
+    },
+    {
+      "method": "test_C16_unissued_budget_rejected_409",
+      "case_id": "C16_wrong_funds_basis",
+      "kind": "additional_service_safety_rejection_not_original_adapter",
+      "expected_literal": {
+        "error_code": "METRIC_BUDGET_NOT_ISSUED",
+        "http_status": 409,
+        "stage": "real_budget_resolver_before_allocation",
+        "observer_batches": 0,
+        "registry_count": 0,
+        "financial_state_unchanged": true
+      },
+      "service_path": [
+        "real native Gateway allocation_preview with constraints_ref=goals/current, budget_metric_id=capability-unissued-budget",
+        "real issuer registry lookup",
+        "empty Registry/Observer/final guard"
+      ],
+      "extra_requirements": [
+        "no client value/basis or crafted FinancialMetric; failed lookup cannot become original C16 adapter pass"
+      ]
+    }
+  ],
+  "fixture_contract": {
+    "subject_mapping": "only fixture-A -> newly created isolated workspace; never rename original goal/hold/product/share/channel IDs",
+    "scope_mapping": "independent_synthetic -> actual issued budget scope; original literal retained unchanged",
+    "date_begin": "2026-10-06",
+    "date_end": "2026-11-06",
+    "horizon_days": 31,
+    "source_records_type": "separate SQLite metadata/raw_records/catalog; catalog fixed before reading raw records",
+    "native_seed_contract": "create_session invokes actual seed; full source manifest covers service.py/customer_schema.py/customer_seed.py and fixture dependencies; expected monetary values are independent constants below, never derived from seed output",
+    "native_normalization": [
+      "all accounts zero except actual main exact literal balance/opening balance",
+      "fixed emergency floor",
+      "existing installments/statements paid, subscription/mandates closed, scheduled payments cancelled, pending orders settled; clear preexisting holds and complete seeded goals before recording fixture",
+      "WIP interface only, no services instantiated during design"
+    ],
+    "budget_bridges": {
+      "C06_unknown_budget": {
+        "source": "trusted_source",
+        "trusted_balance_minor": null,
+        "actual_bank_balance_minor": 1000000,
+        "frozen_minor": 0,
+        "floor_minor": 200000,
+        "confirmed_outflow_minor": 300000,
+        "expected_budget_minor": null,
+        "expected_status": "unavailable",
+        "expected_gap": "missing_balance"
+      },
+      "C07_occupied_once": {
+        "source": "bank_ledger",
+        "balance_minor": 300000,
+        "floor_minor": 200000,
+        "held_minor": 30000,
+        "confirmed_outflow_minor": 0,
+        "expected_budget_minor": 70000,
+        "independent_equation": "300000-200000-30000=70000"
+      },
+      "C08_reused_occupancy": {
+        "source": "bank_ledger",
+        "balance_minor": 300000,
+        "floor_minor": 200000,
+        "held_minor": 30000,
+        "confirmed_outflow_minor": 0,
+        "expected_budget_minor": 70000,
+        "independent_equation": "300000-200000-30000=70000"
+      },
+      "C14_simulated_risk_not_formal": {
+        "source": "bank_ledger",
+        "balance_minor": 1000000,
+        "floor_minor": 200000,
+        "held_minor": 0,
+        "confirmed_outflow_minor": 300000,
+        "expected_budget_minor": 500000,
+        "independent_equation": "1000000-200000-300000=500000"
+      }
+    },
+    "inherited_upstream_limit": "C07/C08 original scalar mutation70000 conflicts with inherited C01 funding upstream500000; preserve inherited original JSON, explicitly use independently frozen alternative bank bridge. No claim that inherited upstream itself produces70000. C06 source balance missing is explicit extension needed by original unknown scalar, not a change of original grading literal.",
+    "funding_source_refs": {
+      "cash": "capability:funding:cash",
+      "events": [
+        "capability:funding:obligation"
+      ],
+      "holds": [],
+      "coverage": "capability:funding:catalog",
+      "version": "v1"
+    },
+    "raw_hold": {
+      "id": "hold-1",
+      "task_id": "capability-task",
+      "amount_minor": 30000,
+      "status": "held",
+      "created_on": "2026-10-06",
+      "expires_on": "2026-11-06",
+      "task_status": "in_progress",
+      "account_id": "actual isolated main account"
+    },
+    "reference_mapping": {
+      "oracle_hold_id": "hold-1",
+      "actual_raw_hold_id": "hold-1",
+      "service_evidence_ref": "fund_holds/hold-1",
+      "oracle_reuse_diagnostic": "occupancy_reused:hold-1",
+      "service_reuse_diagnostic": "occupancy_reused:fund_holds/hold-1",
+      "rule": "only literal prefix fund_holds/; require actual raw hold id and real link/receipt; no suffix, fuzzy, numeric, or arbitrary diagnostic matching"
+    },
+    "risk_source_formal_fixture": {
+      "configuration_source": "formal_assessment",
+      "not_real_risk_assessment": false,
+      "assessment_type": "formal_assessment",
+      "assessment_status": "completed",
+      "subject_id": "actual isolated workspace",
+      "currency": "CNY",
+      "data_scope": "actual issued budget scope",
+      "assessment_ref": "adapter:formal-risk",
+      "source_version": "v1",
+      "confirmation_source": "subject_confirmation",
+      "confirmation_ref": "capability:risk-subject-confirmation",
+      "confirmation_source_version": "v1",
+      "confirmed_by_subject_id": "actual isolated workspace",
+      "effective_on": "2026-10-06",
+      "valid_through": "2027-10-06",
+      "level": 2
+    },
+    "native_seed_initial_data_sha256": {
+      "simulated_bank/fixtures/demo.json": "03498e514aa5689fa6020cb4d0560710b77b0ba88a5d094b6445f25876e7ac1a",
+      "simulated_bank/reference/fineract-client-examples.json": "b2cbf9e7d6045f83014d35da64f715a51e1a3e7b6b5c108b316309aec08c2afc",
+      "simulated_bank/customer-contract.json": "fc024268ff756994c1bd92de81cb344a9bf35360fbca03e04bf4844137605453"
+    }
+  },
+  "runtime_requirements": [
+    "formal Base owner handoff before executing; current WIP not executed",
+    "new isolated workspace/database/knowledge/market/cache/private Fernet key paths before business import, path receipts retained; private key value never logged",
+    "patch sockets/create_connection/urlopen before business imports, 0 model/cloud; root external hard timeout and actual process exit",
+    "actual FinancialMetrics instance only; no monkeypatch algorithm, resolver, issuance, signature, versions, observer, registry, guard or publication assertion",
+    "real signed reports must keep 13 metric fields, integer/null type, subject,CNY,unit,basis,formula,as_of/period,scope,all consumed source versions and trusted planning_scenario kind",
+    "reject tampered HMAC; register actual metric id and kind; final response_guard validates same observed batches",
+    "reading/issuance/Registry/final phases full bank-state equality; real GoalService preparation/confirmation is fixture setup with separately bounded metadata changes and unchanged money/hold/task records",
+    "all actual assertions source-bound; report actual statuses and errors, process exit remains external receipt null until root executor",
+    "C08 identity-path correspondence disclosed, cannot claim byte-identical diagnostic string or two real links",
+    "C16 original pure-stage response remains untested/uncovered even if both additional service safety cases pass"
+  ],
+  "limitations": [
+    "No formal execution or stability claim on current Base WIP. All 5 original cases remain not_run.",
+    "Four planned adapter cases and two independent C16 safety checks are not 46-item pass or formal G1 authorization.",
+    "C14 formal-assessment source is controlled synthetic fixture and interface contract verification only; no production qualification, live product, or real customer claim.",
+    "No model, service, test collection, customer query, network, or business module instantiation run during this design.",
+    "Readonly reuse only SqliteAuditedSource non-TestCase helper; no inheritance or collection of original12 or29.",
+    "C07/C08 capability outputs compare original pure monetary/state literals, but different issuer upstream means no original same-input adapter pass; original input ambiguity remains pending owner clarification."
+  ],
+  "design_revision": 3,
+  "previous_draft_sha256": "cf3c8fd2990275826678743d931cba7edea049ce5b24c97556222a5fc1513ca1",
+  "independent_occupancy_capability_method_count": 2,
+  "original_C07_C08_same_input_adapter_passed": false
+}

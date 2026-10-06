@@ -1,0 +1,505 @@
+/* 聊天页的阅读宽度和正文排版；在共享主题样式之后加载。 */
+body[data-page="chat"] {
+  --chat-reading-width: 1040px;
+  --chat-composer-width: 760px;
+  --chat-bubble-width: var(--chat-composer-width);
+}
+
+.chat-messages,
+.chat-input-area {
+  padding-inline: max(var(--page-padding), calc((100% - var(--chat-reading-width, 1040px)) / 2));
+  scrollbar-gutter: stable both-edges;
+}
+
+.chat-messages {
+  gap: 26px;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+.chat-messages .message:is(.ai, .assistant) {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 12px;
+  align-items: start;
+  align-self: center;
+  width: 100%;
+  max-width: var(--chat-composer-width, 760px);
+  margin-inline: auto;
+  min-width: 0;
+}
+
+.chat-messages .message:is(.ai, .assistant) > .avatar {
+  position: absolute;
+  inset-inline-end: calc(100% + 12px);
+  top: 0;
+  width: 32px;
+  height: 32px;
+  margin-top: 0;
+}
+
+.chat-messages .message.user {
+  align-self: center;
+  flex-direction: row;
+  justify-content: flex-end;
+  width: 100%;
+  max-width: var(--chat-composer-width, 760px);
+  margin-inline: auto;
+}
+
+.chat-messages .message.user > .bubble {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.chat-messages .message:is(.ai, .assistant) > div:not(.avatar) {
+  min-width: 0;
+}
+
+/* 兼容历史欢迎消息中包住气泡的无类名 div。 */
+.chat-messages .message:is(.ai, .assistant) > div:not(.avatar, .bubble, .message-suggestions) {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  width: 100%;
+  max-width: min(100%, var(--chat-bubble-width, 760px));
+}
+
+.chat-messages .message:is(.ai, .assistant) .bubble {
+  width: 100%;
+  max-width: min(100%, var(--chat-bubble-width, 760px));
+  min-width: 0;
+  padding: 20px 24px;
+  background: var(--surface-card);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 4px 20px 20px 20px;
+  box-shadow: var(--shadow-xs);
+  font-size: var(--font-size-msg, var(--font-size-base, 16px));
+  line-height: 1.8;
+  text-align: start;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.chat-messages .message:is(.ai, .assistant) > .bubble {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+}
+
+.chat-messages .message:is(.ai, .assistant) .sender {
+  margin-bottom: 10px;
+  color: var(--primary-deep);
+  font-size: var(--font-size-xs, 13px);
+  line-height: 1.5;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+
+/* 操作按钮继续留在卡片右下角，底部留白覆盖短消息和大字号。 */
+.chat-messages .message:is(.ai, .assistant) .bubble:is(.has-audio-control, .has-message-actions) {
+  position: relative;
+  min-width: min(100%, 120px);
+  padding-inline: 24px;
+  padding-bottom: 54px;
+}
+
+.chat-messages .message-body.message-prose {
+  min-width: 0;
+  max-width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  text-indent: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.message-body.message-prose > :first-child { margin-top: 0; }
+.message-body.message-prose > :last-child { margin-bottom: 0; }
+
+.message-body.message-prose p {
+  margin: 0 0 .85em;
+  text-align: start;
+  text-indent: 0;
+}
+
+.message-body.message-prose :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.2em 0 .55em;
+  color: var(--ink);
+  line-height: 1.5;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-indent: 0;
+  text-wrap: pretty;
+}
+
+.message-body.message-prose h1 { font-size: 1.25em; }
+.message-body.message-prose h2 { font-size: 1.17em; }
+.message-body.message-prose h3 { font-size: 1.08em; }
+.message-body.message-prose :is(h4, h5, h6) { font-size: 1em; }
+
+.message-body.message-prose :is(ul, ol) {
+  margin: .75em 0 .95em;
+  padding-inline-start: 1.5em;
+  text-indent: 0;
+}
+
+.message-body.message-prose ul { list-style-type: disc; }
+.message-body.message-prose ol { list-style-type: decimal; }
+.message-body.message-prose ul ul { list-style-type: circle; }
+.message-body.message-prose ul ul ul { list-style-type: square; }
+.message-body.message-prose li {
+  margin: .25em 0;
+  padding-inline-start: .15em;
+  text-indent: 0;
+}
+
+.message-body.message-prose li::marker { color: var(--ink-50); }
+.message-body.message-prose li > p { margin: .35em 0; }
+.message-body.message-prose li > p:first-child { margin-top: 0; }
+.message-body.message-prose li > p:last-child { margin-bottom: 0; }
+.message-body.message-prose li > :is(ul, ol) { margin: .3em 0 .45em; }
+.message-body.message-prose :is(strong, b) { font-weight: 650; }
+
+.message-body.message-prose blockquote {
+  margin: .95em 0;
+  padding: .2em 0 .2em 1em;
+  border-inline-start: 3px solid var(--primary-border);
+  color: var(--ink-70);
+  text-indent: 0;
+}
+
+.message-body.message-prose blockquote > :last-child { margin-bottom: 0; }
+.message-body.message-prose a {
+  color: var(--primary-deep);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: .2em;
+  overflow-wrap: anywhere;
+}
+
+.message-body.message-prose a:hover { color: var(--primary); }
+.message-body.message-prose code {
+  padding: .12em .35em;
+  border-radius: 5px;
+  background: var(--surface-raised);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .88em;
+  overflow-wrap: anywhere;
+}
+
+.message-body.message-prose pre {
+  min-width: 0;
+  max-width: 100%;
+  margin: 1em 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.message-body.message-prose pre code {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: .86em;
+  line-height: 1.7;
+  white-space: inherit;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.message-body.message-prose hr {
+  margin: 1.25em 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.message-body.message-prose :is(img, video) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-block: .8em;
+  border-radius: 8px;
+}
+
+.message-body.message-prose .message-table-scroll {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 1em 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.message-body.message-prose table {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  border-collapse: collapse;
+  font-size: .9em;
+  line-height: 1.65;
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+}
+
+.message-body.message-prose :is(th, td) {
+  min-width: 6.5em;
+  max-width: 28ch;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.message-body.message-prose th {
+  background: var(--surface-raised);
+  color: var(--ink-70);
+  font-weight: 600;
+}
+
+.message-body.message-prose tr:last-child td { border-bottom: 0; }
+.message-body.message-prose :is(th, td) > :last-child { margin-bottom: 0; }
+
+/* 建议是卡片下方的独立操作区，历史显示策略由消息渲染层管理。 */
+.chat-messages .message-suggestions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  width: fit-content;
+  min-width: 0;
+  max-width: min(100%, var(--chat-bubble-width, 760px));
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.chat-messages .message:is(.ai, .assistant) > .message-suggestions {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: start;
+  width: fit-content;
+  max-width: min(100%, var(--chat-bubble-width, 760px));
+}
+
+.chat-messages .message-suggestions[hidden] { display: none; }
+.chat-messages .message-suggestions .follow-up-label {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ink-50);
+  font-size: max(12px, var(--font-size-xs, 13px));
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.chat-messages .message-suggestions :is(.follow-up-chip, .preset-chip) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--primary-border);
+  border-radius: 12px;
+  background: var(--surface-card);
+  color: var(--primary-deep);
+  box-shadow: none;
+  font: inherit;
+  font-size: var(--font-size-sm, 15px);
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.chat-messages .message-suggestions :is(.follow-up-chip, .preset-chip):hover:enabled {
+  background: var(--primary-soft);
+  border-color: var(--border-emphasis);
+  color: var(--primary-deep);
+}
+
+.chat-messages .message-suggestions :is(.follow-up-chip, .preset-chip):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.chat-messages .message-suggestions :is(.follow-up-chip, .preset-chip):disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+.chat-input-area {
+  overflow-y: auto;
+}
+
+.chat-input-area::-webkit-scrollbar { width: 4px; }
+
+.chat-input-area .input-row {
+  width: 100%;
+  max-width: var(--chat-composer-width, 760px);
+  margin-inline: auto;
+}
+
+.chat-input-area .voice-status { max-width: var(--chat-composer-width, 760px); }
+
+.mode-senior .chat-messages .message:is(.ai, .assistant) .bubble {
+  padding: 24px;
+  line-height: 1.9;
+}
+
+.mode-senior .chat-messages .message:is(.ai, .assistant) .bubble:is(.has-audio-control, .has-message-actions) {
+  min-width: min(100%, 136px);
+  padding-inline: 24px;
+  padding-bottom: 66px;
+}
+
+.mode-senior .chat-messages .message-suggestions :is(.follow-up-chip, .preset-chip) {
+  min-height: 48px;
+  padding: 12px 16px;
+}
+
+@media (max-width: 1040px) {
+  .chat-messages .message:is(.ai, .assistant) > .avatar { display: none; }
+}
+
+@media (max-width: 760px) {
+  .chat-messages { padding: 24px 16px; gap: 22px; }
+  .chat-messages .message:is(.ai, .assistant) {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 10px;
+  }
+  .chat-messages .message:is(.ai, .assistant) > .avatar { display: none; }
+  .chat-messages .message:is(.ai, .assistant) > .bubble,
+  .chat-messages .message:is(.ai, .assistant) > div:not(.avatar, .bubble, .message-suggestions),
+  .chat-messages .message:is(.ai, .assistant) > .message-suggestions { grid-column: 1; }
+  .chat-messages .message:is(.ai, .assistant) .bubble,
+  .mode-senior .chat-messages .message:is(.ai, .assistant) .bubble { padding: 18px 20px; }
+  .chat-messages .message:is(.ai, .assistant) .bubble:is(.has-audio-control, .has-message-actions) {
+    padding-inline: 20px;
+    padding-bottom: 54px;
+  }
+  .mode-senior .chat-messages .message:is(.ai, .assistant) .bubble:is(.has-audio-control, .has-message-actions) { padding-bottom: 66px; }
+  .chat-input-area { padding: 10px 16px 16px; }
+  .message-body.message-prose pre { padding: 12px 14px; }
+}
+
+@media (max-width: 380px) {
+  .chat-messages { padding-inline: 12px; }
+  .chat-input-area { padding-inline: 12px; }
+  .chat-messages .message:is(.ai, .assistant) .bubble,
+  .mode-senior .chat-messages .message:is(.ai, .assistant) .bubble { padding-inline: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-messages .message-suggestions :is(.follow-up-chip, .preset-chip) { transition: none; }
+}
+
+/* 失败回复的重试与朗读共用一行，取消旧悬浮工具的底部留白。 */
+.chat-messages .message:is(.ai, .assistant) .bubble:has(> .message-tools.has-retry) {
+  padding-bottom: 20px;
+}
+.chat-messages .message-tools.has-retry {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.chat-messages .message-tools.has-retry .chat-retry {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0 auto 0 0;
+  padding: 8px 14px;
+  font-size: var(--font-size-sm, 14px);
+  line-height: 1.4;
+}
+.chat-messages .message-tools.has-retry .message-audio-control {
+  position: static;
+  inset: auto;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
+}
+.mode-senior .chat-messages .message:is(.ai, .assistant) .bubble:has(> .message-tools.has-retry) {
+  padding-bottom: 24px;
+}
+@media (max-width: 760px) {
+  .chat-messages .message:is(.ai, .assistant) .bubble:has(> .message-tools.has-retry),
+  .mode-senior .chat-messages .message:is(.ai, .assistant) .bubble:has(> .message-tools.has-retry) {
+    padding-bottom: 18px;
+  }
+}
+
+/* 实际调用默认只占一行；明细通过原生 details 展开。 */
+.chat-messages .runtime-panel.runtime-activity-panel {
+  width: 100%; min-width: 0; padding: 0; margin: 12px 0 0;
+  color: var(--ink-50); font-size: var(--font-size-sm, 14px);
+}
+.runtime-activity-panel > .runtime-activity-current {
+  display: flex; align-items: center; gap: 10px; min-height: 32px;
+  cursor: pointer; list-style: none; line-height: 1.5;
+}
+.runtime-activity-current::-webkit-details-marker { display: none; }
+.runtime-activity-current::before {
+  content: ''; width: 6px; height: 6px; flex: 0 0 6px;
+  border-radius: 50%; background: var(--primary);
+}
+.runtime-activity-panel[data-status="failed"] > .runtime-activity-current::before { background: var(--state-warning); }
+.runtime-activity-latest { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runtime-activity-count { flex: none; color: var(--ink-40); font-size: var(--font-size-xs, 12px); }
+.runtime-activity-current::after {
+  content: ''; width: 6px; height: 6px; flex: 0 0 6px; margin-right: 2px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg);
+}
+.runtime-activity-panel[open] > .runtime-activity-current::after { transform: rotate(225deg); }
+.runtime-activity-current:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+.runtime-activity-panel > .runtime-activity-list {
+  display: flex; flex-direction: column; gap: 12px; max-height: 280px; overflow: auto;
+  margin: 12px 0 0; padding: 14px 0 0; list-style: none; border-top: 1px solid var(--border);
+}
+.runtime-activity-panel:not([open]) > .runtime-activity-list { display: none; }
+.runtime-activity-list > .runtime-step {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px;
+  margin: 0; padding: 0; line-height: 1.6; color: var(--ink-60);
+}
+.runtime-activity-list > .runtime-step::before { content: none; }
+.runtime-activity-label { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
+.runtime-activity-name { max-width: 100%; font-size: .85em; overflow-wrap: anywhere; color: var(--ink-50); background: var(--surface); border-radius: 5px; padding: 1px 5px; }
+.runtime-activity-state { flex: none; font-size: var(--font-size-xs, 12px); }
+.runtime-step.rejected > .runtime-activity-state { color: var(--state-warning); }
+.runtime-activity-data { flex-basis: 100%; color: var(--ink-50); font-size: var(--font-size-xs, 12px); overflow-wrap: anywhere; }

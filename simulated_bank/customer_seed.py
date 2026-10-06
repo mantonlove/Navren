@@ -117,6 +117,7 @@ def populate(db, workspace, clock, core_seed_hash=None):
     add('cards','lost-card','customer',savings,'debit','SIM-UnionPay','1002','lost','2024-01-01','2029-01-01',0,0)
     for card in ['debit','credit','lost-card']:
         for kind,enabled,limit in [('online',1,0),('overseas',0,0),('contactless',1,0),('single_limit',1,200000)]:
+            if card=='lost-card': enabled=0
             add('card_controls',card+'-'+kind,card,kind,enabled,limit,'2026-10-03')
     add('card_applications','issued-application','customer','credit','credit',1000000,'issued','2024-06-01','模拟历史审批')
     add('card_applications','draft-application','customer',None,'credit',1500000,'draft','2026-10-03','尚未提交银行审批')
@@ -135,6 +136,8 @@ def populate(db, workspace, clock, core_seed_hash=None):
         add('loan_installments','installment-'+str(i),'loan',f'{y}-{m:02d}-01',50000,(600000-i*50000)*480//120000,0,0,'scheduled')
     for p in db.execute('SELECT id,data FROM products ORDER BY id'):
         product = json.loads(p['data'])
+        if product.get('historical_synthetic_position') or product.get('execution_enabled') is False or product.get('workspace_id'):
+            continue  # 历史头寸没有业务条款，不能给新工作区拼造发行方和资格。
         add('product_terms','terms-'+p['id'],p['id'],'轻舟模拟发行方','cash' if 'CASH' in p['id'] else 'fixed_income' if 'BOND' in p['id'] else 'mixed',0,product['risk_notice'],'principal_only','terms-document')
     profile = db.execute('SELECT * FROM profiles WHERE workspace_id=?',(workspace,)).fetchone()
     add('risk_assessments','assessment','customer','2026-10-03','2027-10-03',profile['risk_level'],profile['horizon_days'],profile['reserve_minor'],'current',{'source':'模拟问卷','loss_tolerance':'low','experience':'basic'})

@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-04T19:59:11.366817+00:00",
+  "review": {
+    "status": "approved",
+    "primary_model": "deepseek-flash",
+    "reviewer_model": "GLM-5.3-Flash",
+    "reviewed_at": "2026-10-04T19:59:11.366449+00:00",
+    "reason": "逐项核对后，六张短卡的标题、期间、数字、单位与证据引用均与材料一致，无虚构或重大遗漏。PMI卡数值（50.1%/50.2%/50.7%）与统计局发布一致，且注明月度环比扩散指数属性；PSL卡利率从1.75%降至1.5%、再贷款增量（2000亿/5000亿）有官方发布支撑，并正确区分额度增加与实际投放；贴息卡条件（120平米以下、150万以下、100万上限、不含存量置换）与通知一致；施纳贝尔卡加息50个基点、存款利率2.5%有演讲证据；欧央行抵押品指引生效日2026年11月30日与发布日区分清楚；拉加德卡25个基点、8月通胀3.2%、AI占企业信贷增长约四分之一均有引用，且标明为观点评论类。"
+  },
+  "events": [
+    {
+      "id": "e_abaf4b03c48d62e02df43eb9",
+      "display_title": "9月制造业PMI升至50.1%重回扩张",
+      "display_summary": "9月制造业PMI为50.1%，非制造业50.2%，综合50.7%，均升至临界点以上。",
+      "display_fact": {
+        "label": "制造业PMI",
+        "value": "50.1",
+        "unit": "%",
+        "period": "2026年9月",
+        "text": "",
+        "evidence_refs": [
+          {
+            "article_id": "a_e5c6d60f81bc7347e782eae3",
+            "fact_index": 0
+          }
+        ]
+      },
+      "display_conditions": "月度环比扩散指数，仅反映较上月扩张或收缩",
+      "topic_id": "macro",
+      "card_template": "data",
+      "event_version": 2,
+      "content_version": "bbb8ef6ee57a0dc7",
+      "article_versions": {
+        "a_e5c6d60f81bc7347e782eae3": 2,
+        "a_f08130adc541aa792c809817": 2
+      },
+      "display_version": "8f3ee8aacef8fa2e"
+    },
+    {
+      "id": "e_1cc49ddadc3d2f35306b04bc",
+      "display_title": "央行下调PSL利率并增加再贷款额度",
+      "display_summary": "一年期PSL利率降至1.5%，科创再贷款增2000亿，支农支小增5000亿。",
+      "display_fact": {
+        "label": "PSL利率",
+        "value": "",
+        "unit": "",
+        "period": "",
+        "text": "一年期抵押补充贷款利率从1.75%降至1.5%",
+        "evidence_refs": [
+          {
+            "article_id": "a_47ae696ab3663bfdd99df221",
+            "fact_index": 0
+          }
+        ]
+      },
+      "display_conditions": "额度增加不等于实际投放，落地时点未披露",
+      "topic_id": "rates",
+      "card_template": "policy",
+      "event_version": 2,
+      "content_version": "5b6a331f7e5de024",
+      "article_versions": {
+        "a_47ae696ab3663bfdd99df221": 2
+      },
+      "display_version": "0733d49cb6daafa0"
+    },
+    {
+      "id": "e_32970b934ae5a5447daff3d3",
+      "display_title": "符合条件的首套房贷可获贴息",
+      "display_summary": "2026年10月1日起，新发放符合条件的首套商业房贷按本金年化1个百分点贴息，最长5年。",
+      "display_fact": {
+        "label": "贴息标准",
+        "value": "",
+        "unit": "",
+        "period": "",
+        "text": "按贷款本金年化1个百分点、期限不超过5年",
+        "evidence_refs": [
+          {
+            "article_id": "a_4efa8d9419e5c8207d60a113",
+            "fact_index": 0
+          }
+        ]
+      },
+      "display_conditions": "面积和房价须达标，单户贴息贷款上限100万元，不含存量贷款置换",
+      "topic_id": "household",
+      "card_template": "policy",
+      "event_version": 2,
+      "content_version": "435260097e5ef954",
+      "article_versions": {
+        "a_4efa8d9419e5c8207d60a113": 2,
+        "a_c6285fe35635761cb7953284": 2
+      },
+      "display_version": "ea44f6498b9af97d"
+    },
+    {
+      "id": "e_eb670e8e28e6f2de19fad78d",
+      "display_title": "欧央行施纳贝尔谈多重冲击下利率路径",
+      "display_summary": "6月以来累计加息50个基点，存款便利利率升至2.5%，通胀预计逐步回落。",
+      "display_fact": {
+        "label": "讨论焦点",
+        "value": "",
+        "unit": "",
+        "period": "",
+        "text": "多重冲击下通胀二轮效应与政策容忍度",
+        "evidence_refs": [
+          {
+            "article_id": "a_dcc7f652075d2e51a8787f01",
+            "fact_index": 0
+          }
+        ]
+      },
+      "display_conditions": "能源路径与通胀预期是否锚定均不确定",
+      "topic_id": "international",
+      "card_template": "commentary",
+      "event_version": 2,
+      "content_version": "612b53d1d02a28c2",
+      "article_versions": {
+        "a_dcc7f652075d2e51a8787f01": 2
+      },
+      "display_version": "3a864870def5b5b6"
+    },
+    {
+      "id": "e_afd7c0a7900a5a9ef2785f49",
+      "display_title": "欧央行修订抵押品评级与折扣表",
+      "display_summary": "私人部门资产改用次优评级，折扣表更新，2026年11月30日起适用。",
+      "display_fact": {
+        "label": "生效日期",
+        "value": "",
+        "unit": "",
+        "period": "",
+        "text": "修订后指引自2026年11月30日起适用",
+        "evidence_refs": [
+          {
+            "article_id": "a_de1f7d7983f0a16734f4cd6d",
+            "fact_index": 0
+          }
+        ]
+      },
+      "display_conditions": "公共部门资产仍适用最优评级",
+      "topic_id": "international",
+      "card_template": "policy",
+      "event_version": 2,
+      "content_version": "9cf1e75611662cb6",
+      "article_versions": {
+        "a_de1f7d7983f0a16734f4cd6d": 2
+      },
+      "display_version": "f32f3175687c1405"
+    },
+    {
+      "id": "e_a7970cf64a441929a4b61127",
+      "display_title": "拉加德听证谈利率决定与AI影响",
+      "display_summary": "9月加息25个基点，8月整体通胀3.2%，AI借款约占企业信贷增长四分之一。",
+      "display_fact": {
+        "label": "讨论焦点",
+        "value": "",
+        "unit": "",
+        "period": "",
+        "text": "AI投资对通胀与增长的方向与幅度",
+        "evidence_refs": [
+          {
+            "article_id": "a_019c6561785fc62ab846876f",
+            "fact_index": 4
+          }
+        ]
+      },
+      "display_conditions": "通胀有上行风险、增长有下行风险",
+      "topic_id": "international",
+      "card_template": "commentary",
+      "event_version": 2,
+      "content_version": "c92c3ac041b62022",
+      "article_versions": {
+        "a_019c6561785fc62ab846876f": 2
+      },
+      "display_version": "8608686804932f26"
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+# Navren 四板块与产品收益实施验收
+
+日期：2026-10-05。执行目录：`/Users/manton/CC/projects/Navren`。对应合同：[一体化落地方案](/Users/manton/CC/projects/Navren/设计文档/Navren四板块图谱与微众产品收益一体化落地方案.md)。
+
+四板块图谱、官方净值历史、独立历史组合、权益核算、日历与产品详情、共用说明、聊天工具联动已落地并通过技术验收。**原有 24 个工作区的当前组合尚未整体切换**：官方候选不能覆盖原 R1 活钱用途，旧组合继续使用原账本。当前组合转换执行、适配货币基金、真实渠道核验、真实用户理解研究仍未完成；本文件不把独立示例当作用户组合迁移。
+
+## 1. 合同逐项结果
+
+| 合同内容 | 本轮结果 | 可核验依据 |
+|---|---|---|
+| 四板块与总览 | `cashflow/wealth/plans/preferences`，总览仅呈现四张摘要；旧六个标识兼容映射 | `financial_graph.py`、`js/personal_graph.js`；图谱及权益测试 |
+| 日常收支 | 默认保留收入、消费和结余路径；信用卡购买计消费、还款本金不重计；借款和投资本金另列 | 经济结余回归；实际页面包含收入来源、工资、支出去向与本期结余 |
+| 财富结构 | 现金、投资、赎回应收与负债分开；旧组合没有完整市值时保持未知；历史组合不混入当前现金 | 部分缺失、应收、历史来源与多账户回归 |
+| 目标与责任 | 复用已确认目标分配和现金时间轴；规划不扣款；缺少家庭责任资料时不推断亲属/分担 | 原目标规划与时间轴测试；确认记录接口 |
+| 偏好与认知 | 区分本人陈述、观察、正式测评；新增选择、备选项、理由、证据、有效期、执行回执和反馈；删除记忆使关联决策失效 | `personal_decisions`、决策/记忆删除测试；页面“记录我的选择” |
+| 图谱交互 | 稳定二维默认、可选三维；节点文字常驻；收入和负债等关键端点不受固定 12 节点截断；明细渐进展开 | 桌面/手机截图、35 条收支路径实测 |
+| 真实历史数据 | 3 个份额分别取得完整 9 页、263 条净值；有效区间 2025-09-01～2026-09-30，共 789 条 | `source_probe.json`、`history_coverage.json` |
+| 权益与历史键 | 明示 `total_equity_v2` 与旧 `holdings_only_v1`；逐账户/份额/日期/组合版本唯一计数；修订归档可回看 | `wealth_returns.py`、`wealth_portfolio.py`、重复/修订/缺项测试 |
+| 当前模拟组合迁移 | 已盘点、备份、逐工作区审计；R1 缺口阻断整体转换；未更名旧记录、未执行新的净值订单 | `migration_audit.json`；原 24 个工作区账本逐字段摘要相同 |
+| 独立历史组合 | 每个工作区另建独立期初资金/成本、每只 1000 份的历史示例；期间无买卖；活动版本唯一 | `portfolio_versions/positions/valuations`，本金与成本说明常驻 |
+| 日历 | 月/周/日/待办与总览/收益/收支/生活分层；收益默认最新完整月；红正、绿负、灰零，未知不补零 | 三模式桌面/手机日历截图；日期详情回归 |
+| 完整产品详情 | 份额、净值、成本、市值、权益组成、资本流、损益分类、费用、263 条历史及原文来源 | 006210 浏览器详情核对；多账户成本完整性回归 |
+| 共用问号与小字 | 五个主要页面接入说明，图谱/日历另有概念说明；删重复眉标题和口号；金额、覆盖状态与必要确认条件常驻 | `js/help.js`；键盘、边界、外部点击关闭实测 |
+| 聊天联动 | 新增 `wealth_versions/wealth_product` 只读工具；图谱、日历沿用相同对象与组合身份；真实模型审核链通过 | `real-runtime.json`、`browser-runtime.json` |
+| 用户理解任务 | 尚未开展真实用户研究 | 不能以自动化页面操作替代用户理解或金融效果证据 |
+
+## 2. 来源、覆盖和核算实例
+
+微众旧目录仍保存原始披露日 **2022-07-14**，不以抓取日冒充当前在售。历史销售关系来自东方基金 [2025-05-14 公告](https://www.orient-fund.com/upload/pdf/1747116276433-gyzjszqhwzyxgfyxgswgsqxbfjjxsjgdgg.pdf)；原文摘要与获取时间保存在 `product_evidence.json`。三份额的风险依据为管理人 [2026-08-19 风险名录](https://www.orient-fund.com/upload/pdf/1787102717734-gongmujijinfengxiandengjiminglu(2026-08-19).pdf)，不能视作微众当前渠道评级。
+
+| 份额 | 产品 | 管理人风险依据 | 净值/公告分页 | 当前渠道 |
+|---|---|---|---|---|
+| 006210 | 东方臻宝纯债 A | R2 | 9 页 / 8 页公告索引 | 未核验，不开放新申购 |
+| 001198 | 东方惠新灵活配置混合 A | R4 | 9 页 / 14 页公告索引 | 未核验，不开放新申购 |
+| 021095 | 东方低碳经济混合 C | 名录基金级条目 021094 对应 R4 | 9 页 / 2 页公告索引 | 未核验，不开放新申购 |
+
+本区间公告索引未发现分红/拆分候选，且单位与累计净值差额核对通过。本轮只在这些已核验条件下回放；后续有候选则阻断完整性，待逐笔原文核实。申赎费取管理人费率页原文，微众折扣未知。净值内运作费用不再次扣减。网页端点可读取不等于公开 API 或批量再分发授权；当前缓存仅用于本地原型。
+
+新口径：`E = 市值 + 分红应收 + 赎回应收 + 待确认权益 + 投资现金 − 应付款`；`当期损益 = E期末 − E期初 − 所有者净投入`。金额使用整数分，份额/净值使用 Decimal。首个净值日时点权益可知、前期损益未知；假日没有新净值不填零。缺少一个账户或一只预期基金时，完整组合金额保持未知，已知部分另列。
+
+实际官方样例：006210 在 09-28、09-29、09-30 的单位净值为 3.6844、3.6874、3.6834。1000 份、无交易时连续贡献 **+3.00 / −4.00 元**。09-30 权益 **3683.40 元**、剩余成本 **3575.70 元**、累计未实现损益 **107.70 元**。独立三基金组合 2026 年 9 月损益 **−433.00 元**，09-30 合计 **−116.00 元**，截至该日持仓累计损益 **1572.30 元**；三者期间与含义不同。
+
+[核算案例](/Users/manton/CC/projects/Navren/output/equity/calculation_examples.json) 导出 12 个带输入、预期值和实际输出的构造案例，包括除息应收、同日/跨日再投、赎回应收与到账、待确认申购、费用与所有者代付。100 元除息后 90 元市值加 10 元应收，损益为零；次日市值 92 元加 10 元待再投权益，损益为 2 元；到账转换不重复获利。另有转换金额守恒及家庭口径对账：期初现金 10000、收入 6000、消费 2000、申购本金 1000、借款 3000，期末现金 16000、投资 1000、负债 3000、净资产 14000、日常结余 4000，不能把借款计收入或把结余叠加到净资产。
+
+转换帮助函数已核验分值守恒；它不是已完成的当前组合迁移执行器，尚未切换默认组合或建立净值基金申赎执行通路。
+
+## 3. 页面说明处理表
+
+| 页面 | 常驻 | 说明/详情 | 清理 |
+|---|---|---|---|
+| 账户 | 银行演示身份、余额、未到账、当前业务状态 | 财富说明；日历损益/现金流说明；产品成本、费用和全部历史 | 合并账户眉标题/口号；每格不显示“暂无记录”；高级操作放更多 |
+| 推荐 | 产品名、管理人、净值日、评级来源、渠道未知与确认条件 | 共用产品来源问号；实际销售/风险/费率原文 | 去掉重复“财富建议”眉标题；原目录日期不伪装最新 |
+| 我的 | 四板块、记忆开启状态、本人资料确认/删除入口 | 偏好与认知说明；原记录、有效期及修订 | 删宣传段和重复眉标题；技术版本进入详情 |
+| 图谱 | 对象名称、金额、缺项、已发生/计划区别 | 图例大小、全部依据、时间版本、知识概念 | 总览隐藏大画布；按需展开明细和证据 |
+| 对话与卡片 | 最终结果、组合/时期身份、缺项、必要风险及操作确认 | 权益说明、日历/产品详情 | 运行中显示实际工具进度，完成后运行面板移除；不把内部长 ID 当主正文 |
+| 工作台 | 当前浏览器资料边界与客户事实 | 资金安排说明；原档案及证据 | 简化标题，删重复眉标题与口号 |
+
+说明登记表位于 `NavrenHelp.registry`，共 8 类概念。通过按钮点击/键盘打开、Esc/再次点击/外部点击关闭、焦点返回和手机边缘避让检查。桌面五个主要页面标题问号均已实际打开并关闭；手机的模块说明另按可见入口测试。必要金额、费用、执行影响及错误原因未折叠进问号。
+
+## 4. 接口与失效规则
+
+沿用个人图谱和日历接口；补充 `GET /wealth/versions`、`GET /wealth/product?fund_id&on&portfolio`、`POST /graph/decisions`。旧图标识映射到四内容视图，资料查找保持工具能力；不产生第五个内容板块。
+
+私有关系以服务端工作区隔离。查询携带来源、组合版本、期间、币种和明确核算口径；跨页面保留同一版本与净值日期。新数据版本使旧证据失效：行情、费用/风险资料、私人资料修订均进入上下文摘要；同一轮执行期间来源变化拒绝旧证据。归档组合可按 ID 回看，并标记只读；不会替换当前规划或资金动作依据。
+
+决策依据保存实际来源版本，执行回执必须属于该工作区并具有真实账本状态；单纯本人承诺不能标成已执行。删除/更正个人记忆使关联决策投影失效，旧图快照不能复活已删除资料。当前实现对有记忆依据的决策采用保守失效策略，宁可重新确认，不沿用可能过时的偏好。
+
+## 5. 验收证据
+
+| 检查 | 实际结果 | 文件 |
+|---|---|---|
+| 全部 Python 回归 | 340 项通过；包含原系统回归及本轮权益/来源/隔离/决策测试 | [测试输出](/Users/manton/CC/projects/Navren/output/equity/final-full-tests.txt) |
+| 前端既有回归 | 11 项通过；新增/修改脚本语法检查通过 | [前端输出](/Users/manton/CC/projects/Navren/output/equity/js-tests.txt) |
+| 官方分页与完整性 | 三基金各 263 条净值，缺日期不补零；公告索引及费用/风险/销售核验留存 | [来源](/Users/manton/CC/projects/Navren/output/equity/source_probe.json)、[覆盖](/Users/manton/CC/projects/Navren/output/equity/history_coverage.json)、[产品依据](/Users/manton/CC/projects/Navren/output/equity/product_evidence.json) |
+| 三种界面与两种尺寸 | 经典/关怀/青春，1440×980 与 390×844；四总览卡、30 日期格，无文档横溢、收益金额裁切 | [页面记录](/Users/manton/CC/projects/Navren/output/equity/browser_acceptance.json) |
+| 日期/产品详情 | 09-30 三项合计 −116 元；006210 1000 份、净值 3.6834、权益 3683.4、损益 −4、5 原文链接、263 历史行 | 浏览器记录及产品截图 |
+| 真实模型 HTTP | 两个查询均为 DeepSeek 实际工具调用→GLM 审核→返回，未执行资金动作 | [运行记录](/Users/manton/CC/projects/Navren/output/equity/real-runtime.json) |
+| 浏览器到模型 | 真实发送、显示正确金额、审核标识可见；最终 `.runtime-panel/.runtime-step` 均为 0 | [审计与页面记录](/Users/manton/CC/projects/Navren/output/equity/browser-runtime.json) |
+| 独立只读复核 | 已报告的来源失效、缺项聚合、历史数量及记忆关联问题已修复 | 本会话独立 reviewer 记录；对应回归用例 |
+
+模型检查是实际冒烟测试，未做未见题评测或用户任务成功率研究。测试计数包括继承的回归用例，不等同于 340 种独立金融场景。
+
+查看截图：[青春桌面总览](/Users/manton/CC/projects/Navren/output/equity/graph-desktop-youth.png)、[青春手机总览](/Users/manton/CC/projects/Navren/output/equity/graph-mobile-youth.png)、[桌面收益日历](/Users/manton/CC/projects/Navren/output/equity/calendar-desktop-youth.png)、[手机收益日历](/Users/manton/CC/projects/Navren/output/equity/calendar-mobile-youth.png)、[收支图](/Users/manton/CC/projects/Navren/output/equity/graph-cashflow-desktop.png)、[手机路径列表](/Users/manton/CC/projects/Navren/output/equity/graph-cashflow-mobile.png)、[实际模型回答](/Users/manton/CC/projects/Navren/output/equity/chat-real-model.png)。其余经典/关怀模式截图位于相同证据目录。
+
+## 6. 真实数据库与恢复演练
+
+本地服务：`http://127.0.0.1:18767`。实际数据库：`/Users/manton/Library/Application Support/Qingzhou/simulated-bank.sqlite3`，没有把旧项目目录或另一个数据库的检查结果当成线上状态。
+
+备份：`/Users/manton/Library/Application Support/Qingzhou/backups/four-equity-20261005T015711.sqlite3`。恢复演练副本：同目录 `four-equity-restore-verification.sqlite3`，权限 600。通过 SQLite backup 复制原备份并做完整性检查，未以演练替换正在使用的数据库。
+
+[实际盘点](/Users/manton/CC/projects/Navren/output/equity/migration_audit.json)：原 24 工作区仍存在，原账户/持仓/订单/操作记录逐字段摘要相同、现金未改；当前共 27 工作区，多出的 3 个是隔离查询验收会话。原备份、现场库与恢复副本完整性均通过。迁移清单逐工作区保留风险缺口，未声明全量转换完成。
+
+如需恢复，先停止该端口服务，另外保全现场最新 SQLite 一致性快照，再从所选完整备份恢复到临时库、运行 `PRAGMA integrity_check`，确认工作区/现金/持仓/订单/组合活动配置后替换并重启。旧备份会回退本轮新增表和测试后资料，因此不能在运行中直接覆盖或只换一张持仓表。
+
+## 7. 理论到字段的实际映射
+
+| 依据 | 实际应用 | 本轮示例与限度 |
+|---|---|---|
+| [Hogan 等：Knowledge Graphs](https://arxiv.org/abs/2003.02320) | 有类型对象/关系、证据引用、有效期、来源范围、事实/分析/确认区分 | 消费类别→结余、条件→选择。四板块是产品设计，并非论文规定的菜单 |
+| [Campbell：Household Finance](https://campbell.scholars.harvard.edu/sites/g/files/omnuum5881/files/campbell/files/householdfinance_jof_2006.pdf) | 收入与消费、资产与负债、目标期限和流动性约束共同呈现 | 借款不算收入、申购本金不算消费；未据此证明改善用户收益或福祉 |
+| [W3C PROV-O](https://www.w3.org/TR/prov-o/) | 来源对象、派生活动、方法版本、获取/修订时间与证据版本失效 | NAV/账本→估值→图谱/日历→受审答案可追溯。这是借鉴来源模型，未实现完整 RDF/OWL 标准符合性认证 |
+
+来源、方法和计算可靠性依靠原文/代码/测试分别核验，独立语言模型审核不能代替数值复算。
+
+## 8. 复现与后续缺口
+
+在项目目录运行：
+
+```sh
+.venv/bin/python scripts/sync_fund_history.py
+.venv/bin/python scripts/verify_fund_sources.py
+.venv/bin/python scripts/export_equity_examples.py
+.venv/bin/python scripts/audit_portfolio_migration.py
+PYTHONPATH=tests .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -q
+node --test tests/test_voice_frontend.js tests/test_api_response.js
+```
+
+同步脚本写公开缓存；组合 provision 及迁移审计会写版本/投影与审计表，不会改当前现金或把旧持仓换名。备份路径为本轮现场备份，换机器运行审计前须改成对应已核验备份。真实模型检查通过统一钥匙串加载器运行，密钥不进入证据文件。
+
+后续必须补齐：适配原 R1 场景且每日收益/结转/风险/销售证据完整的候选；按具体条款实现当前组合转换与订单生命周期；核验微众当前渠道及费率优惠；如公开发布，核验来源长期访问/再展示范围；进行真实用户理解研究。个人家庭责任和认知反馈只能来自本人确认，缺少资料继续保持未知。

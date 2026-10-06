@@ -1,0 +1,41 @@
+{
+  "title": "Navren 银行卡片样式与切换效果定稿",
+  "status": "用户确认，已归档",
+  "archived_at": "2026-10-07T00:13:31+08:00",
+  "timezone": "Asia/Shanghai",
+  "user_confirmation": "没问题，存档",
+  "approved_scope": [
+    "单张卡片样式",
+    "多张银行卡水平堆叠样式",
+    "点击后排卡片切换到前排的效果"
+  ],
+  "application_state": "已保存设计与交互源文件；尚未接入本地账户页面",
+  "data_kind": "演示数据",
+  "files": [
+    {
+      "path": "navren-bank-card-approved.fragment.html",
+      "bytes": 21547,
+      "sha256": "3dd00a0e28d8844f895a9e9db8a5c17b77ad2e5c43c93ce2a4e82141e0b2eba6"
+    },
+    {
+      "path": "navren-bank-card-approved.html",
+      "bytes": 94958,
+      "sha256": "be491efe22d041c125f151f0f25636b2e1e9f885e08fb04933fea0ad2f3866b3"
+    },
+    {
+      "path": "navren-bank-card-switch.fragment.html",
+      "bytes": 23092,
+      "sha256": "3ed437de0edac425fa820dc0f869344ac63c2fec8cd3c6a5682ae565d6042ec4"
+    },
+    {
+      "path": "navren-bank-card-switch.html",
+      "bytes": 96302,
+      "sha256": "c66947e8acba200864521180c90a58eedea464adfc3c37154eb033e7fcfe21fc"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2025,
+      "sha256": "363a404a5d28d069c63ac5aa9e1731801f60b6ec4e582533b7dad62eef02742f"
+    }
+  ]
+}

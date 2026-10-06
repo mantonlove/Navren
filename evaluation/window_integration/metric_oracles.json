@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "suite_id": "navren-window-integration-financial-contracts-20261006",
+  "owner_task": "navren-window-integration-20261006",
+  "expectations_frozen_before_execution": true,
+  "data_kind": "explicit_synthetic_fixture",
+  "expectation_method": "集成验收方先给出整数分、十进制手算与拒绝条件；未调用被测函数生成预期，未引用金融窗口的测试作为唯一裁判。",
+  "scope": "10项纯计算合同；实际服务接线、四账户、真实净值、真实Agent语义和投资建议效果均不在本套通过含义中。",
+  "version_policy": "source_baseline_sha256记录编写预期时读取的版本。每次执行另取候选快照，导入前与测试后必须一致；候选改版不自动改变手算预期，结果仅适用于该次候选快照。",
+  "source_baseline_sha256": {
+    "financial_methods/__init__.py": "48a0261249afc2509c7c7a10149b5d4e1479662703243787205a8700a8314a15",
+    "financial_methods/contracts.py": "135c616d83ac13600488167ff1733346a19a1d59a63c3a52589fb3b2d20e5b17",
+    "financial_methods/funding.py": "f8811897d9ccb15880a4059145a439a1e5b13041a9010f2b5b63a01a712027ad",
+    "financial_methods/accounting.py": "9ceadd67124041db6c36974a7b51e35e22b3ad736db01ba2b1c0c47a9d2ba5a7",
+    "financial_methods/returns.py": "5f8ff4f28533068c1c9d2263770dc72a671f3373710ff540bed072090685fe47",
+    "financial_methods/allocation.py": "cb5ff7866fa04a5110b5ea34b90d8811852ad7a4a639df79c78c5594d94d736c"
+  },
+  "source_documents": [
+    "设计文档/多窗口执行方案/00-总控与接口合同.md",
+    "设计文档/多窗口执行方案/05-金融方法执行任务.md",
+    "设计文档/多窗口执行方案/06-集成验收执行任务.md",
+    "outputs/window-progress/finance/returns-notes.md",
+    "outputs/window-progress/finance/allocation-notes.md"
+  ],
+  "report_state_at_freeze": "outputs/window-progress/finance/report.md未出现，不能称已正式交接。",
+  "common": {
+    "subject_id": "synthetic-integration-owner",
+    "currency": "CNY",
+    "data_scope": "synthetic-single-subject-complete-period",
+    "period_start": "2026-10-06",
+    "period_end": "2026-10-31",
+    "input_refs": ["synthetic:scope"],
+    "source_versions": [["synthetic:scope", "fixture-v1"]],
+    "coverage_complete": true,
+    "evidence_policy": "每条输入引用显式的synthetic:<稳定ID>，版本fixture-v1；测试不声称引用是真实银行证据。"
+  },
+  "cases": [
+    {
+      "id": "FM01", "name": "应急线只扣一次且未来确认流入不变成当下预算",
+      "cash_snapshot": {"balance_minor": 1200000, "frozen_minor": 30000, "emergency_floor_minor": 300000},
+      "events": [{"event_id": "later-income", "on": "2026-10-20", "amount_minor": 80000, "direction": "inflow", "certainty": "confirmed"}],
+      "hand_calculation": "当前底线外余量=1200000-30000-300000=870000；没有确认支出，当下预算仍870000；未来确认流入只令期末现金变为1280000。",
+      "expected": {"status": "calculated", "metrics": {"cash_balance": 1200000, "current_available": 870000, "current_budget": 870000, "scenario_budget": 870000, "confirmed_minimum": 870000, "confirmed_closing_cash": 1280000}, "budget_basis": "floor_surplus", "formula_id": "funds.current_budget/1"}
+    },
+    {
+      "id": "FM02", "name": "义务与2500元留款按关联ID去重，金额相同不猜关联",
+      "cash_snapshot": {"balance_minor": 1000000, "frozen_minor": 0, "emergency_floor_minor": 200000},
+      "events": [
+        {"event_id": "rent", "on": "2026-10-10", "amount_minor": 150000, "direction": "outflow", "certainty": "confirmed"},
+        {"event_id": "fee", "on": "2026-10-20", "amount_minor": 100000, "direction": "outflow", "certainty": "confirmed"}
+      ],
+      "holds": [{"hold_id": "living-hold", "amount_minor": 250000, "commitment_allocations": [["rent", 150000]], "release_on_payment": true}],
+      "planning_reserves": [{"reserve_id": "next-month", "amount_minor": 250000, "commitment_ids": ["rent", "fee"]}],
+      "hand_calculation": "初始余量1000000-250000-200000=550000；确认义务250000，其中150000可消耗已扣留款，因此预算550000-250000+150000=450000。规划留款250000关联同两项义务，新增扣款0。另一无关联的同额规划留款应另扣250000，不能凭金额去重。",
+      "expected": {"status": "calculated", "metrics": {"current_available": 550000, "current_budget": 450000, "scenario_budget": 450000, "confirmed_minimum": 450000, "confirmed_closing_cash": 750000}, "reserve": {"covered_by_commitments_minor": 250000, "additional_reserve_minor": 0}, "same_id_duplicate_budget_minor": 450000, "unlinked_same_amount_scenario_minor": 200000}
+    },
+    {
+      "id": "FM03", "name": "确认与候选的日期分支和覆盖期外排除",
+      "cash_snapshot": {"balance_minor": 700000, "frozen_minor": 0, "emergency_floor_minor": 100000},
+      "events": [
+        {"event_id": "pay", "on": "2026-10-10", "amount_minor": 200000, "direction": "outflow", "certainty": "confirmed"},
+        {"event_id": "candidate-pay", "on": "2026-10-15", "amount_minor": 450000, "direction": "outflow", "certainty": "candidate"},
+        {"event_id": "income", "on": "2026-10-20", "amount_minor": 100000, "direction": "inflow", "certainty": "confirmed"},
+        {"event_id": "candidate-income", "on": "2026-10-22", "amount_minor": 200000, "direction": "inflow", "certainty": "candidate"},
+        {"event_id": "forecast", "on": "2026-10-12", "amount_minor": 999999, "direction": "inflow", "certainty": "forecast"},
+        {"event_id": "past", "on": "2026-10-01", "amount_minor": 100000, "direction": "inflow", "certainty": "historical"},
+        {"event_id": "outside", "on": "2026-11-01", "amount_minor": 50000, "direction": "outflow", "certainty": "confirmed"}
+      ],
+      "hand_calculation": "当下预算700000-100000-200000=400000。确认最低400000发生10月10日；候选10月15日余量700000-200000-450000-100000=-50000。确认期末现金600000，含候选350000。历史、预测、期外事项都不改分支。",
+      "expected": {"status": "calculated", "metrics": {"current_budget": 400000, "confirmed_minimum": 400000, "candidate_minimum": -50000, "confirmed_closing_cash": 600000, "candidate_closing_cash": 350000}, "floor_judgments": {"confirmed_floor_breached": false, "candidate_floor_breached": true, "candidate_shortfall_minor": 50000, "confirmed_minimum_on": "2026-10-10", "candidate_minimum_on": "2026-10-15", "intraday_solvency": "not_assessed_daily_net_only"}, "excluded_items": ["forecast:forecast:not_counted", "past:historical:not_counted", "outside:confirmed:not_counted"]}
+    },
+    {
+      "id": "FM04", "name": "规划资金只改变规划层，不能改写当前基线或输入",
+      "cash_snapshot": {"balance_minor": 900000, "frozen_minor": 50000, "emergency_floor_minor": 200000},
+      "events": [{"event_id": "confirmed-use", "on": "2026-10-12", "amount_minor": 100000, "direction": "outflow", "certainty": "confirmed"}],
+      "planning_reserves": [{"reserve_id": "planned-use", "amount_minor": 250000, "commitment_ids": ["confirmed-use"]}],
+      "hand_calculation": "当前预算900000-50000-200000-100000=550000；规划目标250000被义务覆盖100000，新增150000，规划余量400000。将100000列为本人确认的现金用途后，规划未分配450000，原当前预算仍550000。",
+      "expected": {"current_budget_minor": 550000, "scenario_budget_minor": 400000, "additional_reserve_minor": 150000, "allocation_assigned_cash_minor": 100000, "allocation_unassigned_cash_minor": 450000, "input_unchanged": true, "execution_authority": false}
+    },
+    {
+      "id": "FM05", "name": "内部划转、本金和所有者入出不冒充经营收益",
+      "opening_cash_minor": 500000, "closing_cash_minor": 741000,
+      "movements": [
+        {"movement_id": "transfer-out", "account_id": "a", "on": "2026-10-08", "kind": "internal_transfer", "delta_minor": -100000, "related_id": "pair"},
+        {"movement_id": "transfer-in", "account_id": "b", "on": "2026-10-08", "kind": "internal_transfer", "delta_minor": 100000, "related_id": "pair"},
+        {"movement_id": "income", "account_id": "a", "on": "2026-10-09", "kind": "income", "delta_minor": 80000},
+        {"movement_id": "expense", "account_id": "a", "on": "2026-10-10", "kind": "expense", "delta_minor": -30000},
+        {"movement_id": "refund", "account_id": "a", "on": "2026-10-11", "kind": "refund", "delta_minor": 5000, "related_id": "expense"},
+        {"movement_id": "borrow", "account_id": "a", "on": "2026-10-12", "kind": "loan_proceeds", "delta_minor": 200000},
+        {"movement_id": "repay", "account_id": "a", "on": "2026-10-13", "kind": "loan_principal_repayment", "delta_minor": -60000},
+        {"movement_id": "interest", "account_id": "a", "on": "2026-10-14", "kind": "loan_interest", "delta_minor": -4000},
+        {"movement_id": "buy", "account_id": "a", "on": "2026-10-15", "kind": "investment_purchase", "delta_minor": -90000},
+        {"movement_id": "redeem", "account_id": "a", "on": "2026-10-16", "kind": "investment_redemption", "delta_minor": 40000},
+        {"movement_id": "contribute", "account_id": "a", "on": "2026-10-17", "kind": "owner_contribution", "delta_minor": 120000},
+        {"movement_id": "withdraw", "account_id": "a", "on": "2026-10-18", "kind": "owner_withdrawal", "delta_minor": -20000}
+      ],
+      "hand_calculation": "内部两笔和0；现金净变动241000=经营51000+借贷本金140000-投资现金50000+所有者净入100000。经营51000=80000-(30000+4000-5000)，不能用总现金增长241000作为收益。",
+      "expected": {"metrics": {"cash_income": 80000, "cash_expenses_gross": 34000, "cash_refunds": 5000, "net_cash_expenses": 29000, "operating_cash_surplus": 51000, "total_cash_change": 241000, "loan_principal_net": 140000, "investment_transaction_cash_net": -50000}, "internal_pair_only_change_minor": 0, "internal_pair_only_income_minor": 0, "incomplete_pair_gap": "incomplete_internal_transfer_pair"}
+    },
+    {
+      "id": "FM06", "name": "权益与期间损益独立核算所有者流量",
+      "opening": {"on": "2026-10-06", "holdings": [{"instrument_id": "synthetic-share-A", "quantity": "50", "unit_price": "2"}], "expected_instrument_ids": ["synthetic-share-A"], "cash_minor": 40000, "receivables_minor": 0, "payables_minor": 0, "coverage_complete": true},
+      "closing": {"on": "2026-10-31", "holdings": [{"instrument_id": "synthetic-share-A", "quantity": "60", "unit_price": "2.5"}], "expected_instrument_ids": ["synthetic-share-A"], "cash_minor": 52000, "receivables_minor": 3000, "payables_minor": 1000, "coverage_complete": true},
+      "owner_contributions_minor": 30000, "owner_withdrawals_minor": 10000,
+      "hand_calculation": "期初权益50×2×100+40000=50000；期末市值60×2.5×100=15000，权益15000+52000+3000-1000=69000；期间损益69000-50000-30000+10000=-1000。内部现金转持仓只变资产构成，60份×2.5元+54000现金=69000，与原权益相等。",
+      "expected": {"opening_equity_minor": 50000, "closing_market_value_minor": 15000, "closing_equity_minor": 69000, "period_profit_minor": -1000, "recomposed_equity_minor": 69000, "nonzero_owner_flows_simple_return_status": "unavailable", "simple_return_gap": "cashflows_require_subperiod_valuations"}
+    },
+    {
+      "id": "FM07", "name": "缺净值、期初或流量保持未知，明确零份额可算",
+      "snapshot": {"on": "2026-10-31", "holdings": [{"instrument_id": "synthetic-share-A", "quantity": "10", "unit_price": null}], "expected_instrument_ids": ["synthetic-share-A"], "cash_minor": 34500, "receivables_minor": 0, "payables_minor": 0, "coverage_complete": true},
+      "known_price": "1.25",
+      "hand_calculation": "10份缺价格则权益未知；明确0份无需价格，权益34500。期末10×1.25×100+34500=35750可算，但缺期初净值不能给期间损益。所有者流量缺失也不能补0。",
+      "expected": {"missing_price_status": "unavailable", "missing_price_value": null, "missing_price_gap": "price_missing:synthetic-share-A", "known_zero_equity_minor": 34500, "known_closing_equity_minor": 35750, "missing_opening_profit_status": "unavailable", "missing_owner_flow_gap": "owner_contributions_minor_missing"}
+    },
+    {
+      "id": "FM08", "name": "TWR按外部流量前后估值链接，不用总权益增长替代",
+      "subperiods": [
+        {"start": "2026-10-06", "end": "2026-10-15", "opening_equity_minor": 100000, "closing_equity_minor": 120000, "internal_contributions_minor": 0, "internal_withdrawals_minor": 0},
+        {"start": "2026-10-15", "end": "2026-10-31", "opening_equity_minor": 150000, "closing_equity_minor": 135000, "internal_contributions_minor": 0, "internal_withdrawals_minor": 0}
+      ],
+      "boundaries": [{"on": "2026-10-15", "contribution_minor": 30000, "withdrawal_minor": 0}],
+      "hand_calculation": "现金流前120000+30000=下一子期期初150000；(120000/100000)×(135000/150000)-1=1.2×0.9-1=0.08，即8%。整体权益增长35%混入外部投入。边界多1分或缺估值均不可算。",
+      "expected": {"ratio_decimal": "0.08", "unit": "ratio", "status": "calculated", "bad_boundary_gap": "boundary_equity_does_not_reconcile", "missing_valuation_gap": "subperiod_opening_equity_minor_missing", "simple_return_flow_gap": "cashflows_require_subperiod_valuations"}
+    },
+    {
+      "id": "FM09", "name": "具体费率、现金预留与两层守恒",
+      "funds_minor": 200000,
+      "cash_goal_minor": 40000, "investment_goal_minor": 100000,
+      "product_key": {"product_id": "synthetic-product", "share_class_id": "synthetic-share-A", "channel_id": "synthetic-channel"},
+      "product_terms": {"identity_verified": true, "current_sale_verified": true, "terms_complete": true, "risk_level": 2, "minimum_minor": 5000, "step_minor": 5000, "entry_fixed_minor": 125, "entry_rate": "0.0075", "exit_fixed_minor": 0, "exit_rate": "0.0125", "fee_rounding": "half_up", "fee_basis": "allocated_principal", "exit_available_on": "2026-10-20", "evidence_as_of": "2026-10-06", "valid_through": "2026-10-31"},
+      "formal_risk": {"level": 3, "confirmed": true, "effective_on": "2026-10-01", "valid_through": "2026-10-31"},
+      "rounding_variant": {"principal_minor": 250, "funds_minor": 251, "entry_rate": "0.003", "expected_fees": {"half_up": 1, "ceiling": 1, "floor": 0}, "expected_unassigned": {"half_up": 0, "ceiling": 0, "floor": 1}},
+      "hand_calculation": "进入费125+100000×0.0075=875；退出费留现金100000×0.0125=1250。剩余200000-100000-875=99125；未分配99125-40000-1250=57875。100000+875+99125=200000；40000+1250+57875=99125。独立舍入边界250×0.003=0.750分，半入/向上1、向下0。",
+      "expected": {"metrics": {"investment_principal": 100000, "assigned_cash": 40000, "entry_fees": 875, "exit_fee_reserve": 1250, "remaining_cash": 99125, "unassigned_cash": 57875}, "status": "calculated", "feasibility": "feasible", "conservation_difference_minor": 0, "cash_partition_difference_minor": 0, "execution_authority": false, "future_proceeds_minor": null}
+    },
+    {
+      "id": "FM10", "name": "对象、币种、期间与同源版本错配拒绝",
+      "cash_snapshot": {"balance_minor": 800000, "frozen_minor": 0, "emergency_floor_minor": 200000},
+      "funding_rejections": [
+        {"mutation": {"subject_id": "other-subject"}, "gap": "subject_mismatch"},
+        {"mutation": {"currency": "USD"}, "gap": "currency_mismatch"},
+        {"mutation": {"as_of": "2026-10-07"}, "gap": "opening_snapshot_date_mismatch"},
+        {"mutation": {"coverage_end": "2026-10-30"}, "gap": "requested_period_outside_input_coverage"},
+        {"mutation": {"basis": "floor_surplus"}, "gap": "requires_gross_balance_not_already_deducted_surplus"},
+        {"mutation": {"coverage_complete": false}, "gap": "input_coverage_incomplete"}
+      ],
+      "hand_calculation": "身份/覆盖拒绝必须先于金额输出；不同主体、币种、期初日期、覆盖范围或同一证据两个版本都不能拼接。金额0是已知值，拒绝后的null表示未知，二者不同。",
+      "expected": {"rejected_status": "unavailable", "rejected_value": null, "version_conflict_gap": "同一输入证据存在版本冲突", "allocation_version_conflict_gap": "source_version_conflict_or_invalid", "allocation_share_mismatch_gap": "product_terms_missing:invest", "allocation_period_gap": "goal_outside_funds_period:cash", "contract_version_rejected": true}
+    }
+  ],
+  "not_covered": ["金融方法经基座服务的映射与接线", "四账户真实输入的差异", "交易历史全量重建与分红/拆分事件", "真实净值与销售/费率原文充分性", "真实Agent答复的人工金融语义裁决", "风险序列优化和现实投资效果", "三轮正式集成成绩与发布"]
+}

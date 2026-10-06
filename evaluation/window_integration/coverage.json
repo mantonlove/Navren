@@ -1,0 +1,313 @@
+{
+  "schema_version": 1,
+  "dataset_path": "evaluation/window_integration/semantic_cases.json",
+  "dataset_sha256": "89a849854c74d6598ec9121a06a30fa9a4d0077d76c925ba5c7efc83e5055234",
+  "origin": {
+    "path": "evaluation/navren_skill_semantic_cases.json",
+    "sha256": "f92627f6dcd96a979d17d805dc5a219a47fcacc0a9e647c6f6e1a421f62ec0e6",
+    "dataset_id": "navren-skill-semantic-synthetic-v1",
+    "version": "1.0.0",
+    "runner_path": "scripts/run_skill_acceptance.py",
+    "runner_sha256": "c3cf75416eb5306e0a2cf8e09b9222e68cf3deed4630cac6a7bad1de80ab215b",
+    "copied_sections": [
+      "fixtures",
+      "fixture_policy",
+      "cases"
+    ],
+    "sections_sha256": {
+      "fixtures": "9603a12cb54a5bc79127486f989a95f206e4b6534e40f816e353eadaeb677f22",
+      "fixture_policy": "04a0145c148a17ea6b4391307b998d643280e756264867977f04fb8dfa902c23",
+      "cases": "9a7002e9c7131b1eba814defeff0ab611eb747b6fdce780b2ca9470116b3de58"
+    }
+  },
+  "frozen_case_count": 10,
+  "stage": "expectations_frozen_execution_pending",
+  "semantic_pass_count": null,
+  "repetition_policy": {
+    "target_rounds": 3,
+    "completed_formal_rounds": 0,
+    "note": "既有开发或旧候选采集不自动作为本轮冻结成绩；不得把必要条件通过计为语义通过。"
+  },
+  "case_matrix": [
+    {
+      "id": "S01_emergency_floor_once",
+      "title": "应急底线只扣一次",
+      "fixture_type": "default",
+      "skills": [
+        "financial-diagnosis",
+        "goal-planning"
+      ],
+      "automatic": "固定事实/独立复算/前后状态/必要工具轨迹",
+      "manual": "原must_convey、forbidden_conclusions及human_judgment全文判定",
+      "status": "not_run"
+    },
+    {
+      "id": "S02_future_zero_not_missing_history",
+      "title": "未来零入账不否定历史收入",
+      "fixture_type": "default",
+      "skills": [
+        "financial-diagnosis"
+      ],
+      "automatic": "固定事实/独立复算/前后状态/必要工具轨迹",
+      "manual": "原must_convey、forbidden_conclusions及human_judgment全文判定",
+      "status": "not_run"
+    },
+    {
+      "id": "S03_buffer_adequacy_unknown",
+      "title": "没有充分性依据不定性缓冲薄",
+      "fixture_type": "default",
+      "skills": [
+        "financial-diagnosis"
+      ],
+      "automatic": "固定事实/独立复算/前后状态/必要工具轨迹",
+      "manual": "原must_convey、forbidden_conclusions及human_judgment全文判定",
+      "status": "not_run"
+    },
+    {
+      "id": "S04_short_horizon_no_fabricated_allocation",
+      "title": "短期限不臆造收益配置",
+      "fixture_type": "default",
+      "skills": [
+        "asset-allocation",
+        "goal-planning",
+        "product-research"
+      ],
+      "automatic": "固定事实/独立复算/前后状态/必要工具轨迹",
+      "manual": "原must_convey、forbidden_conclusions及human_judgment全文判定",
+      "status": "not_run"
+    },
+    {
+      "id": "S05_risk_grade_not_equity_weight",
+      "title": "R级不等于权益比例",
+      "fixture_type": "risk_r4",
+      "skills": [
+        "asset-allocation",
+        "financial-diagnosis"
+      ],
+      "automatic": "固定事实/独立复算/前后状态/必要工具轨迹",
+      "manual": "原must_convey、forbidden_conclusions及human_judgment全文判定",
+      "status": "not_run"
+    },
+    {
+      "id": "S06_unavailable_rag_not_current_sale",
+      "title": "RAG未接入与旧目录不能冒充已检索在售",
+      "fixture_type": "legacy_catalog_no_rag",
+      "skills": [
+        "product-research",
+        "knowledge-retrieval"
+      ],
+      "automatic": "固定事实/独立复算/前后状态/必要工具轨迹",
+      "manual": "原must_convey、forbidden_conclusions及human_judgment全文判定",
+      "status": "not_run"
+    },
+    {
+      "id": "S07_public_amount_not_personal_entitlement",
+      "title": "公开补助金额不等于个人资格或到账",
+      "fixture_type": "public_policy",
+      "skills": [
+        "knowledge-retrieval",
+        "financial-diagnosis"
+      ],
+      "automatic": "固定事实/独立复算/前后状态/必要工具轨迹",
+      "manual": "原must_convey、forbidden_conclusions及human_judgment全文判定",
+      "status": "not_run"
+    },
+    {
+      "id": "S08_conditional_not_saved_profile",
+      "title": "条件化假设不保存个人画像",
+      "fixture_type": "memory_enabled",
+      "skills": [
+        "profile",
+        "asset-allocation"
+      ],
+      "automatic": "固定事实/独立复算/前后状态/必要工具轨迹",
+      "manual": "原must_convey、forbidden_conclusions及human_judgment全文判定",
+      "status": "not_run"
+    },
+    {
+      "id": "S09_imported_surplus_not_cash_or_full_year",
+      "title": "导入结余不等于可投现金或全年覆盖",
+      "fixture_type": "imported_january",
+      "skills": [
+        "financial-diagnosis",
+        "goal-planning"
+      ],
+      "automatic": "固定事实/独立复算/前后状态/必要工具轨迹",
+      "manual": "原must_convey、forbidden_conclusions及human_judgment全文判定",
+      "status": "not_run"
+    },
+    {
+      "id": "S10_linked_reserve_dedup",
+      "title": "关联已确认义务去重留款",
+      "fixture_type": "default",
+      "skills": [
+        "goal-planning"
+      ],
+      "automatic": "固定事实/独立复算/前后状态/必要工具轨迹",
+      "manual": "原must_convey、forbidden_conclusions及human_judgment全文判定",
+      "status": "not_run"
+    }
+  ],
+  "business_matrix": [
+    {
+      "business": "智能转账",
+      "covered_case_ids": [],
+      "coverage": "not_covered"
+    },
+    {
+      "business": "账单分析",
+      "covered_case_ids": [
+        "S02_future_zero_not_missing_history",
+        "S09_imported_surplus_not_cash_or_full_year"
+      ],
+      "coverage": "read_and_semantic_only"
+    },
+    {
+      "business": "理财操作",
+      "covered_case_ids": [
+        "S04_short_horizon_no_fabricated_allocation",
+        "S05_risk_grade_not_equity_weight",
+        "S06_unavailable_rag_not_current_sale"
+      ],
+      "coverage": "planning_and_research_only_no_execution"
+    },
+    {
+      "business": "卡片管理",
+      "covered_case_ids": [
+        "S10_linked_reserve_dedup"
+      ],
+      "coverage": "credit_obligation_planning_only_no_card_control"
+    },
+    {
+      "business": "订阅/代扣",
+      "covered_case_ids": [
+        "S01_emergency_floor_once",
+        "S03_buffer_adequacy_unknown"
+      ],
+      "coverage": "cashflow_candidates_only_no_contract_cancellation"
+    },
+    {
+      "business": "跨场景联动",
+      "covered_case_ids": [
+        "S01_emergency_floor_once",
+        "S03_buffer_adequacy_unknown",
+        "S07_public_amount_not_personal_entitlement",
+        "S08_conditional_not_saved_profile",
+        "S10_linked_reserve_dedup"
+      ],
+      "coverage": "selected_semantics_only"
+    }
+  ],
+  "pending_matrix": [
+    {
+      "requirement": "四账户同问、来源差异与身份隔离",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "base/agent/integration"
+    },
+    {
+      "requirement": "六业务读取→草案→本人确认→模拟验证→唯一回执",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "base/agent/ui/integration"
+    },
+    {
+      "requirement": "多轮修改、撤回、旧草案与重复/并发确认",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "base/agent/integration"
+    },
+    {
+      "requirement": "断连未知结果后用原operation_id恢复",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "base/integration"
+    },
+    {
+      "requirement": "公共原件撤回/修订、错份额/渠道、发布代次变化",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "rag/agent/integration"
+    },
+    {
+      "requirement": "审核期间证据变化与私人输入出站边界",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "rag/agent/integration"
+    },
+    {
+      "requirement": "市场每日历史、事件与周报版本一致",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "rag/base/ui/integration"
+    },
+    {
+      "requirement": "日历/图谱/账户/聊天同对象期间口径",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "base/finance/ui/integration"
+    },
+    {
+      "requirement": "额外服务协商、无资格与修改条件",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "base/agent/ui/integration"
+    },
+    {
+      "requirement": "模型/工具超时与审核拒绝",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "agent/integration"
+    },
+    {
+      "requirement": "中英文往返、移动/关怀布局、四账户切换实屏",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "ui/integration"
+    },
+    {
+      "requirement": "语音复用同一路径、取消/切账户旧播报、现场麦克风",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "base/ui/integration"
+    },
+    {
+      "requirement": "主模型/审核/记忆图谱小规模对照",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "agent/integration"
+    },
+    {
+      "requirement": "同题正式三轮与P50/P95/误拦漏拦分母",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "integration"
+    },
+    {
+      "requirement": "现场发布代次、数据库备份与离线备用演示",
+      "status": "not_covered",
+      "planned_case_count": null,
+      "owner": "base/integration"
+    }
+  ],
+  "release_gate": "全部实际范围与正式轮次未完成前，不声称集成通过或95%任务完成率。",
+  "offline_fixture_validation": {
+    "checked_at": "2026-10-05T17:32:49.894710+00:00",
+    "status": "passed",
+    "case_count": 10,
+    "deterministic_check_count": 73,
+    "stable_snapshots": 10,
+    "negative_control_cases": 10,
+    "negative_controls": [
+      "没有人工裁决时所有必要条件通过仍是needs_human_review",
+      "伪造GLM approved不能变human_pass",
+      "账本现金改变1分被拒绝",
+      "隐式操作确认卡被拒绝"
+    ],
+    "model_calls": 0,
+    "formal_semantic_score": null,
+    "source_changed_mid_run": "前置尝试因源码变化保护终止；随后新进程完整验证通过，不合并首次失败与后续结果。",
+    "command": "python3 -B tests/window_integration/semantic_oracle.py --self-test",
+    "scope": "离线合成夹具和分类接口；不等于真实模型/实屏/三轮集成成绩。"
+  }
+}

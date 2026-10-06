@@ -2196,6 +2196,7 @@ class QingzhouAgent:
         final_reply = ''
         compliance_result = {'pass': True, 'flags': []}
         raw_response = ''
+        used_fallback = False
 
         if agent_response['type'] == 'direct':
             # 确定性回复（合规拒绝/交易拦截/问候/追问）
@@ -2232,6 +2233,7 @@ class QingzhouAgent:
                 # 仍不通过 → 合规模板兜底
                 if not compliance_result['pass']:
                     final_reply = COMPLIANCE_FALLBACK
+                    used_fallback = True
                 else:
                     final_reply = raw_response
 
@@ -2240,6 +2242,7 @@ class QingzhouAgent:
                 error_msg = str(e)
                 final_reply = self._build_offline_reply(agent_response, intent_info['intent'], merged_profile, mode)
                 log_entry['error'] = error_msg[:500]
+                used_fallback = True
 
         # 智能体链路：动态记录本轮真实执行步骤（不展示未发生的步骤）
         intent_label = self._intent_label(intent_info['intent'])
@@ -2440,7 +2443,7 @@ class QingzhouAgent:
                           'benchmark': p.get('benchmark', ''), 'lock_period': p.get('lock_period', ''),
                           'min_amount': p.get('min_amount', 0), 'product_id': p.get('product_id', '')}
                          for p in response_products],
-            'isFallback': False,
+            'isFallback': used_fallback,
             'compliance_pass': compliance_result['pass'],
             'agent_chain': agent_chain,
         }

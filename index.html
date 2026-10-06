@@ -11,13 +11,13 @@
 <style>
   body { background: var(--surface); }
 </style>
-<link rel="stylesheet" href="css/design.css?v=ui-20261003-3">
-<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="stylesheet" href="css/design.css?v=navren-brand-20261005-1">
+<link rel="icon" type="image/png" href="assets/brand/navren-icon.png">
 </head>
 <body data-page="index">
 
 <div class="welcome-page">
-  <a class="welcome-brand" href="index.html"><img src="assets/logo.png" alt="">Navren</a>
+  <a class="welcome-brand" href="chat.html" aria-label="Navren首页"><img class="brand-icon" src="assets/brand/navren-icon.png" width="1254" height="1254" alt=""><img class="brand-wordmark" src="assets/brand/navren-wordmark.png" width="2172" height="724" alt=""></a>
   <div class="wl-tag">从容安排每一笔钱</div>
   <h1>看清财务，<br>再做下一步决定。</h1>
   <p class="wl-sub">看懂账单，比较产品，理清资金安排。选择你习惯的阅读方式，从一段对话开始。</p>
@@ -59,9 +59,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>
       </div>
       <div class="wc-name">青春版</div>
-      <div class="wc-who">白色界面，轻快浏览</div>
+      <div class="wc-who">轻快浏览，重点清晰</div>
       <ul class="wc-features">
-        <li>纯白底色，重点清晰</li>
+        <li>柔和主题，清晰层级</li>
         <li>紧凑排版，减少来回寻找</li>
         <li>直达账单、产品与账户</li>
       </ul>
@@ -72,8 +72,11 @@
 </div>
 
 <script src="js/storage.js?v=ui-20261003-3"></script>
+<script src="js/i18n.js"></script>
+<script src="js/design.js"></script>
 <script>
 function enter(mode) {
+  localStorage.setItem('navren_onboarded','true');
   Storage.set('qingzhou_mode', mode);
   NavrenApp.navigate('chat.html', mode);
 }

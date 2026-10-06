@@ -1,0 +1,703 @@
+{
+  "schema_version": 1,
+  "start_date": "2016-10-04",
+  "end_date": "2026-10-03",
+  "seed": 20261005,
+  "profiles": [
+    {
+      "id": "tycoon",
+      "display_name": "A市首富",
+      "source": "navren_synthetic",
+      "risk_level": 4,
+      "horizon_days": 1095,
+      "reserve_minor": 3000000000,
+      "opening_cash": {
+        "daily": 800000000,
+        "reserve": 3000000000,
+        "operating": 0
+      },
+      "assets": [
+        {
+          "id": "TY-FC",
+          "type": "fund_cash",
+          "name": "演示现金基金",
+          "opening_value_minor": 2000000000,
+          "annual_drift_bps": 180,
+          "volatility_bps": 35
+        },
+        {
+          "id": "TY-FB",
+          "type": "fund_bond",
+          "name": "演示债券基金",
+          "opening_value_minor": 6000000000,
+          "annual_drift_bps": 300,
+          "volatility_bps": 450
+        },
+        {
+          "id": "TY-FE",
+          "type": "fund_equity",
+          "name": "演示权益基金",
+          "opening_value_minor": 5000000000,
+          "annual_drift_bps": 550,
+          "volatility_bps": 1800
+        },
+        {
+          "id": "TY-PR-H",
+          "type": "property",
+          "name": "个人住宅出租物业",
+          "opening_value_minor": 12000000000,
+          "annual_drift_bps": 100,
+          "volatility_bps": 600
+        },
+        {
+          "id": "TY-PR-S",
+          "type": "property",
+          "name": "个人商铺出租物业",
+          "opening_value_minor": 8000000000,
+          "annual_drift_bps": 80,
+          "volatility_bps": 700
+        },
+        {
+          "id": "TY-PE",
+          "type": "private_equity",
+          "name": "非上市企业个人持股估值",
+          "opening_value_minor": 100000000000,
+          "annual_drift_bps": 300,
+          "volatility_bps": 2200
+        }
+      ],
+      "loans": [
+        {
+          "id": "TY-LN-PR",
+          "name": "个人物业按揭",
+          "opening_principal_minor": 6000000000,
+          "annual_rate_bps": 450,
+          "monthly_principal_minor": 50000000,
+          "scope": "personal"
+        }
+      ],
+      "monthly_income": [
+        {
+          "category": "个人住宅租金收入",
+          "amount_minor": 22000000,
+          "annual_growth_bps": 150,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 8,
+          "scope": "personal"
+        },
+        {
+          "category": "个人商铺租金收入",
+          "amount_minor": 28000000,
+          "annual_growth_bps": 150,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 10,
+          "scope": "personal"
+        }
+      ],
+      "annual_income": [
+        {
+          "category": "个人持股分红收入",
+          "amount_minor": 2400000000,
+          "annual_growth_bps": 250,
+          "months": [
+            6,
+            12
+          ],
+          "day": 20,
+          "scope": "personal"
+        }
+      ],
+      "monthly_expense": [
+        {
+          "category": "个人日常与交通支出",
+          "amount_minor": 27000000,
+          "annual_growth_bps": 200,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 12,
+          "scope": "personal"
+        },
+        {
+          "category": "家庭生活与赡养支出",
+          "amount_minor": 30000000,
+          "annual_growth_bps": 200,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 15,
+          "scope": "household"
+        },
+        {
+          "category": "个人出租物业管理支出",
+          "amount_minor": 10000000,
+          "annual_growth_bps": 200,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 18,
+          "scope": "personal"
+        }
+      ],
+      "seasonal_expense": [
+        {
+          "category": "个人出租物业维修支出",
+          "amount_minor": 100000000,
+          "annual_growth_bps": 200,
+          "months": [
+            4,
+            10
+          ],
+          "day": 22,
+          "scope": "personal"
+        },
+        {
+          "category": "个人公益捐赠支出",
+          "amount_minor": 120000000,
+          "annual_growth_bps": 100,
+          "months": [
+            12
+          ],
+          "day": 25,
+          "scope": "personal"
+        }
+      ]
+    },
+    {
+      "id": "grain_farmer",
+      "display_name": "种粮大户",
+      "source": "navren_synthetic",
+      "risk_level": 2,
+      "horizon_days": 180,
+      "reserve_minor": 30000000,
+      "opening_cash": {
+        "daily": 140000000,
+        "reserve": 30000000,
+        "operating": 120000000
+      },
+      "assets": [
+        {
+          "id": "GF-FC",
+          "type": "fund_cash",
+          "name": "演示现金基金",
+          "opening_value_minor": 30000000,
+          "annual_drift_bps": 180,
+          "volatility_bps": 35
+        },
+        {
+          "id": "GF-FB",
+          "type": "fund_bond",
+          "name": "演示债券基金",
+          "opening_value_minor": 50000000,
+          "annual_drift_bps": 300,
+          "volatility_bps": 450
+        },
+        {
+          "id": "GF-FE",
+          "type": "fund_equity",
+          "name": "演示权益基金",
+          "opening_value_minor": 20000000,
+          "annual_drift_bps": 550,
+          "volatility_bps": 1800
+        },
+        {
+          "id": "GF-PR",
+          "type": "property",
+          "name": "自有住宅",
+          "opening_value_minor": 250000000,
+          "annual_drift_bps": 80,
+          "volatility_bps": 500
+        },
+        {
+          "id": "GF-EQ-H",
+          "type": "equipment",
+          "name": "联合收割机组",
+          "opening_value_minor": 300000000,
+          "annual_drift_bps": -650,
+          "volatility_bps": 250
+        },
+        {
+          "id": "GF-EQ-S",
+          "type": "equipment",
+          "name": "配套农机与仓储设备",
+          "opening_value_minor": 150000000,
+          "annual_drift_bps": -500,
+          "volatility_bps": 200
+        }
+      ],
+      "loans": [
+        {
+          "id": "GF-LN-EQ",
+          "name": "农业设备贷款",
+          "opening_principal_minor": 240000000,
+          "annual_rate_bps": 420,
+          "monthly_principal_minor": 2000000,
+          "scope": "self_employed"
+        }
+      ],
+      "monthly_income": [],
+      "annual_income": [
+        {
+          "category": "粮食销售回款",
+          "amount_minor": 360000000,
+          "annual_growth_bps": 150,
+          "months": [
+            6,
+            10
+          ],
+          "day": 20,
+          "scope": "self_employed"
+        },
+        {
+          "category": "农机作业服务回款",
+          "amount_minor": 28000000,
+          "annual_growth_bps": 150,
+          "months": [
+            6,
+            10
+          ],
+          "day": 24,
+          "scope": "self_employed"
+        },
+        {
+          "category": "农业经营补贴",
+          "amount_minor": 12000000,
+          "annual_growth_bps": 0,
+          "months": [
+            8
+          ],
+          "day": 25,
+          "scope": "self_employed"
+        }
+      ],
+      "monthly_expense": [
+        {
+          "category": "家庭日常支出",
+          "amount_minor": 800000,
+          "annual_growth_bps": 200,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 12,
+          "scope": "household"
+        },
+        {
+          "category": "个人交通通信支出",
+          "amount_minor": 120000,
+          "annual_growth_bps": 150,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 18,
+          "scope": "personal"
+        },
+        {
+          "category": "农业经营仓储与管理支出",
+          "amount_minor": 600000,
+          "annual_growth_bps": 200,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 28,
+          "scope": "self_employed"
+        }
+      ],
+      "seasonal_expense": [
+        {
+          "category": "农业土地租赁投入",
+          "amount_minor": 115000000,
+          "annual_growth_bps": 150,
+          "months": [
+            3,
+            9
+          ],
+          "day": 3,
+          "scope": "self_employed"
+        },
+        {
+          "category": "农业种子肥料与农药投入",
+          "amount_minor": 78000000,
+          "annual_growth_bps": 200,
+          "months": [
+            2,
+            5,
+            8
+          ],
+          "day": 6,
+          "scope": "self_employed"
+        },
+        {
+          "category": "农业雇工与收获作业支出",
+          "amount_minor": 48000000,
+          "annual_growth_bps": 200,
+          "months": [
+            6,
+            10
+          ],
+          "day": 8,
+          "scope": "self_employed"
+        },
+        {
+          "category": "农机年度维护与保险支出",
+          "amount_minor": 12000000,
+          "annual_growth_bps": 200,
+          "months": [
+            1,
+            7
+          ],
+          "day": 16,
+          "scope": "self_employed"
+        }
+      ]
+    },
+    {
+      "id": "working_landlady",
+      "display_name": "坚持上班的包租婆",
+      "source": "navren_synthetic",
+      "risk_level": 3,
+      "horizon_days": 365,
+      "reserve_minor": 24000000,
+      "opening_cash": {
+        "daily": 9000000,
+        "reserve": 24000000,
+        "operating": 0
+      },
+      "assets": [
+        {
+          "id": "WL-FC",
+          "type": "fund_cash",
+          "name": "演示现金基金",
+          "opening_value_minor": 8000000,
+          "annual_drift_bps": 180,
+          "volatility_bps": 35
+        },
+        {
+          "id": "WL-FB",
+          "type": "fund_bond",
+          "name": "演示债券基金",
+          "opening_value_minor": 22000000,
+          "annual_drift_bps": 300,
+          "volatility_bps": 450
+        },
+        {
+          "id": "WL-FE",
+          "type": "fund_equity",
+          "name": "演示权益基金",
+          "opening_value_minor": 10000000,
+          "annual_drift_bps": 550,
+          "volatility_bps": 1800
+        },
+        {
+          "id": "WL-PR-H",
+          "type": "property",
+          "name": "自住住宅",
+          "opening_value_minor": 220000000,
+          "annual_drift_bps": 100,
+          "volatility_bps": 500
+        },
+        {
+          "id": "WL-PR-R1",
+          "type": "property",
+          "name": "出租住宅一",
+          "opening_value_minor": 180000000,
+          "annual_drift_bps": 100,
+          "volatility_bps": 550
+        },
+        {
+          "id": "WL-PR-R2",
+          "type": "property",
+          "name": "出租住宅二",
+          "opening_value_minor": 170000000,
+          "annual_drift_bps": 100,
+          "volatility_bps": 550
+        },
+        {
+          "id": "WL-PR-R3",
+          "type": "property",
+          "name": "出租住宅三",
+          "opening_value_minor": 150000000,
+          "annual_drift_bps": 80,
+          "volatility_bps": 600
+        }
+      ],
+      "loans": [
+        {
+          "id": "WL-LN-R1",
+          "name": "出租住宅一按揭",
+          "opening_principal_minor": 90000000,
+          "annual_rate_bps": 440,
+          "monthly_principal_minor": 450000,
+          "scope": "personal"
+        },
+        {
+          "id": "WL-LN-R2",
+          "name": "出租住宅二按揭",
+          "opening_principal_minor": 70000000,
+          "annual_rate_bps": 440,
+          "monthly_principal_minor": 350000,
+          "scope": "personal"
+        }
+      ],
+      "monthly_income": [
+        {
+          "category": "工资收入",
+          "amount_minor": 1200000,
+          "annual_growth_bps": 350,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 25,
+          "scope": "personal"
+        },
+        {
+          "category": "出租住宅一租金收入",
+          "amount_minor": 500000,
+          "annual_growth_bps": 150,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 5,
+          "scope": "personal"
+        },
+        {
+          "category": "出租住宅二租金收入",
+          "amount_minor": 480000,
+          "annual_growth_bps": 150,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 10,
+          "scope": "personal"
+        },
+        {
+          "category": "出租住宅三租金收入",
+          "amount_minor": 420000,
+          "annual_growth_bps": 150,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 15,
+          "scope": "personal"
+        }
+      ],
+      "annual_income": [],
+      "monthly_expense": [
+        {
+          "category": "家庭日常支出",
+          "amount_minor": 820000,
+          "annual_growth_bps": 200,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 12,
+          "scope": "household"
+        },
+        {
+          "category": "个人通勤与生活支出",
+          "amount_minor": 230000,
+          "annual_growth_bps": 150,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 18,
+          "scope": "personal"
+        },
+        {
+          "category": "出租物业管理支出",
+          "amount_minor": 120000,
+          "annual_growth_bps": 200,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 22,
+          "scope": "personal"
+        }
+      ],
+      "seasonal_expense": [
+        {
+          "category": "出租物业维修支出",
+          "amount_minor": 3600000,
+          "annual_growth_bps": 200,
+          "months": [
+            4,
+            10
+          ],
+          "day": 20,
+          "scope": "personal"
+        },
+        {
+          "category": "家庭出行支出",
+          "amount_minor": 1500000,
+          "annual_growth_bps": 150,
+          "months": [
+            8
+          ],
+          "day": 16,
+          "scope": "household"
+        }
+      ]
+    },
+    {
+      "id": "retired_entrepreneur",
+      "display_name": "退休后重新创业的阿姨",
+      "source": "navren_synthetic",
+      "risk_level": 2,
+      "horizon_days": 365,
+      "reserve_minor": 30000000,
+      "opening_cash": {
+        "daily": 12000000,
+        "reserve": 30000000,
+        "operating": 15000000
+      },
+      "assets": [
+        {
+          "id": "RE-FC",
+          "type": "fund_cash",
+          "name": "演示现金基金",
+          "opening_value_minor": 10000000,
+          "annual_drift_bps": 180,
+          "volatility_bps": 35
+        },
+        {
+          "id": "RE-FB",
+          "type": "fund_bond",
+          "name": "演示债券基金",
+          "opening_value_minor": 35000000,
+          "annual_drift_bps": 300,
+          "volatility_bps": 450
+        },
+        {
+          "id": "RE-FE",
+          "type": "fund_equity",
+          "name": "演示权益基金",
+          "opening_value_minor": 10000000,
+          "annual_drift_bps": 550,
+          "volatility_bps": 1800
+        },
+        {
+          "id": "RE-PR",
+          "type": "property",
+          "name": "自住住宅",
+          "opening_value_minor": 160000000,
+          "annual_drift_bps": 80,
+          "volatility_bps": 500
+        }
+      ],
+      "loans": [
+        {
+          "id": "RE-LN-H",
+          "name": "个人住房贷款",
+          "opening_principal_minor": 28000000,
+          "annual_rate_bps": 420,
+          "monthly_principal_minor": 200000,
+          "scope": "personal"
+        }
+      ],
+      "monthly_income": [
+        {
+          "category": "工资收入",
+          "amount_minor": 1050000,
+          "annual_growth_bps": 300,
+          "start_date": "2016-10-04",
+          "end_date": "2020-06-30",
+          "day": 25,
+          "scope": "personal"
+        },
+        {
+          "category": "退休金收入",
+          "amount_minor": 580000,
+          "annual_growth_bps": 200,
+          "start_date": "2020-07-01",
+          "end_date": "2026-10-03",
+          "day": 15,
+          "scope": "personal"
+        },
+        {
+          "category": "自营餐饮回款",
+          "amount_minor": 3500000,
+          "annual_growth_bps": 300,
+          "start_date": "2023-01-01",
+          "end_date": "2026-10-03",
+          "day": 5,
+          "scope": "self_employed"
+        }
+      ],
+      "annual_income": [],
+      "monthly_expense": [
+        {
+          "category": "个人日常支出",
+          "amount_minor": 380000,
+          "annual_growth_bps": 150,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 12,
+          "scope": "personal"
+        },
+        {
+          "category": "家庭住房与保障支出",
+          "amount_minor": 120000,
+          "annual_growth_bps": 150,
+          "start_date": "2016-10-04",
+          "end_date": "2026-10-03",
+          "day": 20,
+          "scope": "household"
+        },
+        {
+          "category": "自营餐饮原料与包装投入",
+          "amount_minor": 1400000,
+          "annual_growth_bps": 300,
+          "start_date": "2023-01-01",
+          "end_date": "2026-10-03",
+          "day": 10,
+          "scope": "self_employed"
+        },
+        {
+          "category": "自营门店租赁支出",
+          "amount_minor": 650000,
+          "annual_growth_bps": 200,
+          "start_date": "2023-01-01",
+          "end_date": "2026-10-03",
+          "day": 12,
+          "scope": "self_employed"
+        },
+        {
+          "category": "自营用工支出",
+          "amount_minor": 450000,
+          "annual_growth_bps": 250,
+          "start_date": "2023-01-01",
+          "end_date": "2026-10-03",
+          "day": 18,
+          "scope": "self_employed"
+        },
+        {
+          "category": "自营水电与杂费支出",
+          "amount_minor": 150000,
+          "annual_growth_bps": 250,
+          "start_date": "2023-01-01",
+          "end_date": "2026-10-03",
+          "day": 22,
+          "scope": "self_employed"
+        },
+        {
+          "category": "自营税费支出",
+          "amount_minor": 80000,
+          "annual_growth_bps": 200,
+          "start_date": "2023-01-01",
+          "end_date": "2026-10-03",
+          "day": 25,
+          "scope": "self_employed"
+        },
+        {
+          "category": "自营开店筹备支出",
+          "amount_minor": 1200000,
+          "annual_growth_bps": 0,
+          "start_date": "2023-01-01",
+          "end_date": "2023-06-30",
+          "day": 8,
+          "scope": "self_employed"
+        }
+      ],
+      "seasonal_expense": [
+        {
+          "category": "家庭出行支出",
+          "amount_minor": 1000000,
+          "annual_growth_bps": 150,
+          "months": [
+            5
+          ],
+          "day": 16,
+          "scope": "household"
+        }
+      ]
+    }
+  ]
+}

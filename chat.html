@@ -7,48 +7,50 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Navren · 对话</title>
-<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="icon" type="image/png" href="assets/brand/navren-icon.png">
 <link rel="stylesheet" href="css/style.css?v=ui-20261003-3">
 <link rel="stylesheet" href="css/bank.css?v=ui-20261003-3">
-<link rel="stylesheet" href="css/design.css?v=ui-20261003-3">
+<link rel="stylesheet" href="css/design.css?ui=0833fdeb0038">
+<link rel="stylesheet" href="css/account_switcher.css">
+<link rel="stylesheet" href="css/task_components.css">
+<link rel="stylesheet" href="css/chat_reading.css">
 </head>
 <body data-page="chat">
 <a class="skip-link" href="#mainContent">跳到主要内容</a>
 
 <div class="app">
   <nav class="sidebar" aria-label="Navren主导航">
-    <a class="logo" href="index.html" aria-label="Navren首页"><img src="assets/logo.png" alt=""></a>
+    <a class="logo" href="chat.html" aria-label="Navren首页"><img class="brand-icon" src="assets/brand/navren-icon.png" width="1254" height="1254" alt=""></a>
     <a class="nav-item active" href="chat.html" aria-current="page"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="nav-label">对话</span></a>
-    <a class="nav-item" href="recommend.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M16 3a8 8 0 0 1 5 5h-5z"/></svg><span class="nav-label">推荐</span></a>
     <a class="nav-item" href="account.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 9h18m-5 5h3"/></svg><span class="nav-label">账户</span></a>
+    <a class="nav-item" href="recommend.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M16 3a8 8 0 0 1 5 5h-5z"/></svg><span class="nav-label">发现</span></a>
     <a class="nav-item" href="mine.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="nav-label">我的</span></a>
-    <a class="nav-item nav-workbench" href="copilot.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V3h8v4M3 12h18m-11 0v3h4v-3"/></svg><span class="nav-label">工作台</span></a>
   </nav>
 
   <main class="main" id="mainContent" tabindex="-1">
     <header class="header">
-      <div class="header-identity"><a class="brand" href="index.html" aria-label="Navren首页">Navren</a><h1 class="header-location">理财对话</h1></div>
-      <label class="mode-control"><span>界面模式</span><select id="interfaceMode" aria-label="界面模式"><option value="classic">经典版</option><option value="senior">关怀版</option><option value="youth">青春版</option></select></label>
+      <div class="header-identity"><a class="brand" href="chat.html" aria-label="Navren首页"><img class="brand-wordmark" src="assets/brand/navren-wordmark.png" width="2172" height="724" alt=""></a><h1 class="header-location">银行与生活助手</h1></div>
+
     </header>
+    <section id="accountSwitcher" aria-label="演示账户" class="account-switcher" hidden></section>
 
     <div class="chat-messages" id="chatMessages">
       <div class="message ai">
-        <div class="avatar"><img src="assets/logo.png" alt=""></div>
-        <div>
+        <div class="avatar"><img class="brand-icon" src="assets/brand/navren-icon.png" width="1254" height="1254" alt=""></div>
           <div class="bubble">
             <div class="sender">Navren</div>
-            <span id="welcomeMsg">您好，我是Navren，您的智慧银行理财顾问。请问有什么可以帮您？</span>
-            <div class="preset-inline" id="presetBar"></div>
+            <div class="message-body message-prose"><span id="welcomeMsg">您好，我是Navren，您的智慧银行理财顾问。请问有什么可以帮您？</span></div>
           </div>
-        </div>
+          <div class="preset-inline message-suggestions" id="presetBar"></div>
       </div>
     </div>
 
-    <div class="privacy-guide hidden" id="privacyGuide">
+    <div class="privacy-guide hidden" id="privacyGuide" data-i18n-skip>
       <h4 id="privacyTitle">隐私与个性化服务说明</h4>
-      <p>为提供更精准的理财建议，Navren会在对话中了解您的投资偏好和资产情况，并建立个人档案。</p>
+      <p>为提供更贴合你的银行与生活财务服务，Navren会在对话中了解您的投资偏好和资产情况，并建立个人档案。</p>
       <ul>
-        <li>聊天偏好保存在浏览器；模拟账户和交易记录保存在本机</li>
+        <li>对话与模拟账户记录保存在本机；回答问题所需的账户摘要会发送至 DeepSeek 和 GLM</li>
+          <li>使用语音时，录音和待朗读文字发送至阿里云百炼处理；语音消息仅保存在当前浏览器，供你回放</li>
         <li>未经您确认，不会用于其他用途</li>
         <li>聊天授权在「我的」中管理；模拟风险与资金设置请在「账户」中修改</li>
       </ul>
@@ -66,7 +68,7 @@
         <button class="ib-btn" onclick="triggerUpload()" title="上传图片或拍照">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
-        <textarea id="userInput" rows="1" placeholder="问问账单、产品或资金安排…" onkeydown="handleKeyDown(event)"></textarea>
+        <textarea id="userInput" rows="1" placeholder="查账单、安排转账、管理卡片或聊聊你的计划…" onkeydown="handleKeyDown(event)"></textarea>
         <button class="ib-btn" id="voiceBtn" onclick="toggleVoice()" title="语音输入（说出您的问题）">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         </button>
@@ -77,21 +79,34 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </button>
       </div>
+      <div class="voice-status" id="voiceStatus" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
   </main>
 </div>
 
 <script src="js/storage.js?v=ui-20261003-3"></script>
-<script src="js/design.js?v=ui-20261003-3"></script>
+<script src="js/market_ui.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/design.js?ui=a7ba89e189e9"></script>
+<script src="js/help.js"></script>
 <script src="js/config.js?v=7"></script>
 <script src="js/demo_products_index.js?v=7" defer></script>
-<script src="js/market_data.js?v=7" defer></script>
 <script src="js/router.js?v=7"></script>
-<script src="js/profile_engine.js?v=7" defer"></script>
 <script src="js/data.js?v=7"></script>
 <script src="js/bank_client.js?v=bank2"></script>
+<script src="js/account_switcher.js"></script>
+<script src="js/task_components.js"></script>
+<script src="js/task_chat.js"></script>
+<script src="js/view_context.js"></script>
+<script src="js/calendar_client.js"></script>
+<script src="js/calendar_ui.js"></script>
+<script src="js/speech.js"></script>
 <script src="js/bank_ui.js?v=ui-20261003-3"></script>
 <script src="js/api.js?v=bank2"></script>
-<script src="js/chat.js?v=ui-20261003-3"></script>
+<script src="js/voice_messages.js"></script>
+<script src="assets/vendor/chat-markdown/marked.umd.js"></script>
+<script src="assets/vendor/chat-markdown/purify.min.js"></script>
+<script src="js/chat_markdown.js"></script>
+<script src="js/chat.js?v=navren-brand-20261005-1"></script>
 </body>
 </html>

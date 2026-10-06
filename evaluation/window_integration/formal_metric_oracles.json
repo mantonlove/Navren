@@ -1,0 +1,277 @@
+{
+  "schema_version": 1,
+  "suite_id": "navren.integration.formal-tool-metric-contract/1",
+  "expectations_frozen_before_execution": true,
+  "authoring_source_sha256": {
+    "agent_core.py": "dd36fb52a08a863c69bc29e77fe0a079a89f51c2b3bcd64b58d6e20307d118ce",
+    "agent_runtime/__init__.py": "890319aed11610b92c5e1d0afc8affdbd2c75ebb1635df0a850d2f1c0ffe866d",
+    "agent_runtime/bank_tools.py": "58c9a2eca03e987fcbcae4b684dddfdcbe8e0402dbaaaae46f02a426fab5acf6",
+    "agent_runtime/cashflow_finance.py": "67a8419c0ca4206a52b08f955a170907dbc4e6aa21988df9fd2b8e7a1416c952",
+    "agent_runtime/contracts.py": "1e22cdf35513e3cbeccc8a7dc39f09430361383b24377a838d7af46163444899",
+    "agent_runtime/conversation.py": "4a03d7693040b00be9038424764b63da672d30c10d75063b59952b50056f78c3",
+    "agent_runtime/data_boundary.py": "36102d8c14885e592aa9fbfeeaabc6103a02d78e6c849ccba02ac50b06408360",
+    "agent_runtime/events.py": "6f63997a660921def0c4ef92c88e358fec1da18631a4213fc860173e4baaedaa",
+    "agent_runtime/knowledge_retrieval.py": "82b634cb613c5c8c7f1067a3361f330dc4473a72e6fedff63540fe4204cb3390",
+    "agent_runtime/metric_claims.py": "1a34db9d302cee75f3cd287c51d4c9147a77a8c20fb188bd05cb23942f104854",
+    "agent_runtime/model_adapters.py": "12952b999d443ea0f1f4fcc2de6d21298b8bff77290bce5b80d81e7d392a8b05",
+    "agent_runtime/multi_agent.py": "2d0f3c973a1eaf0609a4ac615cb88b353e7a4071e762165e28b09c7281012389",
+    "agent_runtime/native_client.py": "348ee301152545131a5d7937e893e659f9c036b2ceb117f4eca54b0c97c195f3",
+    "agent_runtime/ports.py": "e4f394030db5a77648f063b14ab498b05171306f4daf599c3d0e8f78da26e55f",
+    "agent_runtime/skills.py": "a523abddb7738e584f735cdd5ec8cfb148a98639d6811a71d72197ff5651f1f7",
+    "base_runtime/__init__.py": "5e3550459644e0516a4a1e2482006ad52eaf2bc53747c54fb4c710150cf7660d",
+    "base_runtime/evidence.py": "5b17f4bbbc77e488827007a22c3e46acac4c99331da2189f5c03c537a7a672ce",
+    "base_runtime/history.py": "68fd9ab014cfbd285ff7d462702b318a3dfe2bea0d55f433685095eb3f3200f8",
+    "base_runtime/identity.py": "24895a661bd03ba8caf724a052e5b795b8c02313ade9d5399f54282f89c21234",
+    "base_runtime/inventory.py": "38b147e0a042bfec714bb2d99af6191b6aacbe33a56640f3027799fdf20814ca",
+    "base_runtime/run_regression.py": "735b880b24e01f34e4d86be24ce93a310ed7874d173444ecf2594b2ad3590443",
+    "calendar_events.py": "855a4c4fede7fca363d81060ee74bd1a8c67d810bd6ca986455bb632cceaeace",
+    "cashflow_timeline.py": "90b88812a77fd4ac67c0a4d3048ee8faf895f6460d1afa29bed6ca066a8a108a",
+    "demo_accounts.py": "74dbf7a3958b3c9ef191303128ebf75e9e4cc07b7e6f16907075566747bb32b2",
+    "evaluation/navren_skill_semantic_cases.json": "f92627f6dcd96a979d17d805dc5a219a47fcacc0a9e647c6f6e1a421f62ec0e6",
+    "evaluation/window_integration/semantic_cases.json": "89a849854c74d6598ec9121a06a30fa9a4d0077d76c925ba5c7efc83e5055234",
+    "finance_agent.py": "9012345cb8d996160addb9e559b2f1772b2e03a916a7c670cd7010b5c95fa2ba",
+    "finance_capabilities.py": "0162e121c84a7a08a33e1fe6ab6327168499d531b0757be684c209b405ebe79e",
+    "finance_gateway.py": "ad2bc44066290ac3d96d384e70238731dc00f4f5231beaada922ee7779eb3263",
+    "financial_calendar.py": "e2075b11b2951b07f2743047aa417fd1c785a93a2bb5052911438ddafbf07983",
+    "financial_graph.py": "2e6e3c61fd35e4822bd71239f4d5d4341f05f1be1f4799f379cc02b46062df65",
+    "financial_methods/__init__.py": "48a0261249afc2509c7c7a10149b5d4e1479662703243787205a8700a8314a15",
+    "financial_methods/accounting.py": "52a6800d1ac1d0f24bd7cffdab6f05e30b6b887c279924df2c0bcfe20122ab42",
+    "financial_methods/allocation.py": "cb5ff7866fa04a5110b5ea34b90d8811852ad7a4a639df79c78c5594d94d736c",
+    "financial_methods/contracts.py": "135c616d83ac13600488167ff1733346a19a1d59a63c3a52589fb3b2d20e5b17",
+    "financial_methods/funding.py": "f8811897d9ccb15880a4059145a439a1e5b13041a9010f2b5b63a01a712027ad",
+    "financial_methods/returns.py": "5f8ff4f28533068c1c9d2263770dc72a671f3373710ff540bed072090685fe47",
+    "financial_metrics.py": "e6d32f64d90d1275d9f184685054c54bd6fb4992cbdb7256c64b01ee8f166a31",
+    "fund_history.py": "662488cc564a4f7ff87c571a7ade4e2506f02f9b494c93e34d7f0d6655921430",
+    "goal_service.py": "029f67cf3fdd0b22cbb51d62261e8763986ebd48cf8344cc149fc65a0d37af54",
+    "local_knowledge/__init__.py": "c51b947e26694762f842592a93fe4b963c226ebb53eb8d3148ef534cde5a95a3",
+    "local_knowledge/acceptance/run_review.py": "b22772233df8222153498468312d9bded619c19cd62e757f6884fe16b82f6b95",
+    "local_knowledge/graph.py": "364b0b58cd8949884d26d8b69af58cfd5d0e367f95adb3497a0bb54a591b11bb",
+    "local_knowledge/importers.py": "6d069cdddb652393a99aaecd812cd56489de4dbab11b106daa8b5274e382d163",
+    "local_knowledge/pdf_ingest.py": "af97f645ffd285d6819eff42a1d33e1dbe35fa61783fd34e03f24b46fc45ef87",
+    "local_knowledge/sources.py": "dbd02a78602a579512cb6cf18834b0b19fdbe12b97a7e1449c11a560b1484741",
+    "local_knowledge/store.py": "5f04fe9ff015f6b5dd246c8a8cec12f322652946670268bc3a30b25fd63c72d4",
+    "local_knowledge/supplement.py": "eaba10ab43879a287dbb9363d0c35b616f73b630268d1598debd502b9e6c3470",
+    "market_content.py": "42684034b66225e7c153a30bb879380c843abb2e3410dffe10ebad8708e491c1",
+    "market_daily.py": "49f35921b0e1519a14637a07ac672995ddc8605d3b22aea9d1061ea6771f1734",
+    "market_editor.py": "e291b1948c02f6f7f97b2bb198602b3dcd8c7d8d4e0b4644229dc2813eae8639",
+    "market_pipeline.py": "5700c5c21db94ccd47eb8a9e2c831e432a5e6d76cdb8c7e5195871aaf6ff37af",
+    "market_schedule.py": "87766f06aae705e73d22ca5573d1124c42dbd0d095ff291e4fe163bb9c1951cb",
+    "market_sources.py": "99da73af71848b236167b228f1e2c3252edab72a4e9415677c47eaa5fdec08de",
+    "personal_data.py": "3207ef7e5c430d3914133a46ef19b94ed4f686ba1c5ecc4130419b7abb010352",
+    "personal_graph.py": "5f56debe69dcdadbe9c3dc7aad0f7adc3f7e7d47703fb33f02c36b5e471e638e",
+    "public_products.py": "5f39010c56e5ac5e45cc97da88e41fee071018abc25e2cff690bf254442d83ed",
+    "research_plans.py": "71c5d2f8abd75d0d1ce1bb2276e2b58800e203e3e56810df79655e2789bbfd34",
+    "server.py": "d1194fbdbd882ae7d5f5c8ea75d26e3fc798b424194483a6fd422615db5c714f",
+    "service_negotiation.py": "198cf19a5b97c50dc0eb4d217d741b9873c781118878b26270255876649f6d6a",
+    "simulated_bank/__init__.py": "15f9a05806013ed9c95c8b8e082a980341c66f10a6e6ada0703b573ac1eb8e81",
+    "simulated_bank/__main__.py": "51e18c0212f395ddc991197a92e86699d6cb4620ad5c7e52f4790b99d72f6817",
+    "simulated_bank/agent_guard.py": "c5074d51f5371e84020cc7f6a3910b3507682fdf47a47f008e9818f05d4e32ff",
+    "simulated_bank/customer_archive.py": "5bc07c60ae27eeb5e962f4b455b7f0ff68061f107e30404001da093484854833",
+    "simulated_bank/customer_schema.py": "738df24ea03f19871bb6ab4c5db4044646fc822702f40a6c5420df02fee354bc",
+    "simulated_bank/customer_seed.py": "fc0d6823f50387eaed49c1b890a9b33a6bf69ead8c993e91390d5a505d2239ca",
+    "simulated_bank/demo.py": "8be28f18202236f76a51aeb90fb84cc6da993fa41eadeeb0c75672c07b769557",
+    "simulated_bank/fixtures/demo.json": "03498e514aa5689fa6020cb4d0560710b77b0ba88a5d094b6445f25876e7ac1a",
+    "simulated_bank/generate_contract.py": "ec560e1a9a919d606d9fcba7e612feaaeb5edbe4f4321086c6ffe077cafe2a4e",
+    "simulated_bank/generate_fixture.py": "29d35656453b05dda591b9dcda3026940fb566be07e0ed8b7d76470fcce6cfba",
+    "simulated_bank/http_api.py": "2c0b37284c1ccf83342e4703ed3cd7ff3156224c988aec50caa7631f82486841",
+    "simulated_bank/service.py": "a1704a1dcefe733a3aed6c098f12bb2cbff1d0b320e73c99d950932be189286c",
+    "simulated_bank/service_benefit_rules.json": "033510eb7bbd53ab0caa4d0a264c8185fa3aec5f15d5ad418bea261025645bb3",
+    "simulated_bank/statement_import.py": "d3a4ec3f5620fcee453dbc4a1ec5b19bca1d7a5a1fa53819acb0a0a116ed1a1b",
+    "simulated_bank/tools.py": "dda7795f0e6a4c24ee0ae806904e1d65bc539aade786f3e9b471c71f20153f19",
+    "sync_products.py": "2f4c06b87603114444a2e918da1e5d24ae667273819d7cf7b145aaa313036074",
+    "user_memory.py": "1217ea25706fd611787190a1a559f360e0ffbb208a515ca39e0d715444dfa16c",
+    "view_context.py": "f6539f4486da0b5fd599129b7755f4ef3e719ec41c56208f2c5aa6f0459e2d14",
+    "voice_gateway.py": "ff19f93148f09955251f01f9dda2f9ed9068eeec62fd9167589bb38bb805e50f",
+    "wealth_portfolio.py": "fa8da58deb1705bc1b2625d2963257e686bec61a592cb33d55f7d655a4d474e3",
+    "wealth_returns.py": "32ad5d80559a4fd91ca8652c9c790914df91dae63b4a2328d3ed153687abd9c3",
+    "webank_catalog.py": "e28b57887c36eb8930b20b49e71f2011914d4c7ae1b232158af171ea53627cbb"
+  },
+  "financial_service": "FinancialMetrics from real isolated FinanceGateway",
+  "data_scope": "original demo.json simulation only; no current bank or real customer",
+  "source_input_identity": {
+    "simulated_bank/fixtures/demo.json": "03498e514aa5689fa6020cb4d0560710b77b0ba88a5d094b6445f25876e7ac1a",
+    "simulated_bank/service_benefit_rules.json": "033510eb7bbd53ab0caa4d0a264c8185fa3aec5f15d5ad418bea261025645bb3"
+  },
+  "oracle_method": "Original raw demo inputs: main 1500000 + income/refund 2604000 - other flows 1815000 = 2289000; savings 150000; cash sum 2439000. No production calculator generates expected amounts. Service terms read raw JSON and frozen literally. Wrong object/time/source signatures are necessary structural rejection, not Chinese financial semantics certification.",
+  "metric_fields": [
+    "contract_version",
+    "metric_id",
+    "subject_id",
+    "metric_name",
+    "currency",
+    "unit",
+    "value_minor",
+    "as_of",
+    "period_start",
+    "period_end",
+    "data_scope",
+    "calculation_status",
+    "basis",
+    "formula_id",
+    "input_refs",
+    "source_versions",
+    "excluded_items",
+    "coverage_gaps",
+    "assumed_inputs"
+  ],
+  "cases": [
+    {
+      "id": "F01",
+      "test": "test_real_cash_batch_is_complete_and_account_specific",
+      "expected": {
+        "main_cash_minor": 2289000,
+        "savings_cash_minor": 150000,
+        "cash_total_minor": 2439000,
+        "holding_principal_minor": 800000,
+        "as_of": "2026-10-03",
+        "kind": "recorded_fact"
+      }
+    },
+    {
+      "id": "F02",
+      "test": "test_real_hypothesis_projection_preserves_complete_local_binding",
+      "inputs": {
+        "operation": "subtract",
+        "values_minor": [
+          13579,
+          579
+        ],
+        "currency": "CNY"
+      },
+      "expected": {
+        "result_minor": 13000,
+        "kind": "hypothesis",
+        "basis": "user_input_arithmetic_not_account_data",
+        "formula_id": "tools.money_hypothesis/1",
+        "assumed_inputs": [
+          {
+            "type": "user_hypothesis",
+            "input_index": 0,
+            "value_minor": 13579
+          },
+          {
+            "type": "user_hypothesis",
+            "input_index": 1,
+            "value_minor": 579
+          }
+        ]
+      }
+    },
+    {
+      "id": "F03",
+      "test": "test_service_rules_are_conditional_not_current_cash",
+      "expected": {
+        "kind": "planning_scenario",
+        "basis": "approved_conditional_service_terms_not_cash",
+        "data_scope": "navren_synthetic_service_terms_not_cash",
+        "offers": {
+          "SYNTH-E-STATEMENT-FEE-90D": {
+            "monthly_value": 500,
+            "max_cost": 1500,
+            "minimum_monthly_salary": 0,
+            "period_start": "2026-10-01",
+            "period_end": "2026-12-31",
+            "duration_months": 3
+          },
+          "SYNTH-PAYROLL-FEE-180D": {
+            "monthly_value": 1000,
+            "max_cost": 6000,
+            "minimum_monthly_salary": 600000,
+            "period_start": "2026-10-01",
+            "period_end": "2026-11-30",
+            "duration_months": 6
+          }
+        }
+      }
+    },
+    {
+      "id": "F04",
+      "test": "test_base_rejects_tool_amount_and_type_forgery",
+      "expected": {
+        "code": "METRIC_RESULT_MISMATCH"
+      }
+    },
+    {
+      "id": "F05",
+      "test": "test_signed_real_batch_rejects_mutation_and_other_workspace",
+      "expected": {
+        "tamper_code": "METRIC_TAMPERED",
+        "subject_code": "METRIC_SUBJECT_MISMATCH"
+      }
+    },
+    {
+      "id": "F06",
+      "test": "test_agent_rejects_same_amount_wrong_object_period_currency_basis",
+      "expected": {
+        "code": "METRIC_CLAIM_MISMATCH"
+      }
+    },
+    {
+      "id": "F07",
+      "test": "test_agent_rejects_wrong_amount_and_condition_relabel",
+      "expected": {
+        "amount_code": "METRIC_LITERAL_MISMATCH",
+        "kind_code": "METRIC_KIND_MISMATCH"
+      }
+    },
+    {
+      "id": "F08",
+      "test": "test_real_batches_cannot_merge_changed_source_versions",
+      "expected": {
+        "code": "METRIC_SOURCE_VERSION_CONFLICT"
+      }
+    },
+    {
+      "id": "F09",
+      "test": "test_source_change_before_prepare_rejects_without_new_operation",
+      "expected": {
+        "code": "STALE_EVIDENCE",
+        "new_operations": 0,
+        "cash_change_minor": 0
+      }
+    },
+    {
+      "id": "F10",
+      "test": "test_source_change_before_final_answer_and_locked_release_rejects",
+      "expected": {
+        "agent_code": "STALE_EVIDENCE",
+        "base_code": "METRIC_VERSION_CONFLICT"
+      }
+    },
+    {
+      "id": "F11",
+      "test": "test_cashflow_prepare_keeps_existing_excluded_pending_source_valid",
+      "inputs": {
+        "days": 60,
+        "transfer_amount_minor": 10000
+      },
+      "expected": {
+        "state": "pending_confirmation",
+        "cash_change_minor": 0,
+        "fresh_after_prepare": true,
+        "pending_operation_kind": "planning_scenario",
+        "pending_excluded": "pending_operations_not_counted"
+      }
+    },
+    {
+      "id": "F12",
+      "test": "test_locked_response_guard_accepts_real_batch_then_rejects_changed_pending_state",
+      "inputs": {
+        "transfer_amount_minor": 10000
+      },
+      "expected": {
+        "state": "pending_confirmation",
+        "after_confirmation_balance_minor": 2279000,
+        "pending_operation_kind": "planning_scenario",
+        "expired_code": "STALE_OPERATION_METRICS",
+        "cash_change_minor": 0
+      }
+    }
+  ],
+  "limits": [
+    "No cloud model/reviewer, HTTP, UI, TTS, production deployment or investment execution certification.",
+    "Structured fields do not prove the prose names the correct account/period or gives sufficient financial advice; independent human semantic review remains required.",
+    "Source drift during execution invalidates this run; record and preserve initial failures rather than altering goldens.",
+    "Transport compression is accepted only with exact metric references restoring to complete local signatures; withholding or omitted hypothesis does not pass."
+  ]
+}

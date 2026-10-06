@@ -97,6 +97,31 @@ class BankTests(unittest.TestCase):
         self.assertEqual(len(video['transaction_ids']),4)
         self.assertTrue(any(r['classification']=='固定生活支出' for r in candidates))
 
+    def test_periodic_candidate_mark_is_local_persistent_and_audited(self):
+        candidate=next(c for c in self.bank.periodic_charges(self.ws)['candidates'] if c['merchant']=='模拟视频会员')
+        before=self.bank.snapshot(self.ws)
+        mandates_before=self.bank.mandates(self.ws)
+        marked=self.bank.mark_periodic_candidate(self.ws,{'candidate_id':candidate['candidate_id'],'decision':'confirmed'})
+        self.assertIn('仅本地标记',marked['status'])
+        self.assertIn('不会修改银行代扣',marked['notice'])
+        after=self.bank.snapshot(self.ws)
+        self.assertEqual(before['total_cash_minor'],after['total_cash_minor'])
+        self.assertEqual(before['version'],after['version'])
+        self.assertEqual(mandates_before,self.bank.mandates(self.ws))
+        reopened=SimulatedBank(self.path)
+        persisted=next(c for c in reopened.periodic_charges(self.ws)['candidates'] if c['candidate_id']==candidate['candidate_id'])
+        self.assertEqual(persisted['user_decision'],'confirmed')
+        self.assertIn('仅本地标记',persisted['status'])
+        audit=[e for e in reopened.audit(self.ws) if e['event']=='periodic_candidate_marked']
+        self.assertEqual(audit[-1]['details']['transaction_ids'],candidate['transaction_ids'])
+
+    def test_periodic_candidate_mark_rejects_stale_evidence_and_bad_decisions(self):
+        candidate=next(c for c in self.bank.periodic_charges(self.ws)['candidates'] if c['merchant']=='模拟视频会员')
+        self.assert_code('INVALID_DECISION',lambda:self.bank.mark_periodic_candidate(self.ws,{'candidate_id':candidate['candidate_id'],'decision':'closed'}))
+        with self.bank.transaction() as db:
+            db.executemany('DELETE FROM transactions WHERE id=?',[(transaction_id,) for transaction_id in candidate['transaction_ids']])
+        self.assert_code('CANDIDATE_CHANGED',lambda:self.bank.mark_periodic_candidate(self.ws,{'candidate_id':candidate['candidate_id'],'decision':'ignored'}))
+
     def test_empty_month_and_invalid_month(self):
         self.assertEqual(self.bank.analysis(self.ws,'2025-01')['recorded_range'],None)
         self.assertEqual(self.bank.snapshot(self.ws,'2025-01')['total_cash_minor'],2439000)
@@ -160,7 +185,7 @@ class BankTests(unittest.TestCase):
             self.assert_code('INVALID_INTEGER',lambda:self.prepare(amount=amount))
 
     def test_unsupported_action_and_client_permission_override(self):
-        self.assert_code('ACTION_UNAVAILABLE',lambda:self.prepare(action='transfer'))
+        self.assert_code('ACTION_UNAVAILABLE',lambda:self.prepare(action='real_bank_transfer'))
         self.assert_code('INVALID_FIELDS',lambda:self.prepare(permission='green'))
 
     def test_changed_profile_invalidates_old_confirmation(self):
@@ -378,12 +403,116 @@ class BankTests(unittest.TestCase):
         self.assertEqual(len(current),1)
         self.assertEqual(current[0]['risk_level'],3)
 
-    def test_draft_holds_and_cards_cannot_execute_or_reduce_cash(self):
+    def test_archive_reads_do_not_execute_and_unknown_card_action_stays_unavailable(self):
         before = self.bank.snapshot(self.ws)['total_cash_minor']
         self.bank.customer_archive(self.ws)
         self.assertEqual(self.bank.snapshot(self.ws)['total_cash_minor'],before)
-        for action in ['reserve_funds','issue_card','transfer','book_cake']:
+        for action in ['issue_card','book_cake']:
             self.assert_code('ACTION_UNAVAILABLE',lambda:self.prepare(action=action))
+        self.assert_code('INVALID_FIELDS',lambda:self.prepare(action='transfer'))
+
+    def test_confirmed_transfer_updates_ledger_once_and_enforces_daily_limit(self):
+        archive=self.bank.customer_archive(self.ws)['records']
+        beneficiary=next(b for b in archive['beneficiaries'] if b['alias']=='妈妈')
+        before=self.bank.snapshot(self.ws)['total_cash_minor']
+        op=self.bank.prepare(self.ws,{'action':'transfer','account_id':self.account,'beneficiary_id':beneficiary['id'],
+            'amount_minor':50000,'reference':'','idempotency_key':'transfer-once'})
+        self.assertEqual(self.bank.snapshot(self.ws)['total_cash_minor'],before)
+        body=self.confirm_body(op)
+        receipt=self.bank.confirm(self.ws,op['id'],body)
+        replay=self.bank.confirm(self.ws,op['id'],body)
+        self.assertEqual(receipt['result']['payment_id'],replay['result']['payment_id'])
+        self.assertEqual(self.bank.snapshot(self.ws)['total_cash_minor'],before-50000)
+        rows=[r for r in self.bank.transactions(self.ws) if r['operation_id']==op['id']]
+        self.assertEqual(len(rows),1);self.assertEqual(rows[0]['kind'],'transfer')
+        payment=next(p for p in self.bank.customer_archive(self.ws)['records']['payment_instructions']
+                     if p['id']==receipt['result']['payment_id'])
+        self.assertEqual(payment['status'],'succeeded')
+
+    def test_scheduled_transfer_executes_on_simulation_date_once(self):
+        archive=self.bank.customer_archive(self.ws)['records']
+        beneficiary=next(b for b in archive['beneficiaries'] if b['alias']=='妈妈')
+        due='2026-10-04'
+        op=self.bank.prepare(self.ws,{'action':'schedule_transfer','account_id':self.account,
+            'beneficiary_id':beneficiary['id'],'amount_minor':25000,'frequency':'once','next_due_on':due,
+            'idempotency_key':'schedule-once'})
+        confirmed=self.execute(op); schedule_id=confirmed['result']['scheduled_payment_id']
+        before=self.bank.snapshot(self.ws)['total_cash_minor']
+        result=self.bank.advance_days(self.ws,1)
+        self.assertEqual(result['scheduled_transfers'],1);self.assertEqual(result['failed_transfers'],0)
+        self.assertEqual(self.bank.snapshot(self.ws)['total_cash_minor'],before-25000)
+        schedule=next(x for x in self.bank.customer_archive(self.ws)['records']['scheduled_payments'] if x['id']==schedule_id)
+        self.assertEqual(schedule['status'],'completed')
+        self.assertEqual(self.bank.advance_days(self.ws,1)['scheduled_transfers'],0)
+
+    def test_split_request_and_receipt_are_local_and_reconciled(self):
+        records=self.bank.customer_archive(self.ws)['records']
+        split=next(s for s in records['split_bills'] if s['status']=='draft')
+        request=self.bank.prepare(self.ws,{'action':'request_split','account_id':self.account,
+            'split_id':split['id'],'idempotency_key':'split-request'})
+        self.execute(request)
+        people=[p for p in self.bank.customer_archive(self.ws)['records']['split_participants'] if p['split_id']==split['id']]
+        self.assertTrue(all(p['status']=='requested' for p in people))
+        before=self.bank.snapshot(self.ws)['total_cash_minor']
+        collect=self.bank.prepare(self.ws,{'action':'collect_split_payment','account_id':self.account,
+            'split_id':split['id'],'participant_id':people[0]['id'],'idempotency_key':'split-receipt'})
+        receipt=self.execute(collect)
+        self.assertEqual(receipt['result']['amount_minor'],15000)
+        self.assertEqual(self.bank.snapshot(self.ws)['total_cash_minor'],before+15000)
+        self.assertEqual(self.bank.analysis(self.ws,'2026-10')['totals_minor']['transfer'],15000)
+
+    def test_subscription_cancellation_does_not_close_bank_mandate(self):
+        records=self.bank.customer_archive(self.ws)['records']
+        subscription=next(s for s in records['subscriptions'] if s['merchant_status']=='active')
+        op=self.bank.prepare(self.ws,{'action':'cancel_subscription','account_id':subscription['account_id'],
+            'subscription_id':subscription['id'],'idempotency_key':'cancel-subscription'})
+        receipt=self.execute(op)
+        self.assertEqual(receipt['result']['mandate_status'],'unchanged')
+        after=self.bank.customer_archive(self.ws)['records']
+        self.assertEqual(next(s for s in after['subscriptions'] if s['id']==subscription['id'])['merchant_status'],'cancelled')
+        self.assertEqual(next(m for m in after['mandates'] if m['id']==subscription['mandate_id'])['status'],'active')
+
+    def test_fund_hold_then_service_booking_debits_once_and_completes_task(self):
+        records=self.bank.customer_archive(self.ws)['records']
+        task=next(t for t in records['orchestration_tasks'] if t['status']=='draft')
+        quotes=[q for q in records['service_quotes'] if q['status']=='illustrative']
+        total=sum(q['price_minor'] for q in quotes)
+        before=self.bank.snapshot(self.ws)['total_cash_minor']
+        hold=self.bank.prepare(self.ws,{'action':'reserve_funds','account_id':self.account,'task_id':task['id'],
+            'amount_minor':total,'expires_on':'2026-10-17','idempotency_key':'reserve-birthday'})
+        hold_receipt=self.execute(hold); hold_id=hold_receipt['result']['hold_id']
+        self.assertEqual(self.bank.snapshot(self.ws)['total_cash_minor'],before)
+        book=self.bank.prepare(self.ws,{'action':'book_services','account_id':self.account,'task_id':task['id'],
+            'hold_id':hold_id,'quote_ids':[q['id'] for q in quotes],'idempotency_key':'book-birthday'})
+        booked=self.execute(book)
+        self.assertEqual(booked['result']['amount_minor'],total)
+        self.assertEqual(self.bank.snapshot(self.ws)['total_cash_minor'],before-total)
+        after=self.bank.customer_archive(self.ws)['records']
+        self.assertEqual(next(t for t in after['orchestration_tasks'] if t['id']==task['id'])['status'],'completed')
+        self.assertEqual(len([r for r in after['service_reservations'] if r['task_id']==task['id'] and r['status']=='confirmed']),len(quotes))
+
+    def test_card_limit_and_application_reviews_run_only_after_simulation_date_moves(self):
+        records=self.bank.customer_archive(self.ws)['records']
+        credit=next(c for c in records['cards'] if c['type']=='credit' and c['status']=='active')
+        limit=self.bank.prepare(self.ws,{'action':'request_card_limit','account_id':credit['account_id'],
+            'card_id':credit['id'],'requested_limit_minor':1500000,'idempotency_key':'limit-review'})
+        limit_receipt=self.execute(limit)
+        self.assertEqual(next(c for c in self.bank.customer_archive(self.ws)['records']['cards'] if c['id']==credit['id'])['credit_limit_minor'],1000000)
+        review=self.bank.advance_days(self.ws,1)
+        self.assertEqual(review['reviewed_card_limits'],1)
+        updated=next(c for c in self.bank.customer_archive(self.ws)['records']['cards'] if c['id']==credit['id'])
+        self.assertEqual(updated['credit_limit_minor'],1500000)
+        self.assertEqual(next(r for r in self.bank.customer_archive(self.ws)['records']['card_limit_requests']
+                              if r['id']==limit_receipt['result']['request_id'])['status'],'approved')
+        application=self.bank.prepare(self.ws,{'action':'apply_card','account_id':self.account,
+            'requested_type':'debit','requested_limit_minor':0,'idempotency_key':'debit-card-review'})
+        receipt=self.execute(application)
+        self.assertEqual(receipt['result']['status'],'submitted')
+        self.assertEqual(self.bank.advance_days(self.ws,1)['reviewed_card_applications'],1)
+        records=self.bank.customer_archive(self.ws)['records']
+        issued=next(a for a in records['card_applications'] if a['id']==receipt['result']['application_id'])
+        self.assertEqual(issued['status'],'issued')
+        self.assertTrue(any(c['status']=='active' and c['type']=='debit' and c['id']!=credit['id'] for c in records['cards']))
 
     def test_typed_money_and_status_reject_bad_storage_values(self):
         for sql in ['UPDATE cards SET outstanding_minor=1.5','UPDATE cards SET outstanding_minor=-1',"UPDATE cards SET status='unknown'"]:
@@ -412,9 +541,9 @@ class BankTests(unittest.TestCase):
             after = {t:[tuple(r) for r in db.execute('SELECT * FROM '+t+' ORDER BY rowid')] for t in before}
             self.assertEqual(before,after)
         self.assertTrue(migrated.customer_archive(self.ws)['integrity']['ok'])
-        self.assertTrue(list(self.path.parent.glob('*.before-v2-*.sqlite3')))
+        self.assertTrue(list(self.path.parent.glob('*.before-v5-*.sqlite3')))
         SimulatedBank(self.path)
-        self.assertEqual(len(list(self.path.parent.glob('*.before-v2-*.sqlite3'))),1)
+        self.assertEqual(len(list(self.path.parent.glob('*.before-v5-*.sqlite3'))),1)
 
     def test_failed_migration_rolls_back_and_can_retry(self):
         before = self.legacy_copy()
@@ -425,6 +554,24 @@ class BankTests(unittest.TestCase):
             for t,rows in before.items(): self.assertEqual([tuple(r) for r in db.execute('SELECT * FROM '+t+' ORDER BY rowid')],rows)
         retried = SimulatedBank(self.path)
         self.assertTrue(retried.customer_archive(self.ws)['integrity']['ok'])
+
+    def test_v2_migration_disables_lost_card_controls_without_rewriting_lots(self):
+        with closing(self.bank.connect()) as db:
+            lots_before=db.execute('SELECT count(*) FROM investment_lots WHERE workspace_id=?',(self.ws,)).fetchone()[0]
+        with self.bank.transaction() as db:
+            db.execute('UPDATE schema_migrations SET version=2')
+            db.execute("UPDATE metadata SET value='2' WHERE key='schema_version'")
+            db.execute("UPDATE card_controls SET enabled=1 WHERE card_id=?",(self.ws[:12]+'-lost-card-online',))
+        migrated=SimulatedBank(self.path)
+        archive=migrated.customer_archive(self.ws)
+        self.assertTrue(archive['integrity']['ok'])
+        with closing(migrated.connect()) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM investment_lots WHERE workspace_id=?',(self.ws,)).fetchone()[0],lots_before)
+            self.assertEqual(db.execute('SELECT count(*) FROM card_controls WHERE workspace_id=? AND card_id=? AND enabled<>0',
+                                        (self.ws,self.ws[:12]+'-lost-card-online')).fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT max(version) FROM schema_migrations').fetchone()[0],5)
+            self.assertEqual(db.execute('SELECT dataset_version FROM workspace_datasets WHERE workspace_id=?',(self.ws,)).fetchone()[0],
+                             'customer-bank-2026-10-06-v5')
 
     def test_changed_new_workspace_fixture_does_not_require_database_reset(self):
         fixture = json.loads((Path(__file__).parents[1]/'simulated_bank/fixtures/demo.json').read_text())
@@ -480,7 +627,7 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.request('/health')[1]['status'],'ok')
         status,contract,headers = self.request('/openapi.json')
         self.assertEqual(status,200)
-        self.assertEqual(sum(len(v) for v in contract['paths'].values()),25)
+        self.assertEqual(sum(len(v) for v in contract['paths'].values()),26)
         self.assertEqual(headers['Cache-Control'],'no-store')
         self.assertNotIn('Access-Control-Allow-Origin',headers)
 
@@ -508,6 +655,24 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.request(f'/api/sim-bank/operations/{op["id"]}/confirm',body,c['session_token'])[1]['state'],'succeeded')
         self.assertEqual(self.request(f'/api/sim-bank/operations/{op["id"]}/confirm',body,c['session_token'])[1]['state'],'succeeded')
         self.assertEqual(len(self.request('/api/sim-bank/orders',token=c['agent_token'])[1]),1)
+
+    def test_periodic_mark_requires_human_and_preserves_bank_state(self):
+        c=self.create()
+        candidate=next(x for x in self.request('/api/sim-bank/periodic-charges',token=c['agent_token'])[1]['candidates']
+                       if x['merchant']=='模拟视频会员')
+        path='/api/sim-bank/periodic-charges/'+candidate['candidate_id']+'/mark'
+        before=self.request('/api/sim-bank/snapshot',token=c['agent_token'])[1]
+        status,error,_=self.request(path,{'decision':'confirmed'},c['agent_token'])
+        self.assertEqual((status,error['error']['code']),(403,'HUMAN_REQUIRED'))
+        status,marked,_=self.request(path,{'decision':'confirmed'},c['session_token'])
+        self.assertEqual(status,200)
+        self.assertIn('仅本地标记',marked['status'])
+        current=self.request('/api/sim-bank/periodic-charges',token=c['agent_token'])[1]
+        viewed=next(x for x in current['candidates'] if x['candidate_id']==candidate['candidate_id'])
+        self.assertEqual(viewed['user_decision'],'confirmed')
+        after=self.request('/api/sim-bank/snapshot',token=c['agent_token'])[1]
+        self.assertEqual((after['total_cash_minor'],after['version']),
+                         (before['total_cash_minor'],before['version']))
 
     def test_auth_csrf_host_and_non_json_fail_closed(self):
         self.assertEqual(self.request('/api/sim-bank/snapshot')[0],401)

@@ -1,0 +1,682 @@
+{
+  "schema_version": 1,
+  "review_type": "read_only_independent_replay_on_temporary_clones",
+  "script_sha256": "70cf6df6fac58cec2b5da4728819d8aff4d266e8b9bef78c8021deb720257d15",
+  "evaluation_sha256": "548434cb3dca4c9e99835521d65c2ecdc448aa0b3f798c8ad388e991f1209f49",
+  "checks": {
+    "manifest_hash": true,
+    "question_set_hash": true,
+    "delivery_database_hash": true,
+    "empty_hit_rejected": true,
+    "replayed_positives": true,
+    "replayed_negatives": true,
+    "original_raw_and_spans": true,
+    "graph_paths_present": true
+  },
+  "originals": [
+    {
+      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/006210-summary.pdf",
+      "raw_hash_passed": true,
+      "span_count": 6,
+      "spans": [
+        {
+          "key": "006210-identity",
+          "page": 1,
+          "passed": true
+        },
+        {
+          "key": "006210-sales-fees",
+          "page": 3,
+          "passed": true
+        },
+        {
+          "key": "006211-identity",
+          "page": 1,
+          "passed": true
+        },
+        {
+          "key": "006211-sales-fees",
+          "page": 3,
+          "passed": true
+        },
+        {
+          "key": "006210-risk",
+          "page": 4,
+          "passed": true
+        },
+        {
+          "key": "006211-risk",
+          "page": 4,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/006210-prospectus.pdf",
+      "raw_hash_passed": true,
+      "span_count": 4,
+      "spans": [
+        {
+          "key": "006210-exit",
+          "page": 56,
+          "passed": true
+        },
+        {
+          "key": "006210-workdays",
+          "page": 8,
+          "passed": true
+        },
+        {
+          "key": "006211-exit",
+          "page": 56,
+          "passed": true
+        },
+        {
+          "key": "006211-workdays",
+          "page": 8,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/001198-summary.pdf",
+      "raw_hash_passed": true,
+      "span_count": 3,
+      "spans": [
+        {
+          "key": "001198-identity",
+          "page": 1,
+          "passed": true
+        },
+        {
+          "key": "001198-sales-fees",
+          "page": 3,
+          "passed": true
+        },
+        {
+          "key": "001198-risk",
+          "page": 4,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/001198-prospectus.pdf",
+      "raw_hash_passed": true,
+      "span_count": 3,
+      "spans": [
+        {
+          "key": "001198-exit",
+          "page": 58,
+          "passed": true
+        },
+        {
+          "key": "001198-workdays",
+          "page": 9,
+          "passed": true
+        },
+        {
+          "key": "001198-pension-channel",
+          "page": 58,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/021095-summary.pdf",
+      "raw_hash_passed": true,
+      "span_count": 4,
+      "spans": [
+        {
+          "key": "021095-identity",
+          "page": 1,
+          "passed": true
+        },
+        {
+          "key": "021095-sales-fees",
+          "page": 3,
+          "passed": true
+        },
+        {
+          "key": "021095-operating-fees",
+          "page": 4,
+          "passed": true
+        },
+        {
+          "key": "021095-risk",
+          "page": 4,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/021095-prospectus.pdf",
+      "raw_hash_passed": true,
+      "span_count": 2,
+      "spans": [
+        {
+          "key": "021095-exit",
+          "page": 51,
+          "passed": true
+        },
+        {
+          "key": "021095-workdays",
+          "page": 9,
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "replayed_positive_ids": [
+    "P01",
+    "P02",
+    "P03",
+    "P04",
+    "P05",
+    "P06",
+    "P07",
+    "P08",
+    "P09",
+    "P10",
+    "P11",
+    "P12"
+  ],
+  "replayed_negatives": [
+    {
+      "scenario": "wrong_share_parent",
+      "passed": true,
+      "hit_count": 0,
+      "coverage_gap_codes": [
+        "facet_uncovered",
+        "no_verified_evidence"
+      ],
+      "consumer_freshness_rejected": null
+    },
+    {
+      "scenario": "wrong_channel",
+      "passed": true,
+      "hit_count": 0,
+      "coverage_gap_codes": [
+        "facet_uncovered",
+        "no_verified_evidence"
+      ],
+      "consumer_freshness_rejected": null
+    },
+    {
+      "scenario": "withdrawn_version",
+      "passed": true,
+      "hit_count": 0,
+      "coverage_gap_codes": [
+        "evidence_unavailable",
+        "facet_uncovered",
+        "no_verified_evidence"
+      ],
+      "consumer_freshness_rejected": true
+    },
+    {
+      "scenario": "cancelled_source_permission",
+      "passed": true,
+      "hit_count": 0,
+      "coverage_gap_codes": [
+        "source_permission_missing",
+        "facet_uncovered",
+        "no_verified_evidence"
+      ],
+      "consumer_freshness_rejected": true
+    },
+    {
+      "scenario": "conflicting_fees",
+      "passed": true,
+      "hit_count": 0,
+      "coverage_gap_codes": [
+        "conflicting_sources",
+        "facet_uncovered",
+        "no_verified_evidence"
+      ],
+      "consumer_freshness_rejected": true
+    },
+    {
+      "scenario": "publication_after_as_of",
+      "passed": true,
+      "hit_count": 0,
+      "coverage_gap_codes": [
+        "published_after_as_of",
+        "facet_uncovered",
+        "no_verified_evidence"
+      ],
+      "consumer_freshness_rejected": null
+    },
+    {
+      "scenario": "changed_raw_hash",
+      "passed": true,
+      "hit_count": 0,
+      "coverage_gap_codes": [
+        "evidence_unavailable",
+        "facet_uncovered",
+        "no_verified_evidence"
+      ],
+      "consumer_freshness_rejected": true,
+      "immutable_update_rejected": true
+    },
+    {
+      "scenario": "parser_parameter_or_page_mismatch",
+      "passed": true,
+      "false_text": "raw_parse_mismatch",
+      "wrong_page": "pdf_span_page_mismatch",
+      "dependency_version_change": "pdf_parser_version_mismatch"
+    },
+    {
+      "scenario": "fixed_release_new_publication",
+      "passed": true,
+      "old_release": "pub-7a4f1c5fb3ab99d78eb2aae5846d5d3e17eb8330",
+      "new_release": "pub-ed0343a51ce91f3c3afd2d1bc00fec507c8537cb",
+      "fixed_request_release": "pub-7a4f1c5fb3ab99d78eb2aae5846d5d3e17eb8330",
+      "old_members_unchanged": true
+    },
+    {
+      "scenario": "historical_webank_expired",
+      "passed": true,
+      "kind": "independent_provider_acceptance_artifact",
+      "artifact": "local_knowledge/acceptance/latest_review_result.json",
+      "artifact_sha256": "7470d524544cc7c1509d341a4f78c56ce6d791f9bffb64f6727f7dc84553cf42",
+      "cases": [
+        {
+          "id": "current-risk-expired",
+          "passed": true,
+          "question": "2026-10-06华夏纯债债券A的当前风险是什么？",
+          "request": {
+            "query": "2026-10-06华夏纯债债券A的当前风险是什么？",
+            "scope": "public",
+            "product_id": "WEBANK:000015",
+            "share_class_id": null,
+            "channel_id": "WEBANK",
+            "as_of": "2026-10-06",
+            "facets": [
+              "risk"
+            ],
+            "limit": 4
+          },
+          "expected": {
+            "mode": "no_hits",
+            "gap": "expired_evidence",
+            "semantic_limit": "风险资料超出7天，不能把历史R2写成当前风险结论。"
+          },
+          "status": "empty",
+          "coverage_gaps": [
+            {
+              "code": "expired_evidence",
+              "message": "原文条款在查询时点已经到期。"
+            },
+            {
+              "code": "facet_uncovered",
+              "message": "请求的分析维度缺少已核验原文证据。",
+              "facet": "risk"
+            },
+            {
+              "code": "no_verified_evidence",
+              "message": "本次没有可输出的已核验公共原文证据。"
+            }
+          ],
+          "hits": [],
+          "mutation_is_test_only": false,
+          "agent_final_answer_verified": false
+        }
+      ]
+    }
+  ],
+  "trace_samples": [
+    {
+      "key": "006210-identity",
+      "path_count": 5,
+      "paths": [
+        {
+          "purpose": "original_source",
+          "relations": [
+            {
+              "id": "gr-09496f210d61e035018c5ba9a7107b3644cc0845",
+              "subject_id": "ge-clause-69980923aadcad2da65f58bea13e1aba",
+              "object_id": "ge-document_version-a3ab000de1c1f9fb985428e1c7e03fc1",
+              "predicate": "quoted_in",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            },
+            {
+              "id": "gr-6e4069ab51d86649149ed5b25be7c42e802b77ad",
+              "subject_id": "ge-document_version-a3ab000de1c1f9fb985428e1c7e03fc1",
+              "object_id": "ge-document-7970b9d224489dac28f24c405c10b0d9",
+              "predicate": "version_of",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            },
+            {
+              "id": "gr-d881d7af5edb3df1eadafb762855b94b6441909e",
+              "subject_id": "ge-document-7970b9d224489dac28f24c405c10b0d9",
+              "object_id": "ge-source-8c8ef91512948db45a9e7fec0950e1dd",
+              "predicate": "published_by",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            }
+          ]
+        },
+        {
+          "purpose": "general",
+          "subject_type": "product",
+          "subject_ref": "ORIENT-FUND:006210",
+          "relations": [
+            {
+              "id": "gr-0ed0b0409f5da541081a036f0aba738606fca2b7",
+              "subject_id": "ge-product-4d29f073d5710b038627b4377fdf8bdb",
+              "object_id": "ge-clause-69980923aadcad2da65f58bea13e1aba",
+              "predicate": "has_disclosure",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            },
+            {
+              "id": "gr-f0d78db2db1509f488e3bc5744dfafd1d338f306",
+              "subject_id": "ge-clause-69980923aadcad2da65f58bea13e1aba",
+              "object_id": "ge-general-ba309e74d5b2f791bff2e11e9281e47f",
+              "predicate": "has_rule",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            }
+          ]
+        },
+        {
+          "purpose": "terms",
+          "subject_type": "product",
+          "subject_ref": "ORIENT-FUND:006210",
+          "relations": [
+            {
+              "id": "gr-0ed0b0409f5da541081a036f0aba738606fca2b7",
+              "subject_id": "ge-product-4d29f073d5710b038627b4377fdf8bdb",
+              "object_id": "ge-clause-69980923aadcad2da65f58bea13e1aba",
+              "predicate": "has_disclosure",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            },
+            {
+              "id": "gr-160b73bf950b636a32d924537b2c124626803985",
+              "subject_id": "ge-clause-69980923aadcad2da65f58bea13e1aba",
+              "object_id": "ge-terms-0990da6850b240afa4e254909834f8c8",
+              "predicate": "has_rule",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            }
+          ]
+        },
+        {
+          "purpose": "general",
+          "subject_type": "share_class",
+          "subject_ref": "ORIENT-SHARE:006210",
+          "relations": [
+            {
+              "id": "gr-38eb2e612432ca092cecb72c29c0a518f8813b70",
+              "subject_id": "ge-share_class-ab624ebe4b165de92fd28418ee9f041c",
+              "object_id": "ge-clause-69980923aadcad2da65f58bea13e1aba",
+              "predicate": "has_share_terms",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            },
+            {
+              "id": "gr-f0d78db2db1509f488e3bc5744dfafd1d338f306",
+              "subject_id": "ge-clause-69980923aadcad2da65f58bea13e1aba",
+              "object_id": "ge-general-ba309e74d5b2f791bff2e11e9281e47f",
+              "predicate": "has_rule",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            }
+          ]
+        },
+        {
+          "purpose": "terms",
+          "subject_type": "share_class",
+          "subject_ref": "ORIENT-SHARE:006210",
+          "relations": [
+            {
+              "id": "gr-38eb2e612432ca092cecb72c29c0a518f8813b70",
+              "subject_id": "ge-share_class-ab624ebe4b165de92fd28418ee9f041c",
+              "object_id": "ge-clause-69980923aadcad2da65f58bea13e1aba",
+              "predicate": "has_share_terms",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            },
+            {
+              "id": "gr-160b73bf950b636a32d924537b2c124626803985",
+              "subject_id": "ge-clause-69980923aadcad2da65f58bea13e1aba",
+              "object_id": "ge-terms-0990da6850b240afa4e254909834f8c8",
+              "predicate": "has_rule",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cbe2531f268d47a8d1b6f669d8b44fc178c05c5e6",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "006210-sales-fees",
+      "path_count": 3,
+      "paths": [
+        {
+          "purpose": "original_source",
+          "relations": [
+            {
+              "id": "gr-0fdc20c600165d55eec415c291452e4d9c666247",
+              "subject_id": "ge-clause-c2c694ab223307e457b8b614bb0459ed",
+              "object_id": "ge-document_version-a3ab000de1c1f9fb985428e1c7e03fc1",
+              "predicate": "quoted_in",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cc4a08a8f893f90c38a1c529275f0fdb536ce70a1",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            },
+            {
+              "id": "gr-eb44101da943c5a490f89cca7e9f2c5c965713cf",
+              "subject_id": "ge-document_version-a3ab000de1c1f9fb985428e1c7e03fc1",
+              "object_id": "ge-document-7970b9d224489dac28f24c405c10b0d9",
+              "predicate": "version_of",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cc4a08a8f893f90c38a1c529275f0fdb536ce70a1",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            },
+            {
+              "id": "gr-6e351cc091b8c6d341f2d0a5d300f521d2f8ad62",
+              "subject_id": "ge-document-7970b9d224489dac28f24c405c10b0d9",
+              "object_id": "ge-source-8c8ef91512948db45a9e7fec0950e1dd",
+              "predicate": "published_by",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cc4a08a8f893f90c38a1c529275f0fdb536ce70a1",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            }
+          ]
+        },
+        {
+          "purpose": "fees",
+          "subject_type": "product",
+          "subject_ref": "ORIENT-FUND:006210",
+          "relations": [
+            {
+              "id": "gr-0863018ec49a4e63c653246d9b6dfaa16238be90",
+              "subject_id": "ge-product-4d29f073d5710b038627b4377fdf8bdb",
+              "object_id": "ge-clause-c2c694ab223307e457b8b614bb0459ed",
+              "predicate": "has_disclosure",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cc4a08a8f893f90c38a1c529275f0fdb536ce70a1",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            },
+            {
+              "id": "gr-968f7ca137d2f7f0387aeacc07c6e1cd01fef78c",
+              "subject_id": "ge-clause-c2c694ab223307e457b8b614bb0459ed",
+              "object_id": "ge-fee_rule-931201be60d5fbc81f852f591e7654d5",
+              "predicate": "has_rule",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cc4a08a8f893f90c38a1c529275f0fdb536ce70a1",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            }
+          ]
+        },
+        {
+          "purpose": "fees",
+          "subject_type": "share_class",
+          "subject_ref": "ORIENT-SHARE:006210",
+          "relations": [
+            {
+              "id": "gr-b344b17f400b742404b0818d185d63411911c71f",
+              "subject_id": "ge-share_class-ab624ebe4b165de92fd28418ee9f041c",
+              "object_id": "ge-clause-c2c694ab223307e457b8b614bb0459ed",
+              "predicate": "has_share_terms",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cc4a08a8f893f90c38a1c529275f0fdb536ce70a1",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            },
+            {
+              "id": "gr-968f7ca137d2f7f0387aeacc07c6e1cd01fef78c",
+              "subject_id": "ge-clause-c2c694ab223307e457b8b614bb0459ed",
+              "object_id": "ge-fee_rule-931201be60d5fbc81f852f591e7654d5",
+              "predicate": "has_rule",
+              "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+              "citation_id": "cc4a08a8f893f90c38a1c529275f0fdb536ce70a1",
+              "valid_from": null,
+              "valid_to": null,
+              "status": "verified",
+              "reviewed_by": "{\"extractor_version\":\"pdfplumber/0.11.9;pdfminer.six/20251230\",\"method\":\"human_reviewed_pdf_span\",\"parameters\":{\"char_dir\":\"ltr\",\"expand_ligatures\":true,\"keep_blank_chars\":false,\"layout\":false,\"line_dir\":\"ttb\",\"split_at_punctuation\":false,\"use_text_flow\":false,\"x_tolerance\":3,\"x_tolerance_ratio\":null,\"y_tolerance\":3,\"y_tolerance_ratio\":null},\"raw_sha256\":\"9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500\",\"review_reference\":\"product-review-manifest sha256:e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270\",\"reviewed_by\":\"Codex original reading + independent source reviewer\",\"text_sha256\":\"a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0\"}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "scope": {
+    "live_database_read": false,
+    "live_database_written": false,
+    "delivered_database_mode": "read_only_backup_only",
+    "root_sources_modified": false,
+    "network_calls_by_this_review": 0,
+    "cloud_llm_calls": 0
+  },
+  "coverage_limits": [
+    "Historical expiry is verified from the named independently regenerated acceptance artifact, not re-run against the production source in this script.",
+    "Candidate/unapproved/unpublished and temporary snapshot admission are not probes in this product runner; they are separate module regression tests.",
+    "This evaluation checks bounded original retrieval and metadata, not final Agent financial answers or comprehensive recommendation suitability.",
+    "All 12 lexical baseline expected keys are already covered; this set cannot prove semantic vector retrieval is required."
+  ],
+  "elapsed_seconds": 13.345329584000865,
+  "final_snapshot_verification": {
+    "checked_at": "2026-10-05T17:58:01.763343+00:00",
+    "mode": "read_only_hash_and_consistency_refresh_no_test_replay",
+    "script_sha256": "9fc64544688862b3b08371aba789ccd2a1e8352c79e5137dc2a6bf751e50800b",
+    "evaluation_sha256": "afc9b7940af145f2106ec9d71db035620494c07c933355442f22921578b73dfc",
+    "database_sha256": "230e16cbce15cedbe1f54ee2222a54466f442b7402e141e8721d5d26ed80fcf0",
+    "code_sha256": {
+      "scripts/verify_rag_window.py": "9fc64544688862b3b08371aba789ccd2a1e8352c79e5137dc2a6bf751e50800b",
+      "local_knowledge/store.py": "5f04fe9ff015f6b5dd246c8a8cec12f322652946670268bc3a30b25fd63c72d4",
+      "local_knowledge/graph.py": "364b0b58cd8949884d26d8b69af58cfd5d0e367f95adb3497a0bb54a591b11bb",
+      "local_knowledge/pdf_ingest.py": "af97f645ffd285d6819eff42a1d33e1dbe35fa61783fd34e03f24b46fc45ef87",
+      "agent_runtime/knowledge_retrieval.py": "82b634cb613c5c8c7f1067a3361f330dc4473a72e6fedff63540fe4204cb3390"
+    },
+    "graph_sha256": "8ebabb6e502922303e70768cba0d941e07d851d319956c19f3bf10826f6adeaf",
+    "coverage_matrix_sha256": "564fbea462e8676894949da91c1fc3a5f90ec34ed30a4a5a53dfe3a5bb077933",
+    "manifest_sha256": "e82c49fb9a4c0f699a8f6f4a680a6f3588627d62c7e82ed5780c919a7cf63270",
+    "question_set_sha256": "71190ef37aa8f9f69f46cbe84cff56b7305cddcfd3b2a4f532e2428e3584a3cb",
+    "public_release_id": "pub-7a4f1c5fb3ab99d78eb2aae5846d5d3e17eb8330",
+    "summary": {
+      "products": 3,
+      "shares": 4,
+      "documents_parsed": 6,
+      "reviewed_spans": 22,
+      "retrieval_passed": 12,
+      "retrieval_total": 12,
+      "lexical_only_all_expected_keys_covered": 12,
+      "negative_passed": 10,
+      "negative_total": 10,
+      "final_answer_semantics": "pending_joint_agent_acceptance",
+      "median_retrieval_ms": 28.854021002189256,
+      "max_retrieval_ms": 40.40729199186899,
+      "elapsed_seconds": 13.883484332996886,
+      "max_rss_bytes_macos": 107380736
+    },
+    "checks": {
+      "all_recorded_code_hashes_current": true,
+      "script_hash_matches_recorded": true,
+      "database_hash_current": true,
+      "manifest_hash_unchanged_from_replay": true,
+      "questions_hash_unchanged_from_replay": true,
+      "positive_ids_same_and_all_pass": true,
+      "negative_details_equal_independent_replay": true,
+      "counts_same": true,
+      "final_semantics_still_pending": true,
+      "graph_release_matches": true,
+      "coverage_four_shares": true,
+      "graph_export_matches_read_only_sqlite": true,
+      "locator_binding_exact_in_read_only_sqlite": true,
+      "coverage_matches_reviewed_spans": true
+    },
+    "change_scope_review": "Manually compared reviewed script bodies: source selection, identity/span staging, positive and negative decisions are unchanged. Only final code SHA metadata and graph/coverage JSON export were added after the independent full replay. The final run itself was performed by the root agent, not by this hash-only refresh.",
+    "unchanged_limits": [
+      "Historical expiry is verified from the named independently regenerated acceptance artifact, not re-run against the production source in this script.",
+      "Candidate/unapproved/unpublished and temporary snapshot admission are not probes in this product runner; they are separate module regression tests.",
+      "This evaluation checks bounded original retrieval and metadata, not final Agent financial answers or comprehensive recommendation suitability.",
+      "All 12 lexical baseline expected keys are already covered; this set cannot prove semantic vector retrieval is required."
+    ]
+  }
+}

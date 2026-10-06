@@ -8,30 +8,28 @@
 <meta http-equiv="Expires" content="0">
 
 <title>Navren · 顾问工作台</title>
+<link rel="icon" type="image/png" href="assets/brand/navren-icon.png">
 <link rel="stylesheet" href="css/style.css?v=ui-20261003-3">
-<link rel="stylesheet" href="css/design.css?v=ui-20261003-3">
+<link rel="stylesheet" href="css/design.css?v=navren-brand-20261005-1">
+<link rel="stylesheet" href="css/account_switcher.css">
 </head>
 <body data-page="copilot">
 <a class="skip-link" href="#mainContent">跳到主要内容</a>
 
 <div class="app">
-  <nav class="sidebar" aria-label="Navren主导航">
-    <a class="logo" href="index.html" aria-label="Navren首页"><img src="assets/logo.png" alt=""></a>
-    <a class="nav-item" href="chat.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="nav-label">对话</span></a>
-    <a class="nav-item" href="recommend.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M16 3a8 8 0 0 1 5 5h-5z"/></svg><span class="nav-label">推荐</span></a>
-    <a class="nav-item" href="account.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 9h18m-5 5h3"/></svg><span class="nav-label">账户</span></a>
-    <a class="nav-item" href="mine.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="nav-label">我的</span></a>
-    <a class="nav-item active nav-workbench" href="copilot.html" aria-current="page"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V3h8v4M3 12h18m-11 0v3h4v-3"/></svg><span class="nav-label">工作台</span></a>
+  <nav class="sidebar" aria-label="顾问演示导航">
+    <a class="logo" href="chat.html" aria-label="返回个人视角"><img class="brand-icon" src="assets/brand/navren-icon.png" alt=""></a>
+    <a class="nav-item" id="advisorReturn" href="chat.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m14 6-6 6 6 6"/></svg><span class="nav-label">返回</span></a>
   </nav>
   <main class="main" id="mainContent" tabindex="-1">
     <header class="header">
-      <div class="header-identity"><a class="brand" href="index.html" aria-label="Navren首页">Navren</a><span class="header-location">顾问工作台</span></div>
-      <label class="mode-control"><span>界面模式</span><select id="interfaceMode" aria-label="界面模式"><option value="classic">经典版</option><option value="senior">关怀版</option><option value="youth">青春版</option></select></label>
+      <div class="header-identity"><a class="brand" href="chat.html" aria-label="Navren首页"><img class="brand-wordmark" src="assets/brand/navren-wordmark.png" width="2172" height="724" alt=""></a><h1 class="header-location" data-view-heading tabindex="-1">顾问视角 · 演示</h1></div>
+
     </header>
+    <section id="accountSwitcher" aria-label="演示账户" class="account-switcher" hidden></section>
 
     <div class="page-scroll">
     <div class="rec-page workbench-page">
-      <div class="page-heading"><span class="eyebrow">顾问工作台</span><h1>把客户情况，放在同一页。</h1><p>回看对话与档案，整理建议依据。这里的资料来自当前浏览器。</p></div>
 
 
       <!-- 客户信息摘要 -->
@@ -55,6 +53,7 @@
       <!-- 合规提示 -->
       <div class="mine-section">
         <div class="sec-label">建议边界</div>
+        <p class="workbench-boundary">当前服务对象是你的本机演示账户。本视角没有额外银行顾问权限，仅在已授权范围内整理信息。</p>
         <div id="complianceNotes" style="padding:14px;border-radius:var(--r-sm);font-size:var(--font-size-xs);line-height:1.8"></div>
       </div>
 
@@ -64,8 +63,13 @@
 </div>
 
 <script src="js/storage.js?v=ui-20261003-3"></script>
+<script src="js/i18n.js"></script>
 <script src="js/design.js?v=ui-20261003-3"></script>
-<script src="js/profile_engine.js?v=7"></script>
+<script src="js/help.js"></script>
+<script src="js/bank_client.js"></script>
+<script src="js/account_switcher.js"></script>
+<script src="js/bank_ui.js"></script>
+<script src="js/view_context.js"></script>
 <script src="js/copilot.js?v=ui-20261003-3"></script>
 </body>
 </html>

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "contract_id": "navren.integration.synthetic-history-prelude/1",
+  "base_task_sha256": "99eaeba3d2519f63c130b50c8a696809d60e68486e578546104e78a70a4e1d24",
+  "scope": "new isolated synthetic acceptance workspaces only",
+  "authority": "user-approved integration implementation; independent fixture setup, not real-user consent",
+  "original_tasks_unchanged": true,
+  "original_full_seed_must_pass_before_setup": true,
+  "stage": "after original full seed verification and before first task message/paid request",
+  "actor": "independent_synthetic_human_harness",
+  "request": {
+    "method": "POST",
+    "path": "/api/finance/memories/settings",
+    "payload": {
+      "enabled": true
+    },
+    "authentication": "same isolated workspace real Cookie + CSRF; expected_revision from real current service"
+  },
+  "allowed_setup_effects": {
+    "private_tables": [
+      "user_memory_settings",
+      "personal_versions",
+      "personal_audit"
+    ],
+    "bank_tables": [
+      "personal_data_versions",
+      "conversation_privacy_versions"
+    ],
+    "explanation": "Only the normal settings endpoint permission/version/audit bookkeeping; no direct SQL setup writes. Persist full before/after diff and reject any undeclared table/field change."
+  },
+  "required_unchanged": [
+    "all financial balances/holdings/transactions/orders/operations",
+    "user_memories",
+    "profile_observations",
+    "user_memory_relations",
+    "existing candidates and history must be empty before this setup",
+    "all graph cache tables and existing decisions: must be empty before setup, no silent cleanup credited"
+  ],
+  "post_setup": {
+    "memory_enabled": true,
+    "stored_history": [],
+    "stored_user_memories": [],
+    "candidate_memory_confirmed_by_harness": false,
+    "baseline": "preserve original verified baseline and additionally seal post-setup baseline before task messages"
+  },
+  "stop_on": [
+    "failed or mismatched workspace/permission response",
+    "unexpected state difference",
+    "existing history/candidate data in fresh fixture",
+    "any financial side effect"
+  ],
+  "budget": "record setup wall time and exclude it from model/tool semantic credit; task execution still has one shared105 second deadline; total stage budget includes setup",
+  "forbidden": [
+    "enabling real/live user workspace settings",
+    "writing fake history or approved candidates",
+    "altering original questions, amounts, grading or seed source closure",
+    "treating setup permission as financial action authorization"
+  ],
+  "results_label": "base tasks executed under explicitly frozen synthetic-history prelude; original no-prelude variant remains not_run if history unavailable"
+}

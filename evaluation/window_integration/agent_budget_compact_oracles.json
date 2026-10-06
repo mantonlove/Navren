@@ -1,0 +1,767 @@
+{
+  "schema_version": 1,
+  "suite_id": "navren.integration.agent-budget-compact/1",
+  "scope": "offline_trusted_transport_real_agent_boundary_registry_and_publication_guard",
+  "expectations_frozen_before_execution": true,
+  "basis": {
+    "path": "outputs/window-progress/finance/solution-review/solution-v2.md",
+    "sections": [
+      "2.1",
+      "2.2",
+      "2.3"
+    ],
+    "sha256": "7e3ffe6996588cdd55733926ae294fff72a6e6b23454134ee9fa0708d2f100e8"
+  },
+  "limits": {
+    "tokens": 100000,
+    "seconds": 105,
+    "native_output_tokens": 4000,
+    "amount_claims": 24
+  },
+  "literal_valid_usage": {
+    "prompt_tokens": 3,
+    "completion_tokens": 4,
+    "total_tokens": 7
+  },
+  "literal_failed_usage": {
+    "prompt_tokens": 5,
+    "completion_tokens": 6,
+    "total_tokens": 11
+  },
+  "unknown_usage_variants": {
+    "missing": {
+      "usage": null,
+      "known_component_lower_bound": 0
+    },
+    "total_only": {
+      "usage": {
+        "total_tokens": 7
+      },
+      "known_component_lower_bound": 7
+    },
+    "prompt_only": {
+      "usage": {
+        "prompt_tokens": 3
+      },
+      "known_component_lower_bound": 3
+    },
+    "completion_only": {
+      "usage": {
+        "completion_tokens": 4
+      },
+      "known_component_lower_bound": 4
+    },
+    "bool_total": {
+      "usage": {
+        "prompt_tokens": 3,
+        "completion_tokens": 4,
+        "total_tokens": true
+      },
+      "known_component_lower_bound": 7
+    },
+    "string_total": {
+      "usage": {
+        "prompt_tokens": 3,
+        "completion_tokens": 4,
+        "total_tokens": "7"
+      },
+      "known_component_lower_bound": 7
+    },
+    "negative_total": {
+      "usage": {
+        "prompt_tokens": 3,
+        "completion_tokens": 4,
+        "total_tokens": -1
+      },
+      "known_component_lower_bound": 7
+    },
+    "inconsistent": {
+      "usage": {
+        "prompt_tokens": 3,
+        "completion_tokens": 4,
+        "total_tokens": 9
+      },
+      "known_component_lower_bound_minimum": 7
+    }
+  },
+  "expectations": {
+    "unknown_stop": {
+      "total_tokens": null,
+      "usage_complete": false,
+      "budget_tokens": 100000,
+      "subsequent_paid_calls": 0
+    },
+    "known_count_once": {
+      "total_tokens_primary_failure": 18,
+      "total_tokens_reviewer_failure": 18,
+      "usage_complete": true,
+      "failure_call_usage": 11,
+      "failure_call_count": 1
+    },
+    "known_overrun_preserved": {
+      "total_tokens": 101000,
+      "budget_tokens": 101000,
+      "usage_complete": true
+    },
+    "zero_only_unsent": {
+      "transport_calls": 0,
+      "total_tokens": 0,
+      "budget_tokens": 0,
+      "usage_complete": true
+    },
+    "sent_known_count_once": {
+      "transport_calls": 1,
+      "total_tokens": 7,
+      "budget_tokens": 7
+    },
+    "compact_iff_both_true": [
+      [
+        false,
+        false,
+        false
+      ],
+      [
+        false,
+        true,
+        false
+      ],
+      [
+        true,
+        false,
+        false
+      ],
+      [
+        true,
+        true,
+        true
+      ]
+    ],
+    "structure_rejected": "BOUNDARY_UNKNOWN_STRUCTURE",
+    "alias_rejected": "BOUNDARY_UNKNOWN_ALIAS",
+    "all_24_validated": {
+      "count": 24,
+      "amount_occurrence_count": 24,
+      "review_calls": 1
+    },
+    "25_rejected_without_truncation": {
+      "count": 25,
+      "error": "BOUNDARY_UNKNOWN_STRUCTURE",
+      "review_calls": 0
+    }
+  },
+  "ref_fields_excluding_sources": [
+    "metric_id",
+    "subject_id",
+    "metric_name",
+    "currency",
+    "unit",
+    "value_minor",
+    "as_of",
+    "period_start",
+    "period_end",
+    "data_scope",
+    "calculation_status",
+    "basis",
+    "formula_id"
+  ],
+  "literal_hypothesis": {
+    "inputs": {
+      "operation": "sum",
+      "values_minor": [
+        10000,
+        3000
+      ],
+      "currency": "CNY"
+    },
+    "expected": {
+      "value_minor": 13000,
+      "kind": "hypothesis",
+      "currency": "CNY",
+      "unit": "minor_currency",
+      "metric_name": "hypothetical_sum_result",
+      "basis": "user_input_arithmetic_not_account_data",
+      "formula_id": "tools.money_hypothesis/1",
+      "data_scope": "user_input_scenario",
+      "calculation_status": "calculated",
+      "as_of": "2026-10-03",
+      "period_start": null,
+      "period_end": null
+    },
+    "fragment": "仅作假设算式：130元。"
+  },
+  "authoring_source_sha256": {
+    "agent_core.py": "dd36fb52a08a863c69bc29e77fe0a079a89f51c2b3bcd64b58d6e20307d118ce",
+    "agent_runtime/__init__.py": "890319aed11610b92c5e1d0afc8affdbd2c75ebb1635df0a850d2f1c0ffe866d",
+    "agent_runtime/bank_tools.py": "7bc39cc408f622f55db7f3ea719ab66d33bfdbfa36cf8c6bd6f90b2f7ebe7a60",
+    "agent_runtime/cashflow_finance.py": "67a8419c0ca4206a52b08f955a170907dbc4e6aa21988df9fd2b8e7a1416c952",
+    "agent_runtime/contracts.py": "1e22cdf35513e3cbeccc8a7dc39f09430361383b24377a838d7af46163444899",
+    "agent_runtime/conversation.py": "528cb0f3397a7833da1081eca57571de73a7d36cca26fc2053e85b77ca373073",
+    "agent_runtime/data_boundary.py": "2208e3a969dd71f41f6424803c677145734ca193f3e0973fb15259e58859b80e",
+    "agent_runtime/events.py": "6f63997a660921def0c4ef92c88e358fec1da18631a4213fc860173e4baaedaa",
+    "agent_runtime/knowledge_retrieval.py": "9248c255e861dc28d3766785de26f7ac5075121be9256bde8ea46c98171e1d54",
+    "agent_runtime/metric_claims.py": "1a34db9d302cee75f3cd287c51d4c9147a77a8c20fb188bd05cb23942f104854",
+    "agent_runtime/model_adapters.py": "12952b999d443ea0f1f4fcc2de6d21298b8bff77290bce5b80d81e7d392a8b05",
+    "agent_runtime/multi_agent.py": "2d0f3c973a1eaf0609a4ac615cb88b353e7a4071e762165e28b09c7281012389",
+    "agent_runtime/native_client.py": "52b5bc7567307a481bb98b56b4e1b2aa10a551eec6c638587e245882365d7cf5",
+    "agent_runtime/ports.py": "e4f394030db5a77648f063b14ab498b05171306f4daf599c3d0e8f78da26e55f",
+    "agent_runtime/skills.py": "a523abddb7738e584f735cdd5ec8cfb148a98639d6811a71d72197ff5651f1f7",
+    "base_runtime/__init__.py": "5e3550459644e0516a4a1e2482006ad52eaf2bc53747c54fb4c710150cf7660d",
+    "base_runtime/evidence.py": "689811b71fb87e475ee73a2824eeab2de39ca681ec3025d733fbec584e5b2195",
+    "base_runtime/finance_methods.py": "2ae137be4e8349fe5b8d82a6ba5c10ecc8b32f756e66da10078df7b6581e8950",
+    "base_runtime/finance_returns.py": "b4e6c57c49ec218acc7c4fbe14f9cd6a71c945957f25301d9d858ea4971c68c1",
+    "base_runtime/history.py": "68fd9ab014cfbd285ff7d462702b318a3dfe2bea0d55f433685095eb3f3200f8",
+    "base_runtime/identity.py": "24895a661bd03ba8caf724a052e5b795b8c02313ade9d5399f54282f89c21234",
+    "base_runtime/inventory.py": "38b147e0a042bfec714bb2d99af6191b6aacbe33a56640f3027799fdf20814ca",
+    "base_runtime/run_regression.py": "735b880b24e01f34e4d86be24ce93a310ed7874d173444ecf2594b2ad3590443",
+    "calendar_events.py": "855a4c4fede7fca363d81060ee74bd1a8c67d810bd6ca986455bb632cceaeace",
+    "cashflow_timeline.py": "90b88812a77fd4ac67c0a4d3048ee8faf895f6460d1afa29bed6ca066a8a108a",
+    "demo_accounts.py": "74dbf7a3958b3c9ef191303128ebf75e9e4cc07b7e6f16907075566747bb32b2",
+    "finance_agent.py": "9012345cb8d996160addb9e559b2f1772b2e03a916a7c670cd7010b5c95fa2ba",
+    "finance_capabilities.py": "0162e121c84a7a08a33e1fe6ab6327168499d531b0757be684c209b405ebe79e",
+    "finance_gateway.py": "9d9d19aa312aa12b54a1b0d5d58acd79e7b47834afe8ec35201ab7cca39be01e",
+    "financial_calendar.py": "e2075b11b2951b07f2743047aa417fd1c785a93a2bb5052911438ddafbf07983",
+    "financial_graph.py": "2e6e3c61fd35e4822bd71239f4d5d4341f05f1be1f4799f379cc02b46062df65",
+    "financial_methods/__init__.py": "48a0261249afc2509c7c7a10149b5d4e1479662703243787205a8700a8314a15",
+    "financial_methods/accounting.py": "52a6800d1ac1d0f24bd7cffdab6f05e30b6b887c279924df2c0bcfe20122ab42",
+    "financial_methods/allocation.py": "cb5ff7866fa04a5110b5ea34b90d8811852ad7a4a639df79c78c5594d94d736c",
+    "financial_methods/contracts.py": "135c616d83ac13600488167ff1733346a19a1d59a63c3a52589fb3b2d20e5b17",
+    "financial_methods/funding.py": "f8811897d9ccb15880a4059145a439a1e5b13041a9010f2b5b63a01a712027ad",
+    "financial_methods/returns.py": "5f8ff4f28533068c1c9d2263770dc72a671f3373710ff540bed072090685fe47",
+    "financial_metrics.py": "29046c6e95d5970f7c0df4fc16373b41f4c841f40b6edc69040e63bd99c741a7",
+    "fund_history.py": "662488cc564a4f7ff87c571a7ade4e2506f02f9b494c93e34d7f0d6655921430",
+    "goal_service.py": "b82a89a1f3af0a74994d1a3c270041cc91bb9f0248815388f78099851efbb17c",
+    "local_knowledge/__init__.py": "c51b947e26694762f842592a93fe4b963c226ebb53eb8d3148ef534cde5a95a3",
+    "local_knowledge/acceptance/run_review.py": "b22772233df8222153498468312d9bded619c19cd62e757f6884fe16b82f6b95",
+    "local_knowledge/graph.py": "364b0b58cd8949884d26d8b69af58cfd5d0e367f95adb3497a0bb54a591b11bb",
+    "local_knowledge/importers.py": "6d069cdddb652393a99aaecd812cd56489de4dbab11b106daa8b5274e382d163",
+    "local_knowledge/pdf_ingest.py": "af97f645ffd285d6819eff42a1d33e1dbe35fa61783fd34e03f24b46fc45ef87",
+    "local_knowledge/runtime.py": "51b825b2e8c744fd563e78877b24ec2f45acd41b6d96277fbf959b18ef3da160",
+    "local_knowledge/sources.py": "dbd02a78602a579512cb6cf18834b0b19fdbe12b97a7e1449c11a560b1484741",
+    "local_knowledge/store.py": "01b503cc4b6dfda2d9f07152d28dc16cbf4df5faba7a548509e3185240a5d6f1",
+    "local_knowledge/supplement.py": "eaba10ab43879a287dbb9363d0c35b616f73b630268d1598debd502b9e6c3470",
+    "local_knowledge/webank_runtime.py": "a3d1666a40cfe7b3ade1960391765c9459cd772d877768c471ef39351ad2b4d6",
+    "market_content.py": "42684034b66225e7c153a30bb879380c843abb2e3410dffe10ebad8708e491c1",
+    "market_daily.py": "49f35921b0e1519a14637a07ac672995ddc8605d3b22aea9d1061ea6771f1734",
+    "market_editor.py": "e291b1948c02f6f7f97b2bb198602b3dcd8c7d8d4e0b4644229dc2813eae8639",
+    "market_pipeline.py": "5700c5c21db94ccd47eb8a9e2c831e432a5e6d76cdb8c7e5195871aaf6ff37af",
+    "market_schedule.py": "87766f06aae705e73d22ca5573d1124c42dbd0d095ff291e4fe163bb9c1951cb",
+    "market_sources.py": "99da73af71848b236167b228f1e2c3252edab72a4e9415677c47eaa5fdec08de",
+    "outputs/window-progress/finance/solution-review/solution-v2.md": "7e3ffe6996588cdd55733926ae294fff72a6e6b23454134ee9fa0708d2f100e8",
+    "personal_data.py": "3207ef7e5c430d3914133a46ef19b94ed4f686ba1c5ecc4130419b7abb010352",
+    "personal_graph.py": "5f56debe69dcdadbe9c3dc7aad0f7adc3f7e7d47703fb33f02c36b5e471e638e",
+    "public_products.py": "5f39010c56e5ac5e45cc97da88e41fee071018abc25e2cff690bf254442d83ed",
+    "research_plans.py": "71c5d2f8abd75d0d1ce1bb2276e2b58800e203e3e56810df79655e2789bbfd34",
+    "server.py": "12b346955068600d2224881fc2a44a949038b5dca487d3ceea08483a6a810d3a",
+    "service_negotiation.py": "de2e44e4cd06f9e2b6dfb664b99085806e5cb6f32baabe2a2e244a363b575904",
+    "simulated_bank/__init__.py": "15f9a05806013ed9c95c8b8e082a980341c66f10a6e6ada0703b573ac1eb8e81",
+    "simulated_bank/__main__.py": "51e18c0212f395ddc991197a92e86699d6cb4620ad5c7e52f4790b99d72f6817",
+    "simulated_bank/agent_guard.py": "c5074d51f5371e84020cc7f6a3910b3507682fdf47a47f008e9818f05d4e32ff",
+    "simulated_bank/customer_archive.py": "5bc07c60ae27eeb5e962f4b455b7f0ff68061f107e30404001da093484854833",
+    "simulated_bank/customer_schema.py": "738df24ea03f19871bb6ab4c5db4044646fc822702f40a6c5420df02fee354bc",
+    "simulated_bank/customer_seed.py": "fc0d6823f50387eaed49c1b890a9b33a6bf69ead8c993e91390d5a505d2239ca",
+    "simulated_bank/demo.py": "8be28f18202236f76a51aeb90fb84cc6da993fa41eadeeb0c75672c07b769557",
+    "simulated_bank/generate_contract.py": "ec560e1a9a919d606d9fcba7e612feaaeb5edbe4f4321086c6ffe077cafe2a4e",
+    "simulated_bank/generate_fixture.py": "29d35656453b05dda591b9dcda3026940fb566be07e0ed8b7d76470fcce6cfba",
+    "simulated_bank/http_api.py": "2c0b37284c1ccf83342e4703ed3cd7ff3156224c988aec50caa7631f82486841",
+    "simulated_bank/service.py": "33e4a95882cbaff67ad3fd1bbea3112814aa528771a71bca89b53d19b4436313",
+    "simulated_bank/statement_import.py": "d3a4ec3f5620fcee453dbc4a1ec5b19bca1d7a5a1fa53819acb0a0a116ed1a1b",
+    "simulated_bank/tools.py": "dda7795f0e6a4c24ee0ae806904e1d65bc539aade786f3e9b471c71f20153f19",
+    "sync_products.py": "2f4c06b87603114444a2e918da1e5d24ae667273819d7cf7b145aaa313036074",
+    "user_memory.py": "1217ea25706fd611787190a1a559f360e0ffbb208a515ca39e0d715444dfa16c",
+    "view_context.py": "f6539f4486da0b5fd599129b7755f4ef3e719ec41c56208f2c5aa6f0459e2d14",
+    "voice_gateway.py": "ff19f93148f09955251f01f9dda2f9ed9068eeec62fd9167589bb38bb805e50f",
+    "wealth_portfolio.py": "fa8da58deb1705bc1b2625d2963257e686bec61a592cb33d55f7d655a4d474e3",
+    "wealth_returns.py": "32ad5d80559a4fd91ca8652c9c790914df91dae63b4a2328d3ed153687abd9c3",
+    "webank_catalog.py": "a8ebe55b02f125fe1bd7726970197c2fba07fdab7090601914f5d39d2e14e440",
+    "welcome_auth.py": "285c721a592342b29dfdcaf632251ecf65c93e66b5d14c3ffc64d4895e9658e7"
+  },
+  "cases": [
+    {
+      "id": "U-primary-success-missing",
+      "test": "test_unknown_primary_success_missing",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-success-total_only",
+      "test": "test_unknown_primary_success_total_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-success-prompt_only",
+      "test": "test_unknown_primary_success_prompt_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-success-completion_only",
+      "test": "test_unknown_primary_success_completion_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-success-bool_total",
+      "test": "test_unknown_primary_success_bool_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-success-string_total",
+      "test": "test_unknown_primary_success_string_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-success-negative_total",
+      "test": "test_unknown_primary_success_negative_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-success-inconsistent",
+      "test": "test_unknown_primary_success_inconsistent",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-failure-missing",
+      "test": "test_unknown_primary_failure_missing",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-failure-total_only",
+      "test": "test_unknown_primary_failure_total_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-failure-prompt_only",
+      "test": "test_unknown_primary_failure_prompt_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-failure-completion_only",
+      "test": "test_unknown_primary_failure_completion_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-failure-bool_total",
+      "test": "test_unknown_primary_failure_bool_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-failure-string_total",
+      "test": "test_unknown_primary_failure_string_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-failure-negative_total",
+      "test": "test_unknown_primary_failure_negative_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-primary-failure-inconsistent",
+      "test": "test_unknown_primary_failure_inconsistent",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-success-missing",
+      "test": "test_unknown_reviewer_success_missing",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-success-total_only",
+      "test": "test_unknown_reviewer_success_total_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-success-prompt_only",
+      "test": "test_unknown_reviewer_success_prompt_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-success-completion_only",
+      "test": "test_unknown_reviewer_success_completion_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-success-bool_total",
+      "test": "test_unknown_reviewer_success_bool_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-success-string_total",
+      "test": "test_unknown_reviewer_success_string_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-success-negative_total",
+      "test": "test_unknown_reviewer_success_negative_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-success-inconsistent",
+      "test": "test_unknown_reviewer_success_inconsistent",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-failure-missing",
+      "test": "test_unknown_reviewer_failure_missing",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-failure-total_only",
+      "test": "test_unknown_reviewer_failure_total_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-failure-prompt_only",
+      "test": "test_unknown_reviewer_failure_prompt_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-failure-completion_only",
+      "test": "test_unknown_reviewer_failure_completion_only",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-failure-bool_total",
+      "test": "test_unknown_reviewer_failure_bool_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-failure-string_total",
+      "test": "test_unknown_reviewer_failure_string_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-failure-negative_total",
+      "test": "test_unknown_reviewer_failure_negative_total",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "U-reviewer-failure-inconsistent",
+      "test": "test_unknown_reviewer_failure_inconsistent",
+      "expectation": "unknown_stop"
+    },
+    {
+      "id": "K-primary-length",
+      "test": "test_known_primary_length",
+      "expectation": "known_count_once"
+    },
+    {
+      "id": "K-primary-invalid_contract",
+      "test": "test_known_primary_invalid_contract",
+      "expectation": "known_count_once"
+    },
+    {
+      "id": "O-primary-success",
+      "test": "test_overrun_primary_success",
+      "expectation": "known_overrun_preserved"
+    },
+    {
+      "id": "O-primary-failure",
+      "test": "test_overrun_primary_failure",
+      "expectation": "known_overrun_preserved"
+    },
+    {
+      "id": "K-reviewer-length",
+      "test": "test_known_reviewer_length",
+      "expectation": "known_count_once"
+    },
+    {
+      "id": "K-reviewer-invalid_contract",
+      "test": "test_known_reviewer_invalid_contract",
+      "expectation": "known_count_once"
+    },
+    {
+      "id": "O-reviewer-success",
+      "test": "test_overrun_reviewer_success",
+      "expectation": "known_overrun_preserved"
+    },
+    {
+      "id": "O-reviewer-failure",
+      "test": "test_overrun_reviewer_failure",
+      "expectation": "known_overrun_preserved"
+    },
+    {
+      "id": "Z-unsent",
+      "test": "test_native_missing_key_is_genuinely_unsent_zero",
+      "expectation": "zero_only_unsent"
+    },
+    {
+      "id": "Z-spoof",
+      "test": "test_sent_native_failure_cannot_self_assert_attempts_zero",
+      "expectation": "sent_known_count_once"
+    },
+    {
+      "id": "C-00",
+      "test": "test_capabilities_00_whole_chain",
+      "expectation": "compact_iff_both_true"
+    },
+    {
+      "id": "C-01",
+      "test": "test_capabilities_01_whole_chain",
+      "expectation": "compact_iff_both_true"
+    },
+    {
+      "id": "C-10",
+      "test": "test_capabilities_10_whole_chain",
+      "expectation": "compact_iff_both_true"
+    },
+    {
+      "id": "C-11",
+      "test": "test_capabilities_11_whole_chain",
+      "expectation": "compact_iff_both_true"
+    },
+    {
+      "id": "F-metric_id-missing",
+      "test": "test_compact_metric_id_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-metric_id-type",
+      "test": "test_compact_metric_id_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-metric_id-value",
+      "test": "test_compact_metric_id_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-subject_id-missing",
+      "test": "test_compact_subject_id_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-subject_id-type",
+      "test": "test_compact_subject_id_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-subject_id-value",
+      "test": "test_compact_subject_id_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-metric_name-missing",
+      "test": "test_compact_metric_name_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-metric_name-type",
+      "test": "test_compact_metric_name_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-metric_name-value",
+      "test": "test_compact_metric_name_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-currency-missing",
+      "test": "test_compact_currency_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-currency-type",
+      "test": "test_compact_currency_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-currency-value",
+      "test": "test_compact_currency_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-unit-missing",
+      "test": "test_compact_unit_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-unit-type",
+      "test": "test_compact_unit_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-unit-value",
+      "test": "test_compact_unit_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-value_minor-missing",
+      "test": "test_compact_value_minor_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-value_minor-type",
+      "test": "test_compact_value_minor_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-value_minor-value",
+      "test": "test_compact_value_minor_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-as_of-missing",
+      "test": "test_compact_as_of_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-as_of-type",
+      "test": "test_compact_as_of_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-as_of-value",
+      "test": "test_compact_as_of_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-period_start-missing",
+      "test": "test_compact_period_start_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-period_start-type",
+      "test": "test_compact_period_start_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-period_start-value",
+      "test": "test_compact_period_start_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-period_end-missing",
+      "test": "test_compact_period_end_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-period_end-type",
+      "test": "test_compact_period_end_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-period_end-value",
+      "test": "test_compact_period_end_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-data_scope-missing",
+      "test": "test_compact_data_scope_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-data_scope-type",
+      "test": "test_compact_data_scope_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-data_scope-value",
+      "test": "test_compact_data_scope_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-calculation_status-missing",
+      "test": "test_compact_calculation_status_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-calculation_status-type",
+      "test": "test_compact_calculation_status_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-calculation_status-value",
+      "test": "test_compact_calculation_status_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-basis-missing",
+      "test": "test_compact_basis_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-basis-type",
+      "test": "test_compact_basis_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-basis-value",
+      "test": "test_compact_basis_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-formula_id-missing",
+      "test": "test_compact_formula_id_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "F-formula_id-type",
+      "test": "test_compact_formula_id_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "F-formula_id-value",
+      "test": "test_compact_formula_id_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "R-kind_missing",
+      "test": "test_compact_kind_missing",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "R-kind_type",
+      "test": "test_compact_kind_type",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "R-kind_value",
+      "test": "test_compact_kind_value",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "R-unknown_ref",
+      "test": "test_compact_unknown_ref",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "R-mixed_sources",
+      "test": "test_compact_mixed_sources",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "R-catalog_injection",
+      "test": "test_compact_catalog_injection",
+      "expectation": "structure_rejected"
+    },
+    {
+      "id": "R-old_boundary",
+      "test": "test_compact_old_boundary",
+      "expectation": "alias_rejected"
+    },
+    {
+      "id": "A-0-24",
+      "test": "test_amount_limit_full_24",
+      "expectation": "all_24_validated"
+    },
+    {
+      "id": "A-0-25",
+      "test": "test_amount_limit_full_25",
+      "expectation": "25_rejected_without_truncation"
+    },
+    {
+      "id": "A-1-24",
+      "test": "test_amount_limit_compact_24",
+      "expectation": "all_24_validated"
+    },
+    {
+      "id": "A-1-25",
+      "test": "test_amount_limit_compact_25",
+      "expectation": "25_rejected_without_truncation"
+    }
+  ],
+  "expected_test_count": 96,
+  "claims_not_supported": [
+    "real_cloud_semantics",
+    "real_supplier_cost_or_100000_measured_gate",
+    "HTTP_SSE_PCM_release",
+    "complete_financial_four_questions"
+  ]
+}

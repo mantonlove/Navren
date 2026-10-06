@@ -1,0 +1,241 @@
+<style>
+  #navren-card-study {
+    --nr-page: light-dark(#edf3fa, #0d1725);
+    --nr-panel: light-dark(#f7faff, #162438);
+    --nr-ink: light-dark(#22334c, #e6eef9);
+    --nr-muted: light-dark(#61728a, #a8bbd2);
+    --nr-line: light-dark(#d2deed, #30465f);
+    --nr-soft: light-dark(#dce8f7, #243b55);
+    --nr-card-ink: #f3f7ff;
+    --nr-card-muted: #bdcfe5;
+    --nr-card-line: #ffffff26;
+    --nr-stack-step: 64px;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--nr-ink);
+  }
+  #navren-card-study[data-appearance="light"] { color-scheme: light; }
+  #navren-card-study[data-appearance="dark"] { color-scheme: dark; }
+  #navren-card-study * { box-sizing: border-box; }
+  #navren-card-study .nr-stage { padding: 58px 16px 36px; display: flex; flex-direction: column; align-items: center; gap: 32px; }
+  #navren-card-study .nr-wallet { width: 100%; max-width: 540px; padding: 24px 26px 46px; border-radius: 26px; background: var(--nr-page); }
+  #navren-card-study .nr-wallet-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 25px; }
+  #navren-card-study .nr-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; }
+  #navren-card-study .nr-wallet-head h3 { margin: 0; color: var(--nr-ink); font-size: 18px; line-height: 1.4; font-weight: 600; }
+  #navren-card-study .nr-demo-note { font-size: 12px; color: var(--nr-muted); }
+  #navren-card-study .nr-theme { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 0; border-radius: 12px; background: transparent; color: var(--nr-muted); padding: 8px 10px; font: inherit; font-size: 14px; }
+  #navren-card-study .nr-theme:hover { background: var(--nr-soft); color: var(--nr-ink); }
+  #navren-card-study .nr-card-frame { --nr-bank-brand: #a51c30; --nr-bank-glow: #db6c76; --nr-bank-mid: #871a2c; --nr-bank-deep: #490c1b; --nr-bank-edge: #c27d87; --nr-card-ink: #fff5f6; --nr-card-muted: #f0cbd0; position: relative; isolation: isolate; border-radius: 24px; margin: 0; box-shadow: 0 2px 0 color-mix(in srgb, var(--nr-bank-deep) 85%, #000000), 0 5px 7px -4px #05080e80, 0 16px 25px -12px #090e1899, 0 27px 40px -20px #090e1866; }
+  #navren-card-study .nr-card-frame[data-bank-theme="ccb"] { --nr-bank-brand: #005bac; --nr-bank-glow: #5b95cf; --nr-bank-mid: #124d8a; --nr-bank-deep: #102c4d; --nr-bank-edge: #7296bd; --nr-card-ink: #f4f9ff; --nr-card-muted: #c1d7ef; }
+  #navren-card-study .nr-card-frame[data-bank-theme="abc"] { --nr-bank-brand: #008577; --nr-bank-glow: #67b8a8; --nr-bank-mid: #096456; --nr-bank-deep: #073c35; --nr-bank-edge: #79b4a6; --nr-card-ink: #f1fff9; --nr-card-muted: #c0e1d7; }
+  #navren-card-study .nr-physical { position: relative; isolation: isolate; min-height: 302px; overflow: hidden; padding: 22px 26px 22px; border-radius: inherit; color: var(--nr-card-ink); background: radial-gradient(ellipse at 8% 0%, color-mix(in srgb, var(--nr-bank-glow) 65%, transparent), transparent 60%), linear-gradient(120deg, var(--nr-bank-brand) 0%, var(--nr-bank-mid) 40%, var(--nr-bank-deep) 100%); border: 1px solid #ffffff17; border-top-color: #ffffff38; border-bottom-color: #00000025; box-shadow: inset 0 1px 0 #ffffff22, inset 0 -1px 0 #00000016; }
+  #navren-card-study .nr-physical::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: .4; background: repeating-linear-gradient(105deg, #ffffff08 0, #ffffff08 1px, #ffffff00 1px, #ffffff00 4px); pointer-events: none; }
+  #navren-card-study .nr-physical::after { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: linear-gradient(130deg, #ffffff12, #ffffff00 38%, #ffffff00 68%, #ffffff11); pointer-events: none; }
+  #navren-card-study .nr-wave { position: absolute; z-index: -1; width: 420px; height: 420px; right: -286px; top: -72px; border-radius: 46%; background: linear-gradient(150deg, #ffffff14 5%, color-mix(in srgb, var(--nr-bank-glow) 30%, transparent) 33%, #ffffff26 45%, #ffffff3d 47%, #00000028 52%, #ffffff18 75%); box-shadow: inset 2px 1px 1px #ffffff26, -22px 0 0 #ffffff0a, -52px 0 0 #ffffff0b, -82px 0 0 #ffffff07; pointer-events: none; }
+  #navren-card-study .nr-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
+  #navren-card-study .nr-bank { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; letter-spacing: .025em; text-shadow: 0 1px 1px #00000070, 0 -1px 0 #ffffff1a; }
+  #navren-card-study .nr-bank-icon { width: 27px; height: 30px; display: grid; place-items: center; color: var(--nr-card-ink); }
+  #navren-card-study .nr-type { font-size: 13px; color: var(--nr-card-muted); letter-spacing: .05em; white-space: nowrap; }
+  #navren-card-study .nr-peek-tail { display: none; color: var(--nr-card-muted); font-size: 13px; letter-spacing: .04em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #navren-card-study .nr-chip-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 27px; }
+  #navren-card-study .nr-chip-group { display: flex; align-items: center; gap: 10px; color: var(--nr-card-muted); }
+  #navren-card-study .nr-chip { position: relative; width: 39px; height: 31px; flex-shrink: 0; overflow: hidden; border-radius: 7px; border: 1px solid #e4d8ae; background: linear-gradient(125deg, #98845a 0%, #ece4bb 18%, #cab686 42%, #f4edcc 49%, #b69b65 73%, #e2d3a8 100%); box-shadow: inset 0 1px 1px #fffbeaeb, inset 0 -1px 1px #6d572cb3, 0 1px 2px #020a2080; }
+  #navren-card-study .nr-chip::before { content: ""; position: absolute; inset: 6px 11px; border: 1px solid #7e693d99; border-radius: 4px; box-shadow: 0 0 1px #fffcdd; }
+  #navren-card-study .nr-chip::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #ffffff00 26%, #806b4280 26%, #806b4280 28%, #ffffff00 28%, #ffffff00 71%, #806b4280 71%, #806b4280 73%, #ffffff00 73%), linear-gradient(#ffffff00 45%, #806b4280 45%, #806b4280 48%, #ffffff00 48%); }
+  #navren-card-study .nr-card-number { color: var(--nr-card-ink); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 15px; font-variant-numeric: tabular-nums; letter-spacing: .08em; white-space: nowrap; text-shadow: 0 1px 1px #02040aa6, 0 -1px 0 #ffffff1a; }
+  #navren-card-study .nr-balance { margin: 26px 0 23px; }
+  #navren-card-study .nr-balance-label { display: block; font-size: 13px; color: var(--nr-card-muted); margin-bottom: 10px; }
+  #navren-card-study .nr-value { display: flex; align-items: baseline; gap: 8px; color: var(--nr-card-ink); font-variant-numeric: tabular-nums; letter-spacing: -.025em; text-shadow: 0 2px 2px #0714267a, 0 -1px 0 #ffffff21; }
+  #navren-card-study .nr-unit { font-size: 20px; color: var(--nr-card-muted); letter-spacing: 0; }
+  #navren-card-study .nr-value strong { font-size: 36px; line-height: 1.2; font-weight: 600; }
+  #navren-card-study .nr-decimal { font-size: 24px; font-weight: 500; }
+  #navren-card-study .nr-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 16px; border-top: 1px solid var(--nr-card-line); box-shadow: 0 -1px 0 #030e231f; }
+  #navren-card-study .nr-foot-label { font-size: 12px; color: var(--nr-card-muted); }
+  #navren-card-study .nr-foot-value { display: flex; align-items: center; gap: 10px; color: var(--nr-card-ink); font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  #navren-card-study .nr-hit { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: inherit; background: transparent; color: transparent; }
+  #navren-card-study .nr-stack { position: relative; height: calc(302px + var(--nr-stack-step) * 2); }
+  #navren-card-study .nr-stack .nr-card-frame { position: absolute; top: 0; left: var(--nr-inset, 0px); right: var(--nr-inset, 0px); transform: translateY(var(--nr-offset, 0px)); transition: transform 240ms ease, left 240ms ease, right 240ms ease; }
+  #navren-card-study .nr-stack .nr-card-frame[data-rank="1"] .nr-card-body,
+  #navren-card-study .nr-stack .nr-card-frame[data-rank="2"] .nr-card-body { visibility: hidden; }
+  #navren-card-study .nr-stack .nr-card-frame[data-rank="1"] .nr-type,
+  #navren-card-study .nr-stack .nr-card-frame[data-rank="2"] .nr-type { display: none; }
+  #navren-card-study .nr-stack .nr-card-frame[data-rank="1"] .nr-peek-tail,
+  #navren-card-study .nr-stack .nr-card-frame[data-rank="2"] .nr-peek-tail { display: inline; }
+  #navren-card-study .nr-stack .nr-card-frame[data-rank="1"] .nr-hit,
+  #navren-card-study .nr-stack .nr-card-frame[data-rank="2"] .nr-hit { bottom: auto; height: var(--nr-stack-step); }
+  #navren-card-study .nr-details { margin-top: 31px; padding: 17px 18px; border-radius: 16px; border: 1px solid var(--nr-line); background: var(--nr-panel); color: var(--nr-ink); }
+  #navren-card-study .nr-details-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 14px; }
+  #navren-card-study .nr-close { min-height: 34px; padding: 7px 9px; border: 0; border-radius: 9px; font: inherit; color: var(--nr-muted); background: transparent; }
+  #navren-card-study .nr-close:hover { background: var(--nr-soft); color: var(--nr-ink); }
+  #navren-card-study .nr-detail-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; font-size: 13px; }
+  #navren-card-study .nr-detail-row span { color: var(--nr-muted); }
+  #navren-card-study .nr-detail-row strong { font-weight: 500; font-variant-numeric: tabular-nums; }
+  #navren-card-study .nr-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #navren-card-study [hidden] { display: none; }
+  @media (max-width: 480px) {
+    #navren-card-study { --nr-stack-step: 58px; }
+    #navren-card-study .nr-stage { padding: 54px 8px 32px; gap: 26px; }
+    #navren-card-study .nr-wallet { padding: 21px 15px 43px; border-radius: 22px; }
+    #navren-card-study .nr-wallet-head { margin-bottom: 23px; }
+    #navren-card-study .nr-physical { min-height: 276px; padding: 18px 17px 20px; }
+    #navren-card-study .nr-bank { font-size: 16px; gap: 7px; }
+    #navren-card-study .nr-chip-row { margin-top: 24px; gap: 8px; }
+    #navren-card-study .nr-chip-group { gap: 7px; }
+    #navren-card-study .nr-chip { width: 34px; height: 28px; }
+    #navren-card-study .nr-card-number { font-size: 12px; letter-spacing: .015em; }
+    #navren-card-study .nr-balance { margin-top: 24px; }
+    #navren-card-study .nr-value strong { font-size: 31px; }
+    #navren-card-study .nr-decimal { font-size: 21px; }
+    #navren-card-study .nr-unit { font-size: 18px; }
+    #navren-card-study .nr-foot { gap: 10px; }
+    #navren-card-study .nr-foot-value { font-size: 14px; gap: 6px; }
+    #navren-card-study .nr-stack { height: calc(276px + var(--nr-stack-step) * 2); }
+    #navren-card-study .nr-stack .nr-card-frame[data-rank="1"] .nr-physical,
+    #navren-card-study .nr-stack .nr-card-frame[data-rank="2"] .nr-physical { padding-left: 13px; padding-right: 13px; }
+    #navren-card-study .nr-stack .nr-card-frame[data-rank="1"] .nr-bank,
+    #navren-card-study .nr-stack .nr-card-frame[data-rank="2"] .nr-bank { font-size: 14px; gap: 5px; }
+    #navren-card-study .nr-stack .nr-peek-tail { font-size: 12px; }
+    #navren-card-study .nr-details { padding: 15px 14px; }
+  }
+  @media (pointer: coarse) { #navren-card-study :is(.nr-theme, .nr-close) { min-height: 44px; } }
+  @media (prefers-reduced-motion: reduce) { #navren-card-study .nr-stack .nr-card-frame { transition: none; } }
+</style>
+
+<div id="navren-card-study" data-appearance="auto">
+  <div class="nr-stage viz-dotted-background">
+    <section class="nr-wallet" aria-label="单张银行卡展示">
+      <div class="nr-wallet-head">
+        <div class="nr-heading"><h3>单张展示</h3><span class="nr-demo-note">演示数据</span></div>
+        <button type="button" class="nr-theme cursor-interaction" aria-label="切换页面背景的深浅外观"><i data-lucide="moon" aria-hidden="true"></i><span>外观</span></button>
+      </div>
+      <article class="nr-card-frame" id="nr-single-card" data-bank-theme="boc" aria-label="中国银行，尾号0826，银行卡演示">
+        <div class="nr-physical">
+          <span class="nr-wave" aria-hidden="true"></span>
+          <div class="nr-top">
+            <div class="nr-bank"><span class="nr-bank-icon"><i data-lucide="landmark" aria-hidden="true"></i></span><span data-bank>中国银行</span></div>
+            <span class="nr-type">借记卡</span><span class="nr-peek-tail" data-peek-tail>尾号 0826</span>
+          </div>
+          <div class="nr-card-body">
+            <div class="nr-chip-row">
+              <div class="nr-chip-group"><span class="nr-chip" aria-hidden="true"></span><i data-lucide="nfc" aria-hidden="true"></i></div>
+              <span class="nr-card-number" data-card-number aria-label="16位卡号，前12位用星号隐藏，尾号0826">**** **** **** 0826</span>
+            </div>
+            <div class="nr-balance">
+              <span class="nr-balance-label">账户现金</span>
+              <div class="nr-value"><span class="nr-unit">¥</span><strong><span data-cash>24,680</span><span class="nr-decimal">.00</span></strong></div>
+            </div>
+            <div class="nr-foot">
+              <span class="nr-foot-label">关联持仓 · 本金</span>
+              <span class="nr-foot-value"><span data-holdings>58,000.00</span><i data-lucide="arrow-up-right" aria-hidden="true"></i></span>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="nr-hit cursor-interaction" aria-label="查看中国银行尾号0826的演示资产" aria-expanded="false" aria-controls="nr-single-details"></button>
+      </article>
+      <section class="nr-details" id="nr-single-details" aria-label="单张卡片的演示资产明细" hidden>
+        <div class="nr-details-head"><span>中国银行 · 0826</span><button type="button" class="nr-close cursor-interaction" data-close="single">收起</button></div>
+        <div class="nr-detail-row"><span>账户现金</span><strong>24,680.00 元</strong></div>
+        <div class="nr-detail-row"><span>关联持仓本金</span><strong>58,000.00 元</strong></div>
+      </section>
+    </section>
+    <section class="nr-wallet" aria-label="三张银行卡堆叠展示">
+      <div class="nr-wallet-head">
+        <div class="nr-heading"><h3>多张堆叠</h3><span class="nr-demo-note">3 张 · 演示数据</span></div>
+        <button type="button" class="nr-theme cursor-interaction" aria-label="切换页面背景的深浅外观"><i data-lucide="moon" aria-hidden="true"></i><span>外观</span></button>
+      </div>
+      <div class="nr-stack" id="nr-bank-stack" aria-label="点击露出的银行卡切换当前卡片"></div>
+      <span class="nr-live" role="status" aria-live="polite" id="nr-stack-status"></span>
+      <section class="nr-details" id="nr-stack-details" aria-label="当前银行卡的演示资产明细" hidden>
+        <div class="nr-details-head"><span data-stack-detail-bank>中国银行 · 0826</span><button type="button" class="nr-close cursor-interaction" data-close="stack">收起</button></div>
+        <div class="nr-detail-row"><span>账户现金</span><strong data-stack-detail-cash>24,680.00 元</strong></div>
+        <div class="nr-detail-row"><span>关联持仓本金</span><strong data-stack-detail-holdings>58,000.00 元</strong></div>
+      </section>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const root = document.getElementById('navren-card-study');
+  const single = document.getElementById('nr-single-card');
+  const stack = document.getElementById('nr-bank-stack');
+  const singlePanel = document.getElementById('nr-single-details');
+  const stackPanel = document.getElementById('nr-stack-details');
+  const status = document.getElementById('nr-stack-status');
+  const cards = [
+    {bank: '中国银行', theme: 'boc', tail: '0826', cash: '24,680', holdings: '58,000.00'},
+    {bank: '建设银行', theme: 'ccb', tail: '3918', cash: '38,200', holdings: '76,000.00'},
+    {bank: '农业银行', theme: 'abc', tail: '6502', cash: '8,020', holdings: '12,000.00'}
+  ];
+  const state = {appearance: 'auto', activeIndex: 0, singleExpanded: false, stackExpanded: false};
+  const frames = cards.map((data, index) => {
+    const frame = single.cloneNode(true);
+    frame.id = 'nr-stacked-card-' + index;
+    frame.dataset.bankTheme = data.theme;
+    frame.setAttribute('aria-label', data.bank + '，尾号' + data.tail + '，银行卡演示');
+    frame.querySelector('[data-bank]').textContent = data.bank;
+    frame.querySelector('[data-peek-tail]').textContent = '尾号 ' + data.tail;
+    frame.querySelector('[data-card-number]').textContent = '**** **** **** ' + data.tail;
+    frame.querySelector('[data-card-number]').setAttribute('aria-label', '16位卡号，前12位用星号隐藏，尾号' + data.tail);
+    frame.querySelector('[data-cash]').textContent = data.cash;
+    frame.querySelector('[data-holdings]').textContent = data.holdings;
+    const button = frame.querySelector('.nr-hit');
+    button.setAttribute('aria-controls', 'nr-stack-details');
+    button.addEventListener('click', () => {
+      if (state.activeIndex === index) state.stackExpanded = !state.stackExpanded;
+      else { state.activeIndex = index; state.stackExpanded = false; }
+      render();
+      status.textContent = '当前银行卡：' + data.bank + '，尾号' + data.tail;
+      save();
+    });
+    stack.append(frame);
+    return frame;
+  });
+  function restore(saved) {
+    const data = saved?.modelContent;
+    if (data && ['auto', 'light', 'dark'].includes(data.appearance)) state.appearance = data.appearance;
+    if (data && Number.isInteger(data.activeCardIndex) && data.activeCardIndex >= 0 && data.activeCardIndex < cards.length) state.activeIndex = data.activeCardIndex;
+    const privateData = saved?.privateContent;
+    if (typeof privateData?.singleExpanded === 'boolean') state.singleExpanded = privateData.singleExpanded;
+    if (typeof privateData?.stackExpanded === 'boolean') state.stackExpanded = privateData.stackExpanded;
+  }
+  function render() {
+    root.dataset.appearance = state.appearance;
+    singlePanel.hidden = !state.singleExpanded;
+    single.querySelector('.nr-hit').setAttribute('aria-expanded', String(state.singleExpanded));
+    const order = [state.activeIndex, ...cards.map((_, index) => index).filter(index => index !== state.activeIndex)];
+    frames.forEach((frame, index) => {
+      const rank = order.indexOf(index);
+      frame.dataset.rank = String(rank);
+      frame.style.setProperty('--nr-offset', 'calc(var(--nr-stack-step) * ' + (2 - rank) + ')');
+      frame.style.setProperty('--nr-inset', (rank * 12) + 'px');
+      frame.style.zIndex = String(3 - rank);
+      frame.querySelector('.nr-card-body').setAttribute('aria-hidden', String(rank !== 0));
+      const button = frame.querySelector('.nr-hit');
+      const data = cards[index];
+      button.setAttribute('aria-label', (rank === 0 ? '查看' : '切换到') + data.bank + '尾号' + data.tail + (rank === 0 ? '的演示资产' : '银行卡'));
+      if (rank === 0) button.setAttribute('aria-expanded', String(state.stackExpanded));
+      else button.removeAttribute('aria-expanded');
+    });
+    const active = cards[state.activeIndex];
+    stackPanel.hidden = !state.stackExpanded;
+    root.querySelector('[data-stack-detail-bank]').textContent = active.bank + ' · ' + active.tail;
+    root.querySelector('[data-stack-detail-cash]').textContent = active.cash + '.00 元';
+    root.querySelector('[data-stack-detail-holdings]').textContent = active.holdings + ' 元';
+  }
+  function save() {
+    if (window.openai?.setWidgetState) window.openai.setWidgetState({modelContent: {cardStyle: '平直实体卡片', cardColorMode: '银行品牌色衍生渐变', cardNumberLength: 16, cardMaskCharacter: '*', appearance: state.appearance, activeCardIndex: state.activeIndex, activeCardBank: cards[state.activeIndex].bank, cardCount: cards.length}, privateContent: {singleExpanded: state.singleExpanded, stackExpanded: state.stackExpanded}}).catch(() => {});
+  }
+  restore(window.openai?.widgetState);
+  render();
+  window.addEventListener('openai:set_globals', event => { restore(event.detail?.globals?.widgetState); render(); });
+  root.querySelectorAll('.nr-theme').forEach(button => button.addEventListener('click', () => {
+    const activeScheme = getComputedStyle(root).colorScheme;
+    const darkNow = state.appearance === 'dark' || (state.appearance === 'auto' && (activeScheme.trim() === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches));
+    state.appearance = darkNow ? 'light' : 'dark'; render(); save();
+  }));
+  single.querySelector('.nr-hit').addEventListener('click', () => { state.singleExpanded = !state.singleExpanded; render(); save(); });
+  root.querySelector('[data-close="single"]').addEventListener('click', () => { state.singleExpanded = false; render(); save(); single.querySelector('.nr-hit').focus(); });
+  root.querySelector('[data-close="stack"]').addEventListener('click', () => { state.stackExpanded = false; render(); save(); frames[state.activeIndex].querySelector('.nr-hit').focus(); });
+  if (globalThis.lucide) lucide.createIcons({attrs: {width: 18, height: 18}});
+})();
+</script>

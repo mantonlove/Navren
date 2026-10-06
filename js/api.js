@@ -7,6 +7,9 @@
 let lastCallTime = 0;
 let queueRunning = false;
 const callQueue = [];
+const activeAgentRequests=new Set();
+function cancelAgentRequests(){for(const controller of activeAgentRequests)controller.abort();activeAgentRequests.clear();}
+if(typeof window!=='undefined')for(const type of ['navren:privacy-reset','navren:identity-revoked','pagehide'])window.addEventListener(type,cancelAgentRequests);
 
 /** 限流调度器 */
 async function rateLimiter() {
@@ -19,7 +22,7 @@ async function rateLimiter() {
 }
 
 const Api = {
-  async sendMessage(text, mode, imageBase64 = null, sentiment = null) {
+  async sendMessage(text, mode, imageBase64 = null, sentiment = null, onProgress = null) {
     try {
       // 收集画像数据（不在前端构造 prompt，只传原始数据给 /api/agent）
       let profile = {};
@@ -71,6 +74,9 @@ const Api = {
           content: m.content
         })),
       };
+      if(globalThis.NavrenPageContextId){requestBody.page_context_id=globalThis.NavrenPageContextId;globalThis.NavrenPageContextId=null;}
+      if(globalThis.NavrenMarketContext){requestBody.market_context=globalThis.NavrenMarketContext;globalThis.NavrenMarketContext=null;}
+      if(globalThis.NavrenGraphContext){requestBody.graph_context=globalThis.NavrenGraphContext;globalThis.NavrenGraphContext=null;}
       // 传入 follow-up 会话记忆
       const followupMemory = Storage.get('qingzhou_followupMemory');
       if (followupMemory) requestBody.followup_memory = followupMemory;
@@ -84,20 +90,15 @@ const Api = {
       }
 
       try {
-        const bankRequest = typeof BankClient !== 'undefined' && BankClient.isBankRequest(text);
-        if (!bankRequest) await rateLimiter();
-        const response = await this._fetchAgent(requestBody);
+        const response = await this._fetchAgent(requestBody, onProgress);
         return this._handleResponse(response, text, profile);
       } catch (err) {
         const msg = err.message || '';
-        console.warn('Agent API failed, using fallback:', msg);
+        console.warn('Agent API failed:', msg);
         if (msg.includes('429') || msg.includes('QPM') || msg.includes('限流')) {
           if (typeof showToast === 'function') showToast('请求过于频繁，请稍后重试');
         }
-        if (typeof BankClient !== 'undefined' && BankClient.isBankRequest(text)) {
-          return {bank:true,reply:'银行状态暂不可用。本次对话没有确认执行操作，请到「账户」查询订单核实状态后再试。',isFallback:true};
-        }
-        return this._fallbackResponse(text, mode);
+        return {bank:true,reply:'对话服务暂不可用。本次对话没有确认执行操作，请到「账户」查询原操作状态后再试。',isFallback:true};
       }
     } catch (fatalErr) {
       console.error('Fatal error in sendMessage:', fatalErr.message, fatalErr.stack);
@@ -105,29 +106,54 @@ const Api = {
     }
   },
 
-  async _fetchAgent(body) {
+  async _fetchAgent(body, onProgress = null) {
     const controller = new AbortController();
+    activeAgentRequests.add(controller);
     const timer = setTimeout(() => controller.abort(), API_CONFIG.timeout);
 
     try {
+      const headers=typeof BankClient !== 'undefined' ? await BankClient.agentHeaders() : {'Content-Type':'application/json'};
+      const guard=typeof BankClient!=='undefined'?BankClient.guard?.():null;
+      const current=()=>!controller.signal.aborted&&(!guard||guard.valid());
+      if(!current())throw new Error('账户或页面已变化，已停止旧请求。');
       const res = await fetch('/api/agent', {
         method: 'POST',
-        headers: typeof BankClient !== 'undefined' ? await BankClient.agentHeaders() : { 'Content-Type': 'application/json' },
+        headers: {...headers,
+          ...(onProgress ? {Accept:'text/event-stream'} : {})},
         body: JSON.stringify(body),
         signal: controller.signal
       });
-      clearTimeout(timer);
-
+      if(!current())throw new Error('账户或页面已变化，已停止旧请求。');
       if (!res.ok) {
         const errText = await res.text();
         throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
       }
 
-      return await res.json();
+      if (!onProgress) { const result = await res.json();if(!current())throw new Error('账户或页面已变化，已停止旧请求。'); clearTimeout(timer); return result; }
+      const reader = res.body.getReader(), decoder = new TextDecoder();
+      let pending = '', result = null;
+      while (true) {
+        const {value,done} = await reader.read();
+        if(!current()){controller.abort();await reader.cancel();throw new Error('账户或页面已变化，已停止旧请求。');}
+        pending += decoder.decode(value || new Uint8Array(), {stream:!done});
+        let end;
+        while ((end = pending.indexOf('\n\n')) >= 0) {
+          const block = pending.slice(0,end); pending = pending.slice(end+2);
+          const data = block.split('\n').filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trimStart()).join('\n');
+          if (!data) continue;
+          const event = JSON.parse(data);
+          if (event.type === 'CUSTOM' && event.name === 'navren.result') result = event.value;
+          else onProgress(event);
+        }
+        if (done) break;
+      }
+      clearTimeout(timer);
+      if (!result) throw new Error('运行连接中断，未收到最终成果');
+      return result;
     } catch (e) {
       clearTimeout(timer);
       throw e;
-    }
+    } finally{activeAgentRequests.delete(controller);clearTimeout(timer);}
   },
 
   _handleResponse(data, userText, profile) {
@@ -142,16 +168,29 @@ const Api = {
       products: data?.products || [],
       allocation: data?.allocation || null,
       ui_actions: data?.ui_actions || [],
-      follow_up_questions: data?.follow_up_questions || [],
+      follow_up_questions: (data?.follow_up_questions || []).map(q =>
+        typeof q === 'string' ? {label:q,text:q,type:'question'} : q),
       followup_memory: data?.followup_memory || null,
       agent_chain: data?.agent_chain || null,
       highlight_names: data?.highlight_names || [],
       image_analysis: data?.image_analysis || null,
+      speech_receipt: data?.speech_receipt || '',
+      personal_revision: Number.isSafeInteger(data?.personal_revision) ? data.personal_revision : null,
+      knowledge_snapshot: data?.knowledge_snapshot || null,
+      task_result: data?.task_result ?? null,
       compliance_pass: data?.compliance_pass,
       compliance_flags: data?.compliance_flags || []
     };
     if (data.bank) return {...baseResult,bank:true,bank_actions:data.bank_actions||[],budget:data.budget,
-      workspace_id:data.workspace_id,version:data.version,bank_response_id:data.bank_response_id};
+      widgets:data.widgets||[],
+      market_sources:data.market_sources||[],
+      workspace_id:data.workspace_id,version:data.version,bank_response_id:data.bank_response_id,
+      cashflow_timeline:data.cashflow_timeline||null,agent_workflow:data.agent_workflow||null,
+      user_memory_context:data.user_memory_context||null,
+      service_negotiation_request:data.service_negotiation_request||null,
+      memory_proposals:data.memory_proposals||[],
+      agent_review:data.agent_review||null,agent_runtime:data.agent_runtime||null,
+      answer_contract:data.answer_contract||null};
 
     // 尝试从 slots 中提取档案更新
     const slots = data?.slots || {};
@@ -174,21 +213,5 @@ const Api = {
     }
 
     return baseResult;
-  },
-
-  /** 仅用于真正的 API 异常（网络错误/超时）的 fallback */
-  _fallbackResponse(text, mode) {
-    const fallback = typeof findFallback === 'function' ? findFallback(text, mode) : null;
-    if (fallback) {
-      return {
-        reply: fallback.text,
-        isFallback: true,
-        fallbackId: fallback.id
-      };
-    }
-    return {
-      reply: '抱歉，系统暂时无法处理您的请求，请稍后重试。\n\n⚠️ 理财非存款，产品有风险，投资须谨慎。',
-      isFallback: true
-    };
   }
 };

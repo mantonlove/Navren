@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-10-06",
+  "review_method": "先直接读取保存的官方JSONP原件并人工核对字段，再冻结预期；不从提供器返回生成预期。",
+  "reviewed_release_id": "pub-431a2429c15de761da1ed0051bec15154a8cc7b4",
+  "source_id": "webank-direct-disclosure",
+  "source_url": "https://tctp.tctpwebankcdn.net/owb-admin/data/appsystems/owb-admin/productpresentation.json",
+  "raw_sha256": "dab1216c8bf2911dc5c90542b1d57423fd86d238a290d385e5c7720155a2f0ed",
+  "source_date": "2026-09-24",
+  "products": [
+    {"product_id":"WEBANK:000001","version_id":"v15c72faab4dc307cb4dd4e7dedc1ba58c26a6c89","record_index":0,
+     "expected_fields":{"code":"000001","name":"华夏成长混合","type":"开放式基金","risk":"R5高风险","investor":"C5激进型","charge":"详见产品页面","chargeWay":"详见产品页面","saleStatus":"在售"},
+     "verified_share_class_id":null,"verified_channel_id":"WEBANK"},
+    {"product_id":"WEBANK:000015","version_id":"v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c","record_index":5,
+     "expected_fields":{"code":"000015","name":"华夏纯债债券A","type":"开放式基金","risk":"R2中低风险","investor":"C2稳健型、C3平衡型、C4进取型、C5激进型","charge":"详见产品页面","chargeWay":"详见产品页面","saleStatus":"在售"},
+     "verified_share_class_id":null,"verified_channel_id":"WEBANK"},
+    {"product_id":"WEBANK:000016","version_id":"v45e8f55c528b95e4642b50beb32d1ac8cc38b27f","record_index":6,
+     "expected_fields":{"code":"000016","name":"华夏纯债债券C","type":"开放式基金","risk":"R2中低风险","investor":"C2稳健型、C3平衡型、C4进取型、C5激进型","charge":"详见产品页面","chargeWay":"详见产品页面","saleStatus":"在售"},
+     "verified_share_class_id":null,"verified_channel_id":"WEBANK"}
+  ],
+  "cases": [
+    {"id":"historical-risk-growth","question":"2026-09-24微众目录如何披露华夏成长混合的风险？","product_id":"WEBANK:000001","facets":["risk"],"as_of":"2026-09-24","expect":{"mode":"quote","contains":"R5高风险","semantic_limit":"仅支持该日微众渠道风险披露；不能推出底层产品身份或今天适合购买。"}},
+    {"id":"historical-risk-bond-a","question":"2026-09-24华夏纯债债券A的渠道风险披露是什么？","product_id":"WEBANK:000015","facets":["risk"],"as_of":"2026-09-24","expect":{"mode":"quote","contains":"R2中低风险","semantic_limit":"不把名称中的A字当成已核验份额ID。"}},
+    {"id":"historical-risk-bond-c","question":"2026-09-24华夏纯债债券C的渠道风险披露是什么？","product_id":"WEBANK:000016","facets":["risk"],"as_of":"2026-09-24","expect":{"mode":"quote","contains":"R2中低风险","semantic_limit":"只引用C名称对应的渠道产品，不能复用A的产品ID。"}},
+    {"id":"current-risk-expired","question":"2026-10-06华夏纯债债券A的当前风险是什么？","product_id":"WEBANK:000015","facets":["risk"],"as_of":"2026-10-06","expect":{"mode":"no_hits","gap":"expired_evidence","semantic_limit":"风险资料超出7天，不能把历史R2写成当前风险结论。"}},
+    {"id":"fees-a-placeholder","question":"华夏纯债债券A的申购费、赎回费具体多少？","product_id":"WEBANK:000015","facets":["fees"],"as_of":"2026-09-24","expect":{"mode":"quote","contains":"详见产品页面","semantic_limit":"只提供费用入口占位文字；具体费率、条件和计算仍不可得，不能补成0。"}},
+    {"id":"fees-c-placeholder","question":"华夏纯债债券C是否因名称C而没有费用？","product_id":"WEBANK:000016","facets":["fees"],"as_of":"2026-09-24","expect":{"mode":"quote","contains":"详见产品页面","semantic_limit":"原件没有销售服务费或持有期费率表；不能从C名称推断费用规则。"}},
+    {"id":"redemption-missing","question":"华夏纯债债券A赎回后几天到账？","product_id":"WEBANK:000015","facets":["liquidity"],"as_of":"2026-09-24","expect":{"mode":"no_hits","gap":"facet_uncovered","semantic_limit":"原件无到账规则；开放式基金标签不证明T+1或T+2。"}},
+    {"id":"minimum-holding-missing","question":"华夏成长混合最短持有期限多少？","product_id":"WEBANK:000001","facets":["terms"],"as_of":"2026-09-24","expect":{"mode":"no_hits","gap":"facet_uncovered","semantic_limit":"原件没有最短持有条款，不造期限或承诺可随时退出。"}},
+    {"id":"unknown-share-mapping","question":"按A份额身份检索华夏纯债债券A费用。","product_id":"WEBANK:000015","share_class_id":"UNVERIFIED-SHARE-A","facets":["fees"],"as_of":"2026-09-24","expect":{"mode":"no_hits","gap":"identity_unverified","semantic_limit":"真实份额ID未核验，不将产品名中的A当成映射。"}},
+    {"id":"other-channel-not-inherited","question":"其他渠道是否沿用微众这份费用披露？","product_id":"WEBANK:000015","channel_id":"UNVERIFIED-OTHER-CHANNEL","facets":["fees"],"as_of":"2026-09-24","expect":{"mode":"no_hits","gap":"identity_unverified","semantic_limit":"渠道不匹配，不能套用微众披露。"}},
+    {"id":"current-sale-not-inferred","question":"2026-10-06华夏纯债债券A在微众能否立即买入？","product_id":"WEBANK:000015","facets":["sale_status"],"as_of":"2026-10-06","expect":{"mode":"no_hits","gap":"sale_status_unknown","semantic_limit":"历史在售并非当前可申购，更不证明本人资格或交易授权。"}},
+    {"id":"withdrawn-history-blocked","question":"已撤回的2026-09-24风险披露能否继续作为引文？","product_id":"WEBANK:000015","facets":["risk"],"as_of":"2026-09-24","mutation":"withdraw_version","expect":{"mode":"no_hits","gap":"no_verified_evidence","semantic_limit":"历史正文仍归档，但撤回后不能作为公共有效引用。"}},
+    {"id":"fee-conflict-blocked","question":"两份费用资料冲突时是否仍可引用旧费用？","product_id":"WEBANK:000015","facets":["fees"],"as_of":"2026-09-24","mutation":"conflict_fees","expect":{"mode":"no_hits","gap":"conflicting_sources","semantic_limit":"此案例注入测试冲突，不能从占位原文推算费用。"}},
+    {"id":"source-outbound-revoked","question":"来源取消出站许可后是否仍可用历史风险？","product_id":"WEBANK:000015","facets":["risk"],"as_of":"2026-09-24","mutation":"revoke_source","expect":{"mode":"no_hits","gap":"source_permission_missing","semantic_limit":"当前许可是实时门禁，不因旧发布或历史时点绕过。"}}
+  ]
+}

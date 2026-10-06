@@ -1,0 +1,477 @@
+{
+  "schema_version": 1,
+  "frozen_at": "2026-10-06T01:59:27.835543+08:00",
+  "source": "navren_synthetic",
+  "source_directory": "outputs/contest-finances",
+  "source_file_sha256": {
+    "financial_data.sqlite3": "cfa2c45d52d0c2cc63013da3b736e442ba2a81571669bda4193650932af671f4",
+    "manifest.json": "09d2d23ed0410b7a1aa4e1ba4f5d8373517bfc75e1352ff83c68e8e98fdd8811",
+    "contest_profiles.json": "4f467625a7707a3d51720f6fb1ca60dd860ba53738896377ea276242410b4d05",
+    "data_contract.json": "b66c4d71e2d2138da718aedf804263773de7c90960243bdaaac524ded21929f7",
+    "summary.json": "a2c9fce1c4237fa1e8c22cf2a958993632e1c466baa97146a9016c71cdd13341",
+    "grain_farmer/current_finances.json": "5c6c92b72f800102aa57b11698e20516c14c7b7b3dbb0ebbde995513411802a4",
+    "retired_entrepreneur/current_finances.json": "aeb8f5cf9d2596866681e7815382c68fbd47b49d332063b8ce576bf92e2a0ed1",
+    "tycoon/current_finances.json": "e55561e42133ea5a0eb6cb56427e5400511afc12efa06f72c11b1e1193c60557",
+    "working_landlady/current_finances.json": "77b58d34ea99cf85ec5953e31a881f40b8c7598c5ae975504fd8f09fe2516f26"
+  },
+  "oracle_authority": "集成验收独立只读SQL聚合来源分录，未导入demo_accounts、cashflow_timeline、financial_metrics或现有业务测试预期",
+  "unit": "integer_CNY_minor",
+  "business_as_of": "2026-10-03",
+  "horizon_days": 60,
+  "horizon_end": "2026-12-02",
+  "terminal_reconciliation_sql": "SELECT a.account_id,a.code,a.account_class,coalesce(sum(l.debit_minor-l.credit_minor),0) AS balance_minor FROM (SELECT * FROM ledger_accounts WHERE user_id=?) a LEFT JOIN (SELECT j.* FROM journal_lines j JOIN journal_events e ON e.user_id=j.user_id AND e.event_id=j.event_id WHERE substr(e.occurred_at,1,10)<=?) l ON l.user_id=a.user_id AND l.account_id=a.account_id GROUP BY a.account_id,a.code,a.account_class ORDER BY a.account_id",
+  "rules": [
+    "账户期末余额从debit-credit分录重放，无分录的源账户保留零额；负债取贷方净额；资产、负债与净资产分别列示。",
+    "投资账面值与运行持仓成本分别复算，不把本金与估值相加。",
+    "仅源已记录的未付预测进入候选，monthly/yearly按公开频次展开，seasonal仅保留已记录下一日期。",
+    "同一60日问题无已确认未来收入/支出记录；零不证明没有历史收入或没有贷款义务，完整未来还款合同缺失。",
+    "初始记录内预算=全户现金-已确认应急设置，生效留款和已知到期为零；未记录事项不补造。",
+    "HTTP切换需要CSRF与预期工作区；旧token永久撤销，其他画像不能读取/确认旧画像草案。"
+  ],
+  "profiles": {
+    "grain_farmer": {
+      "display_name": "种粮大户",
+      "risk_level": 2,
+      "horizon_days": 180,
+      "reserve_minor": 30000000,
+      "coverage_start": "2016-10-04",
+      "coverage_end": "2026-10-03",
+      "daily_balance_count": 3652,
+      "terminal_journal_totals": {
+        "cash_minor": 1216248131,
+        "investment_minor": 259411968,
+        "real_assets_minor": 522686267,
+        "liabilities_minor": 0,
+        "total_assets_minor": 1998346366,
+        "net_worth_minor": 1998346366
+      },
+      "runtime_holding_cost_minor": 192383009,
+      "cash_accounts": [
+        {
+          "account_id": "grain_farmer::cash:daily",
+          "code": "cash:daily",
+          "balance_minor": 7457
+        },
+        {
+          "account_id": "grain_farmer::cash:operating",
+          "code": "cash:operating",
+          "balance_minor": 1182417857
+        },
+        {
+          "account_id": "grain_farmer::cash:reserve",
+          "code": "cash:reserve",
+          "balance_minor": 33822817
+        }
+      ],
+      "initial_recorded_only_budget_minor": 1186248131,
+      "forecast_occurrences_60d": [
+        {
+          "obligation_id": "grain_farmer-seasonal_expense-2",
+          "date": "2026-10-08",
+          "amount_minor": 29255866,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "grain_farmer-monthly_expense-0",
+          "date": "2026-10-12",
+          "amount_minor": 975196,
+          "scope": "household",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "grain_farmer-monthly_expense-1",
+          "date": "2026-10-18",
+          "amount_minor": 139265,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "grain_farmer-monthly_expense-2",
+          "date": "2026-10-28",
+          "amount_minor": 731397,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "grain_farmer-monthly_expense-0",
+          "date": "2026-11-12",
+          "amount_minor": 975196,
+          "scope": "household",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "grain_farmer-monthly_expense-1",
+          "date": "2026-11-18",
+          "amount_minor": 139265,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "grain_farmer-monthly_expense-2",
+          "date": "2026-11-28",
+          "amount_minor": 731397,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        }
+      ],
+      "confirmed_outflow_60d_minor": 0,
+      "confirmed_inflow_60d_minor": 0,
+      "candidate_outflow_60d_minor": 32947582,
+      "aggregate_minimum_after_confirmed_minor": 1186248131,
+      "aggregate_minimum_if_candidates_minor": 1153300549
+    },
+    "retired_entrepreneur": {
+      "display_name": "退休后重新创业的阿姨",
+      "risk_level": 2,
+      "horizon_days": 365,
+      "reserve_minor": 30000000,
+      "coverage_start": "2016-10-04",
+      "coverage_end": "2026-10-03",
+      "daily_balance_count": 3652,
+      "terminal_journal_totals": {
+        "cash_minor": 73633324,
+        "investment_minor": 74020382,
+        "real_assets_minor": 189331709,
+        "liabilities_minor": 4000000,
+        "total_assets_minor": 336985415,
+        "net_worth_minor": 332985415
+      },
+      "runtime_holding_cost_minor": 53388934,
+      "cash_accounts": [
+        {
+          "account_id": "retired_entrepreneur::cash:daily",
+          "code": "cash:daily",
+          "balance_minor": 355829
+        },
+        {
+          "account_id": "retired_entrepreneur::cash:operating",
+          "code": "cash:operating",
+          "balance_minor": 39454678
+        },
+        {
+          "account_id": "retired_entrepreneur::cash:reserve",
+          "code": "cash:reserve",
+          "balance_minor": 33822817
+        }
+      ],
+      "initial_recorded_only_budget_minor": 43633324,
+      "forecast_occurrences_60d": [
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-2",
+          "date": "2026-10-10",
+          "amount_minor": 1564111,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-0",
+          "date": "2026-10-12",
+          "amount_minor": 441006,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-3",
+          "date": "2026-10-12",
+          "amount_minor": 700106,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-4",
+          "date": "2026-10-18",
+          "amount_minor": 493659,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-1",
+          "date": "2026-10-20",
+          "amount_minor": 139265,
+          "scope": "household",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-5",
+          "date": "2026-10-22",
+          "amount_minor": 164553,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-6",
+          "date": "2026-10-25",
+          "amount_minor": 86167,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-2",
+          "date": "2026-11-10",
+          "amount_minor": 1564111,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-0",
+          "date": "2026-11-12",
+          "amount_minor": 441006,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-3",
+          "date": "2026-11-12",
+          "amount_minor": 700106,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-4",
+          "date": "2026-11-18",
+          "amount_minor": 493659,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-1",
+          "date": "2026-11-20",
+          "amount_minor": 139265,
+          "scope": "household",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-5",
+          "date": "2026-11-22",
+          "amount_minor": 164553,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        },
+        {
+          "obligation_id": "retired_entrepreneur-monthly_expense-6",
+          "date": "2026-11-25",
+          "amount_minor": 86167,
+          "scope": "self_employed",
+          "source_account_code": "cash:operating"
+        }
+      ],
+      "confirmed_outflow_60d_minor": 0,
+      "confirmed_inflow_60d_minor": 0,
+      "candidate_outflow_60d_minor": 7177734,
+      "aggregate_minimum_after_confirmed_minor": 43633324,
+      "aggregate_minimum_if_candidates_minor": 36455590
+    },
+    "tycoon": {
+      "display_name": "A市首富",
+      "risk_level": 4,
+      "horizon_days": 1095,
+      "reserve_minor": 3000000000,
+      "coverage_start": "2016-10-04",
+      "coverage_end": "2026-10-03",
+      "daily_balance_count": 3652,
+      "terminal_journal_totals": {
+        "cash_minor": 9466265796,
+        "investment_minor": 31891279076,
+        "real_assets_minor": 221162494788,
+        "liabilities_minor": 0,
+        "total_assets_minor": 262520039660,
+        "net_worth_minor": 262520039660
+      },
+      "runtime_holding_cost_minor": 24196640384,
+      "cash_accounts": [
+        {
+          "account_id": "tycoon::cash:daily",
+          "code": "cash:daily",
+          "balance_minor": 6083978107
+        },
+        {
+          "account_id": "tycoon::cash:operating",
+          "code": "cash:operating",
+          "balance_minor": 0
+        },
+        {
+          "account_id": "tycoon::cash:reserve",
+          "code": "cash:reserve",
+          "balance_minor": 3382287689
+        }
+      ],
+      "initial_recorded_only_budget_minor": 6466265796,
+      "forecast_occurrences_60d": [
+        {
+          "obligation_id": "tycoon-monthly_expense-0",
+          "date": "2026-10-12",
+          "amount_minor": 32912849,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "tycoon-monthly_expense-1",
+          "date": "2026-10-15",
+          "amount_minor": 36569833,
+          "scope": "household",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "tycoon-monthly_expense-2",
+          "date": "2026-10-18",
+          "amount_minor": 12189944,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "tycoon-seasonal_expense-0",
+          "date": "2026-10-22",
+          "amount_minor": 60949721,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "tycoon-monthly_expense-0",
+          "date": "2026-11-12",
+          "amount_minor": 32912849,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "tycoon-monthly_expense-1",
+          "date": "2026-11-15",
+          "amount_minor": 36569833,
+          "scope": "household",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "tycoon-monthly_expense-2",
+          "date": "2026-11-18",
+          "amount_minor": 12189944,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        }
+      ],
+      "confirmed_outflow_60d_minor": 0,
+      "confirmed_inflow_60d_minor": 0,
+      "candidate_outflow_60d_minor": 224294973,
+      "aggregate_minimum_after_confirmed_minor": 6466265796,
+      "aggregate_minimum_if_candidates_minor": 6241970823
+    },
+    "working_landlady": {
+      "display_name": "坚持上班的包租婆",
+      "risk_level": 3,
+      "horizon_days": 365,
+      "reserve_minor": 24000000,
+      "coverage_start": "2016-10-04",
+      "coverage_end": "2026-10-03",
+      "daily_balance_count": 3652,
+      "terminal_journal_totals": {
+        "cash_minor": 13508826,
+        "investment_minor": 45099826,
+        "real_assets_minor": 715604108,
+        "liabilities_minor": 64000000,
+        "total_assets_minor": 774212760,
+        "net_worth_minor": 710212760
+      },
+      "runtime_holding_cost_minor": 31754812,
+      "cash_accounts": [
+        {
+          "account_id": "working_landlady::cash:daily",
+          "code": "cash:daily",
+          "balance_minor": 4978620
+        },
+        {
+          "account_id": "working_landlady::cash:operating",
+          "code": "cash:operating",
+          "balance_minor": 0
+        },
+        {
+          "account_id": "working_landlady::cash:reserve",
+          "code": "cash:reserve",
+          "balance_minor": 8530206
+        }
+      ],
+      "initial_recorded_only_budget_minor": 0,
+      "forecast_occurrences_60d": [
+        {
+          "obligation_id": "working_landlady-monthly_expense-0",
+          "date": "2026-10-12",
+          "amount_minor": 999575,
+          "scope": "household",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "working_landlady-monthly_expense-1",
+          "date": "2026-10-18",
+          "amount_minor": 266924,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "working_landlady-seasonal_expense-0",
+          "date": "2026-10-20",
+          "amount_minor": 2194190,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "working_landlady-monthly_expense-2",
+          "date": "2026-10-22",
+          "amount_minor": 146279,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "working_landlady-monthly_expense-0",
+          "date": "2026-11-12",
+          "amount_minor": 999575,
+          "scope": "household",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "working_landlady-monthly_expense-1",
+          "date": "2026-11-18",
+          "amount_minor": 266924,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        },
+        {
+          "obligation_id": "working_landlady-monthly_expense-2",
+          "date": "2026-11-22",
+          "amount_minor": 146279,
+          "scope": "personal",
+          "source_account_code": "cash:daily"
+        }
+      ],
+      "confirmed_outflow_60d_minor": 0,
+      "confirmed_inflow_60d_minor": 0,
+      "candidate_outflow_60d_minor": 5019746,
+      "aggregate_minimum_after_confirmed_minor": -10491174,
+      "aggregate_minimum_if_candidates_minor": -15510920
+    }
+  },
+  "limits": [
+    "合成来源，不是真实客户与真实银行；不判模型金融语义。",
+    "金额与资料冻结在本文件写入时；源码与来源变化须另行冻结并复验，不靠修改预期迎合实现。"
+  ],
+  "oracle_revisions": [
+    {
+      "revised_at": "2026-10-06T01:59:27.835543+08:00",
+      "previous_sha256": "c3e33d2ccb03e87f625601934e6d44a69adfc4879267ff8df17af5edf64ec8c9",
+      "reason": "源ledger_accounts含无分录零余额账户；LEFT JOIN补全账户身份，不改现金、资产、负债、预算或预测预期。",
+      "added_zero_accounts": {
+        "tycoon": [
+          {
+            "account_id": "tycoon::cash:operating",
+            "code": "cash:operating",
+            "balance_minor": 0
+          }
+        ],
+        "working_landlady": [
+          {
+            "account_id": "working_landlady::cash:operating",
+            "code": "cash:operating",
+            "balance_minor": 0
+          }
+        ]
+      }
+    }
+  ]
+}

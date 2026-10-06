@@ -1,0 +1,30 @@
+{
+  "schema_version": 2,
+  "source_scope": "public_knowledge",
+  "checked_on": "2026-10-05",
+  "concepts": [
+    {
+      "id": "liquidity",
+      "label": "流动性与到账时间",
+      "views": [
+        "plans"
+      ],
+      "summary": "流动性涉及资产能否较快、以可接受成本变现。具体账户能否按时用钱，还要核对产品条款、赎回申请及结算日期。图谱里的解锁日期并不自动形成现金流入。",
+      "publisher": "美国证券交易委员会 Investor.gov",
+      "url": "https://www.investor.gov/introduction-investing/investing-basics/glossary/liquidity-or-marketability",
+      "scope": "通用投资者教育概念；具体合同以本地原记录为准"
+    },
+    {
+      "id": "diversification",
+      "label": "资产配置与分散",
+      "views": [
+        "wealth",
+        "plans"
+      ],
+      "summary": "资产配置是在股票、债券、现金等资产之间分配投资；适用安排与投资期限、风险承受能力有关。判断个人产品是否重复暴露，还需要各产品底层资产资料，不能只看产品名称或数量。",
+      "publisher": "美国证券交易委员会 Investor.gov",
+      "url": "https://www.investor.gov/introduction-investing/getting-started/asset-allocation",
+      "scope": "通用概念；不构成个人配置方案，也不提供未经核验的穿透比例"
+    }
+  ]
+}

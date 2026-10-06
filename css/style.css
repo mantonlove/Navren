@@ -56,6 +56,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* 六页共用的语言显示门槛。先保留布局，翻译结束后一次显示；脚本失败也不永久白屏。
+   离散的兜底不属于动效，减少动态效果模式下同样保留。 */
+html:not([data-i18n-ready]) body[data-page] {
+  visibility: hidden;
+  animation: navren-i18n-readable-fallback 0s 3s forwards !important;
+}
+@keyframes navren-i18n-readable-fallback { to { visibility: visible; } }
+
 /* ══════════════════════════════════════
    布局：侧边栏 + 主内容
    ══════════════════════════════════════ */

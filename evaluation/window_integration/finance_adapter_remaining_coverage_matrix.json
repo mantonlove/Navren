@@ -1,0 +1,3600 @@
+{
+  "schema": "navren.finance-adapter-remaining.coverage/1",
+  "status": "FROZEN_NOT_RUN",
+  "rows": [
+    {
+      "case_id": "A03_one_shot_offset",
+      "oracle_case_sha256": "3fdba24da78b48d6904c43e28572298c712bf9ea46d7efa209af6bb54ace0cd2",
+      "resolved_input_sha256": "8713222d68061b3d1a5cfa8b1f923f99a87fdff847acb31d0faf27fc6d5bd464",
+      "resolved_input": {
+        "context_ref": "cash_period",
+        "opening_cash_minor": 1000,
+        "closing_cash_minor": 1000,
+        "movements": [
+          {
+            "movement_id": "salary",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "income",
+            "delta_minor": 100,
+            "evidence_ref": "adapter:salary",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "bill",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "expense",
+            "delta_minor": -100,
+            "evidence_ref": "adapter:bill",
+            "source_version": "v1",
+            "related_id": null
+          }
+        ],
+        "supply_forms": [
+          "tuple",
+          "list",
+          "iterator",
+          "generator"
+        ]
+      },
+      "expected_literal": {
+        "status": "calculated",
+        "metrics": {
+          "cash_income": 100,
+          "cash_expenses_gross": 100,
+          "net_cash_expenses": 100,
+          "total_cash_change": 0
+        }
+      },
+      "expected_sha256": "f664feb1445724b9130257c93b496c0721d1278a08aceee1f612be2b060acdfe",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_complete_cash_principal_refund_interest_and_transfer_case",
+          "literal_match": "not_same_literal",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_A03_one_shot_offset",
+      "gap": null,
+      "limits": [
+        "A03 tests JSON-list adapter literal only; tuple/iterator/generator pure-call forms are outside JSON snapshot contract"
+      ]
+    },
+    {
+      "case_id": "A04_complete_true_zero",
+      "oracle_case_sha256": "25a25924abb1e51aa4f96cdf547bcd11c7b1fbca6a3e4338e93c4e07774c6ee2",
+      "resolved_input_sha256": "c229ec1b7ad51790abee7536ac4e5ac2f4da5477b3b3e905e2c97a1d54538d79",
+      "resolved_input": {
+        "context_ref": "cash_period",
+        "opening_cash_minor": 0,
+        "closing_cash_minor": 0,
+        "movements": [],
+        "independent_complete_coverage": true
+      },
+      "expected_literal": {
+        "status": "calculated",
+        "metrics": {
+          "cash_income": 0,
+          "cash_expenses_gross": 0,
+          "total_cash_change": 0
+        }
+      },
+      "expected_sha256": "81281e4e1ac9cffc8d3ecada27f44154aa8130097de4847e8e3aefc13cf8c464",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_true_zero_vs_unknown_coverage",
+          "literal_match": "exact_zero_amounts_different_source",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_A04_complete_true_zero",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "A05_missing_object",
+      "oracle_case_sha256": "847077047b1000d9a77d11358a5825e0069188fdd91a82f6262401079e8dde00",
+      "resolved_input_sha256": "1ae78375325210db3ea72bc8a40f896be01d42680bdc16cd1b8838fcf2761626",
+      "resolved_input": {
+        "context_ref": "point",
+        "components": [
+          {
+            "object_id": "cash",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "as_of": "2026-10-03",
+            "kind": "cash",
+            "amount_minor": 100000,
+            "basis": "ledger_cash_balance",
+            "evidence_ref": "adapter:cash",
+            "source_version": "v1"
+          },
+          {
+            "object_id": "fund",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "as_of": "2026-10-03",
+            "kind": "financial_asset",
+            "amount_minor": 50000,
+            "basis": "market_value",
+            "evidence_ref": "adapter:fund",
+            "source_version": "v1"
+          },
+          {
+            "object_id": "tractor",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "as_of": "2026-10-03",
+            "kind": "nonfinancial_asset",
+            "amount_minor": 200000,
+            "basis": "carrying_value",
+            "evidence_ref": "adapter:tractor",
+            "source_version": "v1"
+          }
+        ],
+        "expected_object_ids": [
+          "cash",
+          "fund",
+          "tractor",
+          "loan"
+        ],
+        "remove_component_id": "loan",
+        "keep_expected_object_ids": true
+      },
+      "expected_literal": {
+        "all_metrics_null": true,
+        "calculation_status": "unavailable",
+        "coverage_gaps_contains": [
+          "missing_or_duplicate_balance_component"
+        ]
+      },
+      "expected_sha256": "7d28cad1968e21c8751694f61b65eb6fce5b0610fe35c37ba4b4a96634888ffd",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_independent_catalog_detects_missing_row",
+          "literal_match": "nearby_missing_object",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_A05_missing_object",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "A06_mixed_currency",
+      "oracle_case_sha256": "c3389cad27880fb6edadca1a070d6a0d059723f3566fa3c51bf52e2e918ee63a",
+      "resolved_input_sha256": "e301df17026c154bfa92be634eb399d8f20b1d24bb29a3520904f3f9e78eec7f",
+      "resolved_input": {
+        "context_ref": "point",
+        "components": [
+          {
+            "object_id": "cash",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "as_of": "2026-10-03",
+            "kind": "cash",
+            "amount_minor": 100000,
+            "basis": "ledger_cash_balance",
+            "evidence_ref": "adapter:cash",
+            "source_version": "v1"
+          },
+          {
+            "object_id": "fund",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "as_of": "2026-10-03",
+            "kind": "financial_asset",
+            "amount_minor": 50000,
+            "basis": "market_value",
+            "evidence_ref": "adapter:fund",
+            "source_version": "v1"
+          },
+          {
+            "object_id": "tractor",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "as_of": "2026-10-03",
+            "kind": "nonfinancial_asset",
+            "amount_minor": 200000,
+            "basis": "carrying_value",
+            "evidence_ref": "adapter:tractor",
+            "source_version": "v1"
+          },
+          {
+            "object_id": "loan",
+            "subject_id": "fixture-A",
+            "currency": "USD",
+            "as_of": "2026-10-03",
+            "kind": "liability",
+            "amount_minor": 80000,
+            "basis": "outstanding_principal",
+            "evidence_ref": "adapter:loan",
+            "source_version": "v1"
+          }
+        ],
+        "expected_object_ids": [
+          "cash",
+          "fund",
+          "tractor",
+          "loan"
+        ]
+      },
+      "expected_literal": {
+        "all_metrics_null": true,
+        "calculation_status": "unavailable",
+        "coverage_gaps_contains": [
+          "balance_component_identity_mismatch"
+        ]
+      },
+      "expected_sha256": "003b28d45483ea60adcfffc3f0061b6c04ca94da2d72b10c634418f6769df704",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_same_source_time_and_currency_counterexamples",
+          "literal_match": "different_component_cash_vs_loan",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_A06_mixed_currency",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "A07_incomplete_period",
+      "oracle_case_sha256": "0f96eb9381b92c7319f36129f6e1fefc0668dd0e58c126a85fdb8fbc2d7dc652",
+      "resolved_input_sha256": "6b3b344e56f5a0fc52348d3d857dc09a018123e48b348f22f69f90fb277ffa8e",
+      "resolved_input": {
+        "context_ref": "cash_period",
+        "opening_cash_minor": 100000,
+        "closing_cash_minor": 121000,
+        "movements": [
+          {
+            "movement_id": "borrow",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_proceeds",
+            "delta_minor": 100000,
+            "evidence_ref": "adapter:borrow",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "repay",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_principal_repayment",
+            "delta_minor": -50000,
+            "evidence_ref": "adapter:repay",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "interest",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_interest",
+            "delta_minor": -1000,
+            "evidence_ref": "adapter:interest",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "bill",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "expense",
+            "delta_minor": -10000,
+            "evidence_ref": "adapter:bill",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "refund",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "refund",
+            "delta_minor": 2000,
+            "evidence_ref": "adapter:refund",
+            "source_version": "v1",
+            "related_id": "bill"
+          },
+          {
+            "movement_id": "buy",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "investment_purchase",
+            "delta_minor": -20000,
+            "evidence_ref": "adapter:buy",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "out",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "internal_transfer",
+            "delta_minor": -10000,
+            "evidence_ref": "adapter:out",
+            "source_version": "v1",
+            "related_id": "pair"
+          },
+          {
+            "movement_id": "in",
+            "subject_id": "fixture-A",
+            "account_id": "wallet",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "internal_transfer",
+            "delta_minor": 10000,
+            "evidence_ref": "adapter:in",
+            "source_version": "v1",
+            "related_id": "pair"
+          }
+        ],
+        "refund_original_verified": true,
+        "refund_original_id": "bill",
+        "context": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "input_refs": [
+            "adapter:fixture"
+          ],
+          "source_versions": [
+            [
+              "fixture",
+              "v1"
+            ]
+          ],
+          "coverage_complete": false,
+          "as_of": null,
+          "period_start": "2026-10-01",
+          "period_end": "2026-10-03"
+        }
+      },
+      "expected_literal": {
+        "all_metrics_null": true,
+        "calculation_status": "unavailable",
+        "coverage_gaps_contains": [
+          "cash_statement_requires_complete_period"
+        ]
+      },
+      "expected_sha256": "7f48a691c03626f8884bd74ee03f6f1d25d94e49610f65c207ef969451d70490",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_true_zero_vs_unknown_coverage",
+          "literal_match": "different_cash_input",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_A07_incomplete_period",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "A08_transfer_missing_leg",
+      "oracle_case_sha256": "b7d480c1d81d5b45b519de53835dc15bd61aae078db61c7b4a584692ddea0de9",
+      "resolved_input_sha256": "870fac5b6de3fa7f8f2de1912c90d51329f8127626a4c17ac242caa0c1a77f87",
+      "resolved_input": {
+        "context_ref": "cash_period",
+        "opening_cash_minor": 100000,
+        "closing_cash_minor": 111000,
+        "movements": [
+          {
+            "movement_id": "borrow",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_proceeds",
+            "delta_minor": 100000,
+            "evidence_ref": "adapter:borrow",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "repay",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_principal_repayment",
+            "delta_minor": -50000,
+            "evidence_ref": "adapter:repay",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "interest",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_interest",
+            "delta_minor": -1000,
+            "evidence_ref": "adapter:interest",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "bill",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "expense",
+            "delta_minor": -10000,
+            "evidence_ref": "adapter:bill",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "refund",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "refund",
+            "delta_minor": 2000,
+            "evidence_ref": "adapter:refund",
+            "source_version": "v1",
+            "related_id": "bill"
+          },
+          {
+            "movement_id": "buy",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "investment_purchase",
+            "delta_minor": -20000,
+            "evidence_ref": "adapter:buy",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "out",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "internal_transfer",
+            "delta_minor": -10000,
+            "evidence_ref": "adapter:out",
+            "source_version": "v1",
+            "related_id": "pair"
+          }
+        ],
+        "refund_original_verified": true,
+        "refund_original_id": "bill",
+        "remove_movement_id": "in"
+      },
+      "expected_literal": {
+        "all_metrics_null": true,
+        "calculation_status": "unavailable",
+        "coverage_gaps_contains": [
+          "incomplete_internal_transfer_pair"
+        ]
+      },
+      "expected_sha256": "9cca232cce3b13fd4eabd0c7b2410bc3555836ccb91463974af90e0d09952645",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_cash_catalog_cannot_be_inferred_from_residual_rows",
+          "literal_match": "nearby_catalog_gap",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_A08_transfer_missing_leg",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "A09_cash_not_reconciled",
+      "oracle_case_sha256": "6e6b91bc18b7291c84cf8f6c710f4c9aa24d13ba5260356752fd35762afe10c9",
+      "resolved_input_sha256": "3b480e78c77f0d51a1c57156e71a8eed100a40e914e5b7b78c8d50ab7cbdbf97",
+      "resolved_input": {
+        "context_ref": "cash_period",
+        "opening_cash_minor": 100000,
+        "closing_cash_minor": 122000,
+        "movements": [
+          {
+            "movement_id": "borrow",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_proceeds",
+            "delta_minor": 100000,
+            "evidence_ref": "adapter:borrow",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "repay",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_principal_repayment",
+            "delta_minor": -50000,
+            "evidence_ref": "adapter:repay",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "interest",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_interest",
+            "delta_minor": -1000,
+            "evidence_ref": "adapter:interest",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "bill",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "expense",
+            "delta_minor": -10000,
+            "evidence_ref": "adapter:bill",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "refund",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "refund",
+            "delta_minor": 2000,
+            "evidence_ref": "adapter:refund",
+            "source_version": "v1",
+            "related_id": "bill"
+          },
+          {
+            "movement_id": "buy",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "investment_purchase",
+            "delta_minor": -20000,
+            "evidence_ref": "adapter:buy",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "out",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "internal_transfer",
+            "delta_minor": -10000,
+            "evidence_ref": "adapter:out",
+            "source_version": "v1",
+            "related_id": "pair"
+          },
+          {
+            "movement_id": "in",
+            "subject_id": "fixture-A",
+            "account_id": "wallet",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "internal_transfer",
+            "delta_minor": 10000,
+            "evidence_ref": "adapter:in",
+            "source_version": "v1",
+            "related_id": "pair"
+          }
+        ],
+        "refund_original_verified": true,
+        "refund_original_id": "bill"
+      },
+      "expected_literal": {
+        "all_metrics_null": true,
+        "calculation_status": "unavailable",
+        "coverage_gaps_contains": [
+          "cash_reconciliation_failed"
+        ]
+      },
+      "expected_sha256": "e0e7cfce636e61f0f2dd316ce877be2eb8744b1e9afec18598c99105e577570c",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_complete_cash_principal_refund_interest_and_transfer_case",
+          "literal_match": "no_exact_failed_boundary",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_A09_cash_not_reconciled",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "A10_refund_unverified_original",
+      "oracle_case_sha256": "f51705ef635a6f98b8644f1585c90cf1b130012e2d211a60bf44f47966fdfbf2",
+      "resolved_input_sha256": "2aaf5a7e9b0392e07d229af12a064bd2b188ad5af9043a9a1579863c98cf17c7",
+      "resolved_input": {
+        "context_ref": "cash_period",
+        "opening_cash_minor": 100000,
+        "closing_cash_minor": 121000,
+        "movements": [
+          {
+            "movement_id": "borrow",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_proceeds",
+            "delta_minor": 100000,
+            "evidence_ref": "adapter:borrow",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "repay",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_principal_repayment",
+            "delta_minor": -50000,
+            "evidence_ref": "adapter:repay",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "interest",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "loan_interest",
+            "delta_minor": -1000,
+            "evidence_ref": "adapter:interest",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "bill",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "expense",
+            "delta_minor": -10000,
+            "evidence_ref": "adapter:bill",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "refund",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "refund",
+            "delta_minor": 2000,
+            "evidence_ref": "adapter:refund",
+            "source_version": "v1",
+            "related_id": "nonexistent-expense"
+          },
+          {
+            "movement_id": "buy",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "investment_purchase",
+            "delta_minor": -20000,
+            "evidence_ref": "adapter:buy",
+            "source_version": "v1",
+            "related_id": null
+          },
+          {
+            "movement_id": "out",
+            "subject_id": "fixture-A",
+            "account_id": "bank",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "internal_transfer",
+            "delta_minor": -10000,
+            "evidence_ref": "adapter:out",
+            "source_version": "v1",
+            "related_id": "pair"
+          },
+          {
+            "movement_id": "in",
+            "subject_id": "fixture-A",
+            "account_id": "wallet",
+            "currency": "CNY",
+            "on": "2026-10-02",
+            "kind": "internal_transfer",
+            "delta_minor": 10000,
+            "evidence_ref": "adapter:in",
+            "source_version": "v1",
+            "related_id": "pair"
+          }
+        ],
+        "refund_original_verified": false,
+        "refund_original_id": "bill"
+      },
+      "expected_literal": {
+        "calculation_status": "unavailable",
+        "required_reason_semantics": "原费用及退款关联未核验",
+        "forbidden": [
+          "仅凭related_id非空签署净费用事实"
+        ]
+      },
+      "expected_sha256": "dc42f959e19637b6564319bd3abf3720461dee446ef5e89d2a6cb4adeb7d6ea8",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_refund_wrong_owner_original_fee_and_cumulative_excess_unavailable",
+          "literal_match": "different_identity_corruption",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_A10_refund_unverified_original",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B02_internal_settlement",
+      "oracle_case_sha256": "7e77b428f4f7372257c7ba91038a4e7f2ba513147508f2b80208f15508adac2f",
+      "resolved_input_sha256": "cda63ceaa58a50c8faedfab73d9d3a8e968a6803437c50f0babcf75170e6ad08",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "opening": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "on": "2026-10-06",
+          "holdings": [
+            {
+              "instrument_id": "P/share",
+              "currency": "CNY",
+              "quantity": "100",
+              "unit_price": "1.00"
+            }
+          ],
+          "expected_instrument_ids": [
+            "P/share"
+          ],
+          "cash_minor": 2000,
+          "receivables_minor": 6000,
+          "payables_minor": 200,
+          "coverage_complete": true
+        },
+        "closing": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "on": "2026-11-06",
+          "holdings": [
+            {
+              "instrument_id": "P/share",
+              "currency": "CNY",
+              "quantity": "100",
+              "unit_price": "1.02"
+            }
+          ],
+          "expected_instrument_ids": [
+            "P/share"
+          ],
+          "cash_minor": 7800,
+          "receivables_minor": 0,
+          "payables_minor": 0,
+          "coverage_complete": true
+        },
+        "owner_contributions_minor": 0,
+        "owner_withdrawals_minor": 0
+      },
+      "expected_literal": {
+        "period_pnl": 200,
+        "calculation_status": "calculated"
+      },
+      "expected_sha256": "de834c64058cf604c9dac33f28a7f27ffd1a63063df5df23db01b3076f994d88",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_internal_settlement_is_only_200_profit",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B02_internal_settlement",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B04_ex_dividend",
+      "oracle_case_sha256": "53c4263b8b9cbf8e35d3f60addd1fcd04b929e7d3bdee6eaba4369106c88531e",
+      "resolved_input_sha256": "c2a439a428bba816c5759ca53c24285ec04045b5a93d2452e1cbd7bd302b30b9",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "opening": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "instrument_id": "P/share",
+          "on": "2026-10-06",
+          "quantity": "100",
+          "remaining_cost_minor": 11000,
+          "cash_minor": 20000,
+          "payables_minor": 0,
+          "dividend_receivables": [],
+          "unit_price": "1.10"
+        },
+        "events": [
+          {
+            "event_id": "dividend",
+            "sequence": 1,
+            "on": "2026-10-07",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "dividend_declared",
+            "quantity": null,
+            "gross_minor": 1000,
+            "fee_minor": 0,
+            "fee_id": null,
+            "fee_basis": null,
+            "dividend_id": "D",
+            "split_factor": null
+          }
+        ],
+        "coverage": {
+          "period_start": "2026-10-06",
+          "period_end": "2026-11-06",
+          "expected_event_ids": [
+            "dividend"
+          ],
+          "first_sequence": 1,
+          "transactions_complete": true,
+          "entitlements_complete": true,
+          "corporate_actions_complete": true,
+          "fees_complete": true,
+          "cost_method": "moving_average"
+        },
+        "closing_unit_price": "1.00"
+      },
+      "expected_literal": {
+        "period_pnl": 0,
+        "closing_dividend_receivables": 1000,
+        "recognized_dividend_income": 1000
+      },
+      "expected_sha256": "ecb510e01fbb9d3c18a9b57d38e602115e25476a75b64c6d6281175a374ccf38",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_ex_dividend_is_not_a_loss_and_split_is_not_profit",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B04_ex_dividend",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B05_split_no_profit",
+      "oracle_case_sha256": "751b2091fc92a1b0b068b0a042ea33838677d30dc985a3bd52b82eb9888d3de1",
+      "resolved_input_sha256": "4b902e8550b9c547794d74297b3c89d917bed0803fd82cade4e728be700ab373",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "opening": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "instrument_id": "P/share",
+          "on": "2026-10-06",
+          "quantity": "100",
+          "remaining_cost_minor": 20000,
+          "cash_minor": 20000,
+          "payables_minor": 0,
+          "dividend_receivables": [],
+          "unit_price": "2.00"
+        },
+        "events": [
+          {
+            "event_id": "split",
+            "sequence": 1,
+            "on": "2026-10-07",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "split",
+            "quantity": null,
+            "gross_minor": null,
+            "fee_minor": null,
+            "fee_id": null,
+            "fee_basis": null,
+            "dividend_id": null,
+            "split_factor": "2"
+          }
+        ],
+        "coverage": {
+          "period_start": "2026-10-06",
+          "period_end": "2026-11-06",
+          "expected_event_ids": [
+            "split"
+          ],
+          "first_sequence": 1,
+          "transactions_complete": true,
+          "entitlements_complete": true,
+          "corporate_actions_complete": true,
+          "fees_complete": true,
+          "cost_method": "moving_average"
+        },
+        "closing_unit_price": "1.00"
+      },
+      "expected_literal": {
+        "quantity_decimal": "200",
+        "remaining_cost": 20000,
+        "period_pnl": 0
+      },
+      "expected_sha256": "da6d34f6050d8a93535bb189a69d09bc85e4e3e65bc2addab6d0a1afac08281a",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_ex_dividend_is_not_a_loss_and_split_is_not_profit",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B05_split_no_profit",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B06_opening_gain_not_period_gain",
+      "oracle_case_sha256": "00975cdbd6cfd86cb3528eeaa142ae41ddd606d704cda7f657d718399daf04e7",
+      "resolved_input_sha256": "f0344dccf6fe752afce26ce942369e252a8730dc29537b86349a5503e0425555",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "opening": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "instrument_id": "P/share",
+          "on": "2026-10-06",
+          "quantity": "100",
+          "remaining_cost_minor": 10000,
+          "cash_minor": 0,
+          "payables_minor": 0,
+          "dividend_receivables": [],
+          "unit_price": "1.20"
+        },
+        "events": [],
+        "coverage": {
+          "period_start": "2026-10-06",
+          "period_end": "2026-11-06",
+          "expected_event_ids": [],
+          "first_sequence": 1,
+          "transactions_complete": true,
+          "entitlements_complete": true,
+          "corporate_actions_complete": true,
+          "fees_complete": true,
+          "cost_method": "moving_average"
+        },
+        "closing_unit_price": "1.30"
+      },
+      "expected_literal": {
+        "unrealized_pnl": 3000,
+        "period_pnl": 1000
+      },
+      "expected_sha256": "64357e96f289be55a92e7da9ab5bfdf5a821c1e736bc43e75024ceadbf1b0532",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_stock_unrealized_gain_is_not_period_gain",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B06_opening_gain_not_period_gain",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B07_nav_embedded_fee",
+      "oracle_case_sha256": "4a20c55e0115517f45492ef0c403fc61adc1ff8269733811744914e501e52170",
+      "resolved_input_sha256": "8b06d9269172b9a66c24d1fd8a2d8bb041073ab8517814167e84e3788f021ea1",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "opening": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "instrument_id": "P/share",
+          "on": "2026-10-06",
+          "quantity": "100",
+          "remaining_cost_minor": 10000,
+          "cash_minor": 20000,
+          "payables_minor": 0,
+          "dividend_receivables": [],
+          "unit_price": "1.00"
+        },
+        "events": [
+          {
+            "event_id": "embedded",
+            "sequence": 1,
+            "on": "2026-10-07",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "fee",
+            "quantity": null,
+            "gross_minor": 100,
+            "fee_minor": null,
+            "fee_id": "management",
+            "fee_basis": "nav_embedded",
+            "dividend_id": null,
+            "split_factor": null
+          }
+        ],
+        "coverage": {
+          "period_start": "2026-10-06",
+          "period_end": "2026-11-06",
+          "expected_event_ids": [
+            "embedded"
+          ],
+          "first_sequence": 1,
+          "transactions_complete": true,
+          "entitlements_complete": true,
+          "corporate_actions_complete": true,
+          "fees_complete": true,
+          "cost_method": "moving_average"
+        },
+        "closing_unit_price": "0.99"
+      },
+      "expected_literal": {
+        "closing_cash": 20000,
+        "external_fee_expense": 0,
+        "period_pnl": -100,
+        "excluded_contains_fee_id": "management"
+      },
+      "expected_sha256": "a9e55c9539dc29de650335dd813f69cf3685b86f3084aee9838c0fe0726ed2d3",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_nav_embedded_fee_is_not_charged_twice",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B07_nav_embedded_fee",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B09_unknown_quantity",
+      "oracle_case_sha256": "9cdf8336f0dc19a64d6d9a0714ecef387da23b3be32819a68ef0fde414e62632",
+      "resolved_input_sha256": "218c160732424e4c3d92ffe19f884da8c16e5e9fd371d1aa5411387450bae861",
+      "resolved_input": {
+        "context_ref": "returns_point_open",
+        "snapshot": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "on": "2026-10-06",
+          "holdings": [
+            {
+              "instrument_id": "P/share",
+              "currency": "CNY",
+              "quantity": null,
+              "unit_price": "1.00"
+            }
+          ],
+          "expected_instrument_ids": [
+            "P/share"
+          ],
+          "cash_minor": 2000,
+          "receivables_minor": 6000,
+          "payables_minor": 200,
+          "coverage_complete": true
+        }
+      },
+      "expected_literal": {
+        "portfolio_equity": null,
+        "holdings_market_value": null,
+        "calculation_status": "unavailable",
+        "coverage_gaps_contains": [
+          "quantity_missing:P/share"
+        ]
+      },
+      "expected_sha256": "4e69a737f66a0fa10cba17d6fccd74a920ec301fa871a6698f6106f3bba95bf5",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_missing_quantity_is_not_cost_divided_by_price_or_zero",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B09_unknown_quantity",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B10_missing_closing_price",
+      "oracle_case_sha256": "ed8b2c2d8b8fee833cc7d05d4d3edcbf734f62800797ec943c73d4e17cff3401",
+      "resolved_input_sha256": "50aa1c9e8203457f845e1b8616486a129178d4ffe5afa40489a33f87c6deaa66",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "opening": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "instrument_id": "P/share",
+          "on": "2026-10-06",
+          "quantity": "100",
+          "remaining_cost_minor": 10000,
+          "cash_minor": 20000,
+          "payables_minor": 0,
+          "dividend_receivables": [],
+          "unit_price": "1.00"
+        },
+        "events": [
+          {
+            "event_id": "buy",
+            "sequence": 1,
+            "on": "2026-10-07",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "buy",
+            "quantity": "100",
+            "gross_minor": 12000,
+            "fee_minor": 100,
+            "fee_id": "buy-fee",
+            "fee_basis": "external",
+            "dividend_id": null,
+            "split_factor": null
+          },
+          {
+            "event_id": "sale",
+            "sequence": 2,
+            "on": "2026-10-08",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "sell",
+            "quantity": "40",
+            "gross_minor": 5200,
+            "fee_minor": 50,
+            "fee_id": "sale-fee",
+            "fee_basis": "external",
+            "dividend_id": null,
+            "split_factor": null
+          },
+          {
+            "event_id": "dividend",
+            "sequence": 3,
+            "on": "2026-10-09",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "dividend_declared",
+            "quantity": null,
+            "gross_minor": 500,
+            "fee_minor": 0,
+            "fee_id": null,
+            "fee_basis": null,
+            "dividend_id": "D",
+            "split_factor": null
+          },
+          {
+            "event_id": "settle",
+            "sequence": 4,
+            "on": "2026-10-10",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "dividend_settled",
+            "quantity": null,
+            "gross_minor": null,
+            "fee_minor": null,
+            "fee_id": null,
+            "fee_basis": null,
+            "dividend_id": "D",
+            "split_factor": null
+          }
+        ],
+        "coverage": {
+          "period_start": "2026-10-06",
+          "period_end": "2026-11-06",
+          "expected_event_ids": [
+            "buy",
+            "sale",
+            "dividend",
+            "settle"
+          ],
+          "first_sequence": 1,
+          "transactions_complete": true,
+          "entitlements_complete": true,
+          "corporate_actions_complete": true,
+          "fees_complete": true,
+          "cost_method": "moving_average"
+        },
+        "closing_unit_price": null
+      },
+      "expected_literal": {
+        "quantity_decimal": "160",
+        "report_calculation_status": "partial",
+        "known_metrics": {
+          "remaining_cost": 17680,
+          "closing_cash": 13550,
+          "realized_sale_pnl": 730,
+          "recognized_dividend_income": 500
+        },
+        "null_metrics": [
+          "closing_holdings_value",
+          "closing_equity",
+          "unrealized_pnl",
+          "period_pnl"
+        ],
+        "null_metric_status": "unavailable",
+        "coverage_gaps_contains": [
+          "closing_price_missing"
+        ]
+      },
+      "expected_sha256": "d19ce25b5cd7eaeee0f2e9ef1888f71bd4b7266bec3558b3e6ac381a8c491e65",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_missing_closing_price_keeps_only_independent_known_history",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B10_missing_closing_price",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B11_incomplete_corporate_actions",
+      "oracle_case_sha256": "a89ed802109ff8915fb5854a72320d364c31eacc351829050b60b9076329fcdd",
+      "resolved_input_sha256": "04cd748aaccd09c7c1888c50984aff121b85be966ad2923d4e94cb209cbef51f",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "opening": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "instrument_id": "P/share",
+          "on": "2026-10-06",
+          "quantity": "100",
+          "remaining_cost_minor": 10000,
+          "cash_minor": 20000,
+          "payables_minor": 0,
+          "dividend_receivables": [],
+          "unit_price": "1.00"
+        },
+        "events": [
+          {
+            "event_id": "buy",
+            "sequence": 1,
+            "on": "2026-10-07",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "buy",
+            "quantity": "100",
+            "gross_minor": 12000,
+            "fee_minor": 100,
+            "fee_id": "buy-fee",
+            "fee_basis": "external",
+            "dividend_id": null,
+            "split_factor": null
+          },
+          {
+            "event_id": "sale",
+            "sequence": 2,
+            "on": "2026-10-08",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "sell",
+            "quantity": "40",
+            "gross_minor": 5200,
+            "fee_minor": 50,
+            "fee_id": "sale-fee",
+            "fee_basis": "external",
+            "dividend_id": null,
+            "split_factor": null
+          },
+          {
+            "event_id": "dividend",
+            "sequence": 3,
+            "on": "2026-10-09",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "dividend_declared",
+            "quantity": null,
+            "gross_minor": 500,
+            "fee_minor": 0,
+            "fee_id": null,
+            "fee_basis": null,
+            "dividend_id": "D",
+            "split_factor": null
+          },
+          {
+            "event_id": "settle",
+            "sequence": 4,
+            "on": "2026-10-10",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "dividend_settled",
+            "quantity": null,
+            "gross_minor": null,
+            "fee_minor": null,
+            "fee_id": null,
+            "fee_basis": null,
+            "dividend_id": "D",
+            "split_factor": null
+          }
+        ],
+        "coverage": {
+          "period_start": "2026-10-06",
+          "period_end": "2026-11-06",
+          "expected_event_ids": [
+            "buy",
+            "sale",
+            "dividend",
+            "settle"
+          ],
+          "first_sequence": 1,
+          "transactions_complete": true,
+          "entitlements_complete": true,
+          "corporate_actions_complete": false,
+          "fees_complete": true,
+          "cost_method": "moving_average"
+        },
+        "closing_unit_price": "1.40"
+      },
+      "expected_literal": {
+        "quantity_decimal": null,
+        "all_history_metrics_null": true,
+        "report_calculation_status": "unavailable",
+        "coverage_gaps_contains": [
+          "corporate_actions_complete_required"
+        ]
+      },
+      "expected_sha256": "292d6be48f1b459c2f46b5d9b0a6f8ac90cb0e3c9a20800e7efc85b0501d44f1",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_missing_corporate_action_coverage_and_duplicate_fee_are_unavailable",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B11_incomplete_corporate_actions",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B12_duplicate_fee",
+      "oracle_case_sha256": "d2ebe47a488c21f3100e61a6c1d6f322bffbeae158634895466c8ad46ea6bb7e",
+      "resolved_input_sha256": "70527d1404a9f022848b4c387dda25d5daacb04a414f6eaddd6a84bdfed784b5",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "opening": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "instrument_id": "P/share",
+          "on": "2026-10-06",
+          "quantity": "100",
+          "remaining_cost_minor": 10000,
+          "cash_minor": 20000,
+          "payables_minor": 0,
+          "dividend_receivables": [],
+          "unit_price": "1.00"
+        },
+        "events": [
+          {
+            "event_id": "buy",
+            "sequence": 1,
+            "on": "2026-10-07",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "buy",
+            "quantity": "100",
+            "gross_minor": 12000,
+            "fee_minor": 100,
+            "fee_id": "buy-fee",
+            "fee_basis": "external",
+            "dividend_id": null,
+            "split_factor": null
+          },
+          {
+            "event_id": "sale",
+            "sequence": 2,
+            "on": "2026-10-08",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "sell",
+            "quantity": "40",
+            "gross_minor": 5200,
+            "fee_minor": 50,
+            "fee_id": "buy-fee",
+            "fee_basis": "external",
+            "dividend_id": null,
+            "split_factor": null
+          },
+          {
+            "event_id": "dividend",
+            "sequence": 3,
+            "on": "2026-10-09",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "dividend_declared",
+            "quantity": null,
+            "gross_minor": 500,
+            "fee_minor": 0,
+            "fee_id": null,
+            "fee_basis": null,
+            "dividend_id": "D",
+            "split_factor": null
+          },
+          {
+            "event_id": "settle",
+            "sequence": 4,
+            "on": "2026-10-10",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "instrument_id": "P/share",
+            "kind": "dividend_settled",
+            "quantity": null,
+            "gross_minor": null,
+            "fee_minor": null,
+            "fee_id": null,
+            "fee_basis": null,
+            "dividend_id": "D",
+            "split_factor": null
+          }
+        ],
+        "coverage": {
+          "period_start": "2026-10-06",
+          "period_end": "2026-11-06",
+          "expected_event_ids": [
+            "buy",
+            "sale",
+            "dividend",
+            "settle"
+          ],
+          "first_sequence": 1,
+          "transactions_complete": true,
+          "entitlements_complete": true,
+          "corporate_actions_complete": true,
+          "fees_complete": true,
+          "cost_method": "moving_average"
+        },
+        "closing_unit_price": "1.40"
+      },
+      "expected_literal": {
+        "all_history_metrics_null": true,
+        "report_calculation_status": "unavailable",
+        "coverage_gaps_contains": [
+          "duplicate_or_missing_fee_identity"
+        ]
+      },
+      "expected_sha256": "e3120dde37da708e70f08b991d41bdc015301df4cb2b9a207c3503b6f9782981",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_missing_corporate_action_coverage_and_duplicate_fee_are_unavailable",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B12_duplicate_fee",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B13_simple_return_with_flow",
+      "oracle_case_sha256": "fd74ca0161ba3efd3f842675c4b4e18faaf8e53c47c81d237c805cdbe3c46fc8",
+      "resolved_input_sha256": "221e70c2ec3c0d0165a85f8da4033fbaac6188e7d3da8c656d8fdebb6f98bf2f",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "opening_equity_minor": 10000,
+        "closing_equity_minor": 20000,
+        "owner_contributions_minor": 10000,
+        "owner_withdrawals_minor": 0
+      },
+      "expected_literal": {
+        "unit": "ratio",
+        "value_decimal": null,
+        "calculation_status": "unavailable",
+        "coverage_gaps_contains": [
+          "cashflows_require_subperiod_valuations"
+        ]
+      },
+      "expected_sha256": "05db41530ca849fd620182b9f989bf8346c8829887f58ae7f10a8aab22d9c37b",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_simple_return_with_any_owner_flow_is_unavailable",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B13_simple_return_with_flow",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "B14_twr_boundary_mismatch",
+      "oracle_case_sha256": "e72db563f84e2058a28cca132d6dc747bb14df1d41812695d965610673fc3946",
+      "resolved_input_sha256": "e2e851b07574b60135875195c608189071f52b263917aca5076ad34c6bb0b78a",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "subperiods": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "start": "2026-10-06",
+            "end": "2026-10-20",
+            "opening_equity_minor": 10000,
+            "closing_equity_minor": 10500,
+            "internal_contributions_minor": 0,
+            "internal_withdrawals_minor": 0
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "start": "2026-10-20",
+            "end": "2026-11-06",
+            "opening_equity_minor": 20501,
+            "closing_equity_minor": 19475,
+            "internal_contributions_minor": 0,
+            "internal_withdrawals_minor": 0
+          }
+        ],
+        "boundaries": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "on": "2026-10-20",
+            "contribution_minor": 10000,
+            "withdrawal_minor": 0
+          }
+        ]
+      },
+      "expected_literal": {
+        "value_decimal": null,
+        "calculation_status": "unavailable",
+        "coverage_gaps_contains": [
+          "boundary_equity_does_not_reconcile"
+        ]
+      },
+      "expected_sha256": "0090999515475cf340d2abb4c755cd16a92d6d3c7c4fd6eb84e40315ca75a8e0",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_returns_adapter.py",
+          "test": "test_twr_boundary_mismatch_and_missing_boundary_have_no_ratio",
+          "literal_match": "matching_amount_or_gap_literals; other oracle source must not be substituted",
+          "chain": "pure returns_report; no signature/Gateway/Observer/Registry/final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_B14_twr_boundary_mismatch",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "C05_negative_budget",
+      "oracle_case_sha256": "1f493b7b38eeeeee302af461f6e938ebfe91b86640d6bdccd87f6c888ac6f73d",
+      "resolved_input_sha256": "9e038d53db5b2438b41d69fc9b4a59bfc830c6c28eac47097f3114432bd4d29a",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": -10491174,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "invest",
+            "amount_minor": 300000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:invest"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "identity_verified": true,
+            "current_sale_verified": true,
+            "terms_complete": true,
+            "risk_level": 1,
+            "minimum_minor": 1,
+            "step_minor": 1,
+            "entry_fixed_minor": 0,
+            "entry_rate": "0.01",
+            "exit_fixed_minor": 0,
+            "exit_rate": "0",
+            "fee_rounding": "half_up",
+            "fee_basis": "allocated_principal",
+            "exit_available_on": "2026-11-01",
+            "evidence_as_of": "2026-10-06",
+            "valid_through": "2026-10-06",
+            "input_refs": [
+              "adapter:terms"
+            ],
+            "source_versions": [
+              [
+                "terms",
+                "v1"
+              ]
+            ]
+          }
+        ],
+        "risk": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "level": 2,
+          "confirmed": true,
+          "effective_on": "2026-10-06",
+          "valid_through": "2027-10-06",
+          "input_refs": [
+            "adapter:formal-risk"
+          ],
+          "source_versions": [
+            [
+              "risk",
+              "v1"
+            ]
+          ]
+        }
+      },
+      "expected_literal": {
+        "plans": [
+          {
+            "plan_id": "retain_cash",
+            "calculation_status": "infeasible",
+            "feasibility": "infeasible",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "negative_floor_surplus"
+            ],
+            "execution_authority": false
+          },
+          {
+            "plan_id": "confirmed_uses",
+            "calculation_status": "infeasible",
+            "feasibility": "infeasible",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "negative_floor_surplus"
+            ],
+            "execution_authority": false
+          }
+        ]
+      },
+      "expected_sha256": "94a5f128a4522a8e932c0f034c85c41454a4fd6f44937ea0bb19821ba472cb48",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_negative_funds_not_clamped_and_both_infeasible",
+          "literal_match": "different_negative_-10000",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_C05_negative_budget",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "C06_unknown_budget",
+      "oracle_case_sha256": "f632cb796dfa45d7f1ffe05e9e47fbfe30e78e7c83ff93a9fb0728f4c4dd7303",
+      "resolved_input_sha256": "595f18230ac66122fe9398fd26ccf7912faace18017cd898d00ac514b19688ad",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": null,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "invest",
+            "amount_minor": 300000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:invest"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "identity_verified": true,
+            "current_sale_verified": true,
+            "terms_complete": true,
+            "risk_level": 1,
+            "minimum_minor": 1,
+            "step_minor": 1,
+            "entry_fixed_minor": 0,
+            "entry_rate": "0.01",
+            "exit_fixed_minor": 0,
+            "exit_rate": "0",
+            "fee_rounding": "half_up",
+            "fee_basis": "allocated_principal",
+            "exit_available_on": "2026-11-01",
+            "evidence_as_of": "2026-10-06",
+            "valid_through": "2026-10-06",
+            "input_refs": [
+              "adapter:terms"
+            ],
+            "source_versions": [
+              [
+                "terms",
+                "v1"
+              ]
+            ]
+          }
+        ],
+        "risk": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "level": 2,
+          "confirmed": true,
+          "effective_on": "2026-10-06",
+          "valid_through": "2027-10-06",
+          "input_refs": [
+            "adapter:formal-risk"
+          ],
+          "source_versions": [
+            [
+              "risk",
+              "v1"
+            ]
+          ]
+        },
+        "funds_calculation_status": "unavailable",
+        "funds_coverage_gaps": [
+          "missing_balance"
+        ]
+      },
+      "expected_literal": {
+        "plans": [
+          {
+            "plan_id": "retain_cash",
+            "calculation_status": "unavailable",
+            "feasibility": "pending_dependencies",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "funds_not_calculated"
+            ],
+            "execution_authority": false
+          },
+          {
+            "plan_id": "confirmed_uses",
+            "calculation_status": "unavailable",
+            "feasibility": "pending_dependencies",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "funds_not_calculated"
+            ],
+            "execution_authority": false
+          }
+        ]
+      },
+      "expected_sha256": "2314f88803e06fba25a19b9ec8019e1445c1669246d4494ad89d26ca04ee3e08",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_missing_goals_or_priority_and_mixed_missing_risk_whole_use_unavailable",
+          "literal_match": "different_dependency",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "uncovered",
+      "execution_status": "NOT_RUN",
+      "new_test": null,
+      "gap": "FinancialMetrics.snapshot先对非空银行余额求和；未接入能合法发行missing_balance/null预算的缺项来源合同。不得替换issuance或将其他未知原因冒充missing_balance。",
+      "limits": []
+    },
+    {
+      "case_id": "C07_occupied_once",
+      "oracle_case_sha256": "757d8821a65285c4c018fab4155a424dd8dc3835dc4cbb9fff9794ac716e3308",
+      "resolved_input_sha256": "472ef8e14f192e986e8c2122e48c66a0e34c52f91d0c57397026a6500641bd67",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 70000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "G",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:G"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ],
+              [
+                "hold-1",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 30000,
+            "occupancy_refs": [
+              "hold-1"
+            ],
+            "occupancy_verified_in_baseline": true
+          }
+        ],
+        "products": [],
+        "risk": null
+      },
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "calculated",
+          "feasibility": "feasible",
+          "metrics": {
+            "investment_principal": 0,
+            "assigned_cash": 70000,
+            "entry_fees": 0,
+            "exit_fee_reserve": 0,
+            "remaining_cash": 70000,
+            "unassigned_cash": 0
+          },
+          "conservation_difference_minor": 0,
+          "cash_partition_difference_minor": 0,
+          "future_proceeds_minor": null,
+          "execution_authority": false
+        },
+        "allocation_amount_minor": 70000,
+        "already_occupied_minor": 30000,
+        "occupancy_status": "coverage_only"
+      },
+      "expected_sha256": "2dda2c16508c856e6661e78f9cf9dc1d77c33962192213681108a7e75e71fbb1",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_saved_or_self_claimed_occupancy_not_treated_as_baseline_deduction",
+          "literal_match": "asserts_rejection_different_from_positive_oracle",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "uncovered",
+      "execution_status": "NOT_RUN",
+      "new_test": null,
+      "gap": "allocation_report强制拒绝自报occupancy_verified_in_baseline；尚无fund_holds与goal覆盖的权威基线关联合同。",
+      "limits": []
+    },
+    {
+      "case_id": "C08_reused_occupancy",
+      "oracle_case_sha256": "75cffb17f62f009435298127c278f09136d8260f499a3a5584bc168b1d50ce06",
+      "resolved_input_sha256": "dc94f2be5c8d3069552b8bd59e860e6826100fe2dcfc544897d2ec8f367c8825",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 70000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "G1",
+            "amount_minor": 50000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:G1"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 30000,
+            "occupancy_refs": [
+              "hold-1"
+            ],
+            "occupancy_verified_in_baseline": true
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "G2",
+            "amount_minor": 50000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:G2"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 30000,
+            "occupancy_refs": [
+              "hold-1"
+            ],
+            "occupancy_verified_in_baseline": true
+          }
+        ],
+        "products": [],
+        "risk": null
+      },
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "infeasible",
+          "feasibility": "infeasible",
+          "metrics": {
+            "investment_principal": null,
+            "assigned_cash": null,
+            "entry_fees": null,
+            "exit_fee_reserve": null,
+            "remaining_cash": null,
+            "unassigned_cash": null
+          },
+          "coverage_gaps_contains": [
+            "occupancy_reused:hold-1"
+          ],
+          "execution_authority": false
+        }
+      },
+      "expected_sha256": "40de6c01a4ddb0df90cdd63e153963fba55a2b05d24d93a220c3d60df0b1d5ac",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_saved_or_self_claimed_occupancy_not_treated_as_baseline_deduction",
+          "literal_match": "not_reuse_literal",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "uncovered",
+      "execution_status": "NOT_RUN",
+      "new_test": null,
+      "gap": "依赖C07权威基线关联；当前先判occupancy未核验，不能以近似拒绝冒充occupancy_reused:hold-1。",
+      "limits": []
+    },
+    {
+      "case_id": "C09_priority_shortfall",
+      "oracle_case_sha256": "23a71a04e7fbc4f7c906a1bb07d3c9a5975a053ccd9f6fc86cf7b74da92f5f8c",
+      "resolved_input_sha256": "8833b8d0961c7b6eb596e044823628abb79ea73472c26b55e6d1ce8b5c38295a",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 100000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "c",
+            "amount_minor": 1000,
+            "priority": 2,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:c"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "b",
+            "amount_minor": 50000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:b"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "a",
+            "amount_minor": 60000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:a"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [],
+        "risk": null
+      },
+      "expected_literal": {
+        "confirmed_uses": {
+          "calculation_status": "partial",
+          "feasibility": "infeasible",
+          "allocation_goal_ids": [
+            "a"
+          ],
+          "metrics": {
+            "investment_principal": 0,
+            "assigned_cash": 60000,
+            "entry_fees": 0,
+            "exit_fee_reserve": 0,
+            "remaining_cash": 100000,
+            "unassigned_cash": 40000
+          },
+          "coverage_gaps_contains": [
+            "priority_group_budget_shortfall:1"
+          ],
+          "conservation_difference_minor": 0,
+          "cash_partition_difference_minor": 0
+        },
+        "goal_c_status": "blocked_by_higher_priority"
+      },
+      "expected_sha256": "bc43b0d034ae7e119c53282269b9c689f641f0552a026eb8aa836202a934bbc3",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_shortfall_retains_partial_and_conservation",
+          "literal_match": "nearby_goals",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_C09_priority_shortfall",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "C10_equal_priority_shortfall",
+      "oracle_case_sha256": "130ee515cfcad0d3e26a2251e160e36d34a8929225007857227e1c298503b13a",
+      "resolved_input_sha256": "5c809ca5321e48a3762a0baf53616c31cec45795953bb357df9252d3f44f6f32",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 100000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "a",
+            "amount_minor": 60000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:a"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "b",
+            "amount_minor": 60000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:b"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [],
+        "risk": null,
+        "repeat_orders": [
+          "a,b",
+          "b,a"
+        ]
+      },
+      "expected_literal": {
+        "confirmed_uses": {
+          "calculation_status": "partial",
+          "feasibility": "infeasible",
+          "allocations": [],
+          "metrics": {
+            "investment_principal": 0,
+            "assigned_cash": 0,
+            "entry_fees": 0,
+            "exit_fee_reserve": 0,
+            "remaining_cash": 100000,
+            "unassigned_cash": 100000
+          },
+          "coverage_gaps_contains": [
+            "priority_group_budget_shortfall:1"
+          ]
+        }
+      },
+      "expected_sha256": "deeaca0555f7d40123c487e02e9013f053c83fd6fba8141d16d2ff38b8f8cc69",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_shortfall_retains_partial_and_conservation",
+          "literal_match": "not_equal_priority_permutation",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_C10_equal_priority_shortfall",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "C11_goal_outside_period",
+      "oracle_case_sha256": "b321b16ebd05e2f9bf2d34e0dcbe98117d0b9ad3ddd9b8fb633482cb2471f71d",
+      "resolved_input_sha256": "68de4dbdacea7d90351d154dd0a35b52e34c86f60bba2d836949c55aa955e667",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 500000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-07",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [],
+        "risk": null
+      },
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "infeasible",
+          "feasibility": "infeasible",
+          "metrics": {
+            "investment_principal": null,
+            "assigned_cash": null,
+            "entry_fees": null,
+            "exit_fee_reserve": null,
+            "remaining_cash": null,
+            "unassigned_cash": null
+          },
+          "coverage_gaps_contains": [
+            "goal_outside_funds_period:cash"
+          ],
+          "execution_authority": false
+        }
+      },
+      "expected_sha256": "0f40f3bbe7bc07a2118bc40a042bc183ec68ef340a04bc08f050d83bc3c29722",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_cross_scope_date_and_fee_changes_block_or_change_result",
+          "literal_match": "nearby_goal_date",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_C11_goal_outside_period",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "C12_exit_after_use",
+      "oracle_case_sha256": "22b06de993638607e623cd24ad39cfabf5d78a2ec025c1a7dba1e32c9bef453f",
+      "resolved_input_sha256": "6d9e9dcb96152faade91d5124a603049ea4c501eaf97aed8a07db5895516b84b",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 500000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "invest",
+            "amount_minor": 300000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:invest"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "identity_verified": true,
+            "current_sale_verified": true,
+            "terms_complete": true,
+            "risk_level": 1,
+            "minimum_minor": 1,
+            "step_minor": 1,
+            "entry_fixed_minor": 0,
+            "entry_rate": "0.01",
+            "exit_fixed_minor": 0,
+            "exit_rate": "0",
+            "fee_rounding": "half_up",
+            "fee_basis": "allocated_principal",
+            "exit_available_on": "2026-11-07",
+            "evidence_as_of": "2026-10-06",
+            "valid_through": "2026-10-06",
+            "input_refs": [
+              "adapter:terms"
+            ],
+            "source_versions": [
+              [
+                "terms",
+                "v1"
+              ]
+            ]
+          }
+        ],
+        "risk": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "level": 2,
+          "confirmed": true,
+          "effective_on": "2026-10-06",
+          "valid_through": "2027-10-06",
+          "input_refs": [
+            "adapter:formal-risk"
+          ],
+          "source_versions": [
+            [
+              "risk",
+              "v1"
+            ]
+          ]
+        }
+      },
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "infeasible",
+          "feasibility": "infeasible",
+          "metrics": {
+            "investment_principal": null,
+            "assigned_cash": null,
+            "entry_fees": null,
+            "exit_fee_reserve": null,
+            "remaining_cash": null,
+            "unassigned_cash": null
+          },
+          "coverage_gaps_contains": [
+            "exit_after_use_date:invest"
+          ],
+          "execution_authority": false
+        }
+      },
+      "expected_sha256": "8cdf2db8f842bf228668146dc9b076d8885f503e3bcc60d85bb6cd954e605413",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_cross_scope_date_and_fee_changes_block_or_change_result",
+          "literal_match": "nearby_product_date",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_C12_exit_after_use",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "C13_expired_terms",
+      "oracle_case_sha256": "3dec4878b609eb9f81cbaf22641cfeddfb23ccd225d9b81ef14443345110aeb4",
+      "resolved_input_sha256": "2d29b0816ff064ac97ff238af34c385a4fc49c3ecf032a0f1d2ef0911efcde2f",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 500000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "invest",
+            "amount_minor": 300000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:invest"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "identity_verified": true,
+            "current_sale_verified": true,
+            "terms_complete": true,
+            "risk_level": 1,
+            "minimum_minor": 1,
+            "step_minor": 1,
+            "entry_fixed_minor": 0,
+            "entry_rate": "0.01",
+            "exit_fixed_minor": 0,
+            "exit_rate": "0",
+            "fee_rounding": "half_up",
+            "fee_basis": "allocated_principal",
+            "exit_available_on": "2026-11-01",
+            "evidence_as_of": "2026-10-06",
+            "valid_through": "2026-10-05",
+            "input_refs": [
+              "adapter:terms"
+            ],
+            "source_versions": [
+              [
+                "terms",
+                "v1"
+              ]
+            ]
+          }
+        ],
+        "risk": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "level": 2,
+          "confirmed": true,
+          "effective_on": "2026-10-06",
+          "valid_through": "2027-10-06",
+          "input_refs": [
+            "adapter:formal-risk"
+          ],
+          "source_versions": [
+            [
+              "risk",
+              "v1"
+            ]
+          ]
+        }
+      },
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "unavailable",
+          "feasibility": "pending_dependencies",
+          "metrics": {
+            "investment_principal": null,
+            "assigned_cash": null,
+            "entry_fees": null,
+            "exit_fee_reserve": null,
+            "remaining_cash": null,
+            "unassigned_cash": null
+          },
+          "coverage_gaps_contains": [
+            "product_evidence_not_current:invest"
+          ],
+          "execution_authority": false
+        }
+      },
+      "expected_sha256": "a8a8aac19fd121a58e507d6b1abb5151c89417f84478371fef3c829d7a17b17a",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_cross_scope_date_and_fee_changes_block_or_change_result",
+          "literal_match": "nearby_terms",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_C13_expired_terms",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "C14_simulated_risk_not_formal",
+      "oracle_case_sha256": "dc80ce745e13254902f6836396659cd1927c6232a89269dc58dff5c3db5346d1",
+      "resolved_input_sha256": "93d63f0030dc4ae340524ec4e8d6d0338c5b96d26f08e0acb020cd6ac9e14375",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 500000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "invest",
+            "amount_minor": 300000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:invest"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "identity_verified": true,
+            "current_sale_verified": true,
+            "terms_complete": true,
+            "risk_level": 1,
+            "minimum_minor": 1,
+            "step_minor": 1,
+            "entry_fixed_minor": 0,
+            "entry_rate": "0.01",
+            "exit_fixed_minor": 0,
+            "exit_rate": "0",
+            "fee_rounding": "half_up",
+            "fee_basis": "allocated_principal",
+            "exit_available_on": "2026-11-01",
+            "evidence_as_of": "2026-10-06",
+            "valid_through": "2026-10-06",
+            "input_refs": [
+              "adapter:terms"
+            ],
+            "source_versions": [
+              [
+                "terms",
+                "v1"
+              ]
+            ]
+          }
+        ],
+        "risk": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "level": 2,
+          "confirmed": true,
+          "effective_on": "2026-10-06",
+          "valid_through": "2027-10-06",
+          "input_refs": [
+            "adapter:formal-risk"
+          ],
+          "source_versions": [
+            [
+              "risk",
+              "v1"
+            ]
+          ]
+        },
+        "risk_source": {
+          "configuration_source": "navren_synthetic",
+          "not_real_risk_assessment": true
+        }
+      },
+      "expected_literal": {
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "unavailable",
+          "feasibility": "pending_dependencies",
+          "metrics": {
+            "investment_principal": null,
+            "assigned_cash": null,
+            "entry_fees": null,
+            "exit_fee_reserve": null,
+            "remaining_cash": null,
+            "unassigned_cash": null
+          },
+          "coverage_gaps_contains": [],
+          "execution_authority": false
+        },
+        "required_reason_semantics": "缺正式测评与本人资格来源"
+      },
+      "expected_sha256": "9f0efc86ee60756d066db0fee3565ff9f69eae61b2ea1f0525777cd268539ba1",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_unconnected_native_sources_are_accessible_but_unavailable",
+          "literal_match": "native_missing_all_dependencies_not_same_source",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "uncovered",
+      "execution_status": "NOT_RUN",
+      "new_test": null,
+      "gap": "受信snapshot未提供risk_source来源类型分类合同；沿用C01正式risk会错误接受，测试主动改risk=null会掩盖缺口。原生缺产品/目标路线不能冒充同一C01原件。",
+      "limits": []
+    },
+    {
+      "case_id": "C15_unissued_or_forged_budget",
+      "oracle_case_sha256": "b547c5a634141f459a3ad9fd55588bdb46883a99e147a11bb167fd532f12c075",
+      "resolved_input_sha256": "b0809f4214cbbd7fcd6facafd8b55176330c860383dc8a3be804857ae3a2ebab",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 500000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "invest",
+            "amount_minor": 300000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:invest"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "identity_verified": true,
+            "current_sale_verified": true,
+            "terms_complete": true,
+            "risk_level": 1,
+            "minimum_minor": 1,
+            "step_minor": 1,
+            "entry_fixed_minor": 0,
+            "entry_rate": "0.01",
+            "exit_fixed_minor": 0,
+            "exit_rate": "0",
+            "fee_rounding": "half_up",
+            "fee_basis": "allocated_principal",
+            "exit_available_on": "2026-11-01",
+            "evidence_as_of": "2026-10-06",
+            "valid_through": "2026-10-06",
+            "input_refs": [
+              "adapter:terms"
+            ],
+            "source_versions": [
+              [
+                "terms",
+                "v1"
+              ]
+            ]
+          }
+        ],
+        "risk": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "level": 2,
+          "confirmed": true,
+          "effective_on": "2026-10-06",
+          "valid_through": "2027-10-06",
+          "input_refs": [
+            "adapter:formal-risk"
+          ],
+          "source_versions": [
+            [
+              "risk",
+              "v1"
+            ]
+          ]
+        },
+        "budget_metric_id": "not-issued",
+        "client_value_minor": 500000,
+        "client_formula_id": "funds.current_budget/1"
+      },
+      "expected_literal": {
+        "reject_before_calculation": true,
+        "no_signed_result": true,
+        "required_reason_semantics": "本轮正式预算凭据不存在或不匹配"
+      },
+      "expected_sha256": "270fc64ac7397934701ba9aa67222b972124347932d5dbe08d863cccddddb8b0",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_unissued_client_metric_and_direct_numeric_budget_rejected",
+          "literal_match": "same_rejection_family",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_C15_unissued_or_forged_budget",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "C16_wrong_funds_basis",
+      "oracle_case_sha256": "0e4b5d0c6c2441d3315337ef8137385b3d099fc0827b2b5664af2191f01c772b",
+      "resolved_input_sha256": "ed648ec9f9de487eea9e1aecc5e05e49d6fcbd96a58d107697da8a6d770dee9d",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 500000,
+        "funds_basis": "account_balance",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "invest",
+            "amount_minor": 300000,
+            "priority": 1,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:invest"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "key": {
+              "product_id": "P",
+              "share_class_id": "share",
+              "channel_id": "channel"
+            },
+            "identity_verified": true,
+            "current_sale_verified": true,
+            "terms_complete": true,
+            "risk_level": 1,
+            "minimum_minor": 1,
+            "step_minor": 1,
+            "entry_fixed_minor": 0,
+            "entry_rate": "0.01",
+            "exit_fixed_minor": 0,
+            "exit_rate": "0",
+            "fee_rounding": "half_up",
+            "fee_basis": "allocated_principal",
+            "exit_available_on": "2026-11-01",
+            "evidence_as_of": "2026-10-06",
+            "valid_through": "2026-10-06",
+            "input_refs": [
+              "adapter:terms"
+            ],
+            "source_versions": [
+              [
+                "terms",
+                "v1"
+              ]
+            ]
+          }
+        ],
+        "risk": {
+          "subject_id": "fixture-A",
+          "currency": "CNY",
+          "data_scope": "independent_synthetic",
+          "level": 2,
+          "confirmed": true,
+          "effective_on": "2026-10-06",
+          "valid_through": "2027-10-06",
+          "input_refs": [
+            "adapter:formal-risk"
+          ],
+          "source_versions": [
+            [
+              "risk",
+              "v1"
+            ]
+          ]
+        }
+      },
+      "expected_literal": {
+        "plans": [
+          {
+            "plan_id": "retain_cash",
+            "calculation_status": "infeasible",
+            "feasibility": "infeasible",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "funds_basis_mismatch"
+            ],
+            "execution_authority": false
+          },
+          {
+            "plan_id": "confirmed_uses",
+            "calculation_status": "infeasible",
+            "feasibility": "infeasible",
+            "metrics": {
+              "investment_principal": null,
+              "assigned_cash": null,
+              "entry_fees": null,
+              "exit_fee_reserve": null,
+              "remaining_cash": null,
+              "unassigned_cash": null
+            },
+            "coverage_gaps_contains": [
+              "funds_basis_mismatch"
+            ],
+            "execution_authority": false
+          }
+        ]
+      },
+      "expected_sha256": "09014e47bb1c6f28c449f9a603f9f6e1ee14f778e3a9a360c6106b6c6a0bfdb5",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_unissued_client_metric_and_direct_numeric_budget_rejected",
+          "literal_match": "different_missing_token",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "uncovered",
+      "execution_status": "NOT_RUN",
+      "new_test": null,
+      "gap": "真实snapshot只发行floor_surplus/current_budget；其他basis在resolve_budget_metric先被拒绝，原oracle双方planning infeasible输出尚无合法发行入口。",
+      "limits": []
+    },
+    {
+      "case_id": "C17_unconfirmed_priority",
+      "oracle_case_sha256": "2addee26a1c85a8499d45d767f8f19aefb94f32f16db975ab2310ba8e1fc4a57",
+      "resolved_input_sha256": "808e547595911f09a23e4b2153451138d70cc28a3701f5f2ebd7ed7b452d12bb",
+      "resolved_input": {
+        "context_ref": "allocation_period",
+        "funds_value_minor": 500000,
+        "funds_basis": "floor_surplus",
+        "funds_formula_id": "funds.current_budget/1",
+        "funds_upstream_literal": {
+          "balance_minor": 1000000,
+          "emergency_floor_minor": 200000,
+          "frozen_minor": 0,
+          "held_minor": 0,
+          "confirmed_outflow_minor": 300000,
+          "confirmed_inflow_minor": 0
+        },
+        "goals": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "data_scope": "independent_synthetic",
+            "goal_id": "cash",
+            "amount_minor": 100000,
+            "priority": 0,
+            "needed_on": "2026-11-06",
+            "confirmed": true,
+            "input_refs": [
+              "adapter:goal:cash"
+            ],
+            "source_versions": [
+              [
+                "goals",
+                "v1"
+              ]
+            ],
+            "product_key": null,
+            "already_occupied_minor": 0,
+            "occupancy_refs": [],
+            "occupancy_verified_in_baseline": false
+          }
+        ],
+        "products": [],
+        "risk": null,
+        "goal_service_default_priority": 3,
+        "priority_confirmation_receipt": null
+      },
+      "expected_literal": {
+        "retain_cash": {
+          "plan_id": "retain_cash",
+          "calculation_status": "calculated",
+          "feasibility": "feasible",
+          "metrics": {
+            "investment_principal": 0,
+            "assigned_cash": 0,
+            "entry_fees": 0,
+            "exit_fee_reserve": 0,
+            "remaining_cash": 500000,
+            "unassigned_cash": 500000
+          },
+          "conservation_difference_minor": 0,
+          "cash_partition_difference_minor": 0,
+          "execution_authority": false
+        },
+        "confirmed_uses": {
+          "plan_id": "confirmed_uses",
+          "calculation_status": "unavailable",
+          "feasibility": "pending_dependencies",
+          "metrics": {
+            "investment_principal": null,
+            "assigned_cash": null,
+            "entry_fees": null,
+            "exit_fee_reserve": null,
+            "remaining_cash": null,
+            "unassigned_cash": null
+          },
+          "coverage_gaps_contains": [],
+          "execution_authority": false
+        },
+        "required_reason_semantics": "缺本人明确优先级及当前版本绑定"
+      },
+      "expected_sha256": "16ceb2e4a37f0ee271c38bef23c41c0deec9c4e0c99b836e750535fcdb7b0ebb",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_native_default_goal_metadata_does_not_supply_confirmation",
+          "literal_match": "different_seed_goals",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_C17_unconfirmed_priority",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "G01_boolean_money",
+      "oracle_case_sha256": "ee53d6ebc503c770212f31f0dbcb92e953282b09a5315129c4313714cb38d06a",
+      "resolved_input_sha256": "89a9edf264f688fdb52315b57a4e89d91e33216f2fce9c1f1d8dfed5066ae4c1",
+      "resolved_input": {
+        "context_ref": "point",
+        "components": [
+          {
+            "object_id": "cash",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "as_of": "2026-10-03",
+            "kind": "cash",
+            "amount_minor": true,
+            "basis": "ledger_cash_balance",
+            "evidence_ref": "adapter:cash",
+            "source_version": "v1"
+          },
+          {
+            "object_id": "fund",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "as_of": "2026-10-03",
+            "kind": "financial_asset",
+            "amount_minor": 50000,
+            "basis": "market_value",
+            "evidence_ref": "adapter:fund",
+            "source_version": "v1"
+          },
+          {
+            "object_id": "tractor",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "as_of": "2026-10-03",
+            "kind": "nonfinancial_asset",
+            "amount_minor": 200000,
+            "basis": "carrying_value",
+            "evidence_ref": "adapter:tractor",
+            "source_version": "v1"
+          },
+          {
+            "object_id": "loan",
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "as_of": "2026-10-03",
+            "kind": "liability",
+            "amount_minor": 80000,
+            "basis": "outstanding_principal",
+            "evidence_ref": "adapter:loan",
+            "source_version": "v1"
+          }
+        ],
+        "expected_object_ids": [
+          "cash",
+          "fund",
+          "tractor",
+          "loan"
+        ]
+      },
+      "expected_literal": {
+        "http_status": 422,
+        "error_code": "METRIC_ARGUMENTS_INVALID",
+        "no_signed_result": true
+      },
+      "expected_sha256": "5103208307bbac73b8c7fac774f4cedcae1bc1165d8f548e782792328a07e4e2",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_illegal_request_and_monetary_structure_are_422",
+          "literal_match": "exact_boolean_cash_value_service_only",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_G01_boolean_money",
+      "gap": null,
+      "limits": []
+    },
+    {
+      "case_id": "G03_ratio_not_amount_claim",
+      "oracle_case_sha256": "fb7677f3ca75afc4a7a1dd94660d54a4a4e48fb5e9bd6bed0d26fb01455abe63",
+      "resolved_input_sha256": "b9aeea36fe8e34b306c6f01f1124bc921c1dc55be899b04730eff8ac78fe24a7",
+      "resolved_input": {
+        "context_ref": "returns_period",
+        "subperiods": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "start": "2026-10-06",
+            "end": "2026-10-20",
+            "opening_equity_minor": 10000,
+            "closing_equity_minor": 10500,
+            "internal_contributions_minor": 0,
+            "internal_withdrawals_minor": 0
+          },
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "start": "2026-10-20",
+            "end": "2026-11-06",
+            "opening_equity_minor": 20500,
+            "closing_equity_minor": 19475,
+            "internal_contributions_minor": 0,
+            "internal_withdrawals_minor": 0
+          }
+        ],
+        "boundaries": [
+          {
+            "subject_id": "fixture-A",
+            "currency": "CNY",
+            "on": "2026-10-20",
+            "contribution_minor": 10000,
+            "withdrawal_minor": 0
+          }
+        ]
+      },
+      "expected_literal": {
+        "ratio_carrier": "Base_read_only_separate_report",
+        "amount_claim_registration": false,
+        "forbidden": [
+          "value_minor=-25",
+          "value_minor=0",
+          "unit=minor_currency"
+        ],
+        "integration_status": "pending_ratio_contract_extension_if_requested"
+      },
+      "expected_sha256": "e9f662551f53f839a35608023fa1ecd87581c263bc4fad43efc067d94c9eb364",
+      "existing_assertions": [
+        {
+          "path": "tests/test_base_financial_methods.py",
+          "test": "test_ratio_is_separate_signed_report_not_amount_registry",
+          "literal_match": "same_ratio_service_only",
+          "chain": "FinancialMetrics direct service; not same-case Gateway+Observer+Registry+final guard",
+          "upgraded": false
+        },
+        {
+          "path": "tests/window_integration/test_finance_adapter_handoff.py",
+          "test": "test_B08_twr_external_flow",
+          "literal_match": "same base_case B08; ratio -0.0025/unit ratio/no value_minor and Registry rejection",
+          "chain": "Gateway/HMAC/Observer/Registry/final guard all asserted",
+          "upgraded": false,
+          "reason": "static binding available; no current candidate execution receipt reused"
+        }
+      ],
+      "coverage_status": "not_run",
+      "execution_status": "NOT_RUN",
+      "new_test": "FinanceAdapterRemainingContracts.test_G03_ratio_not_amount_claim",
+      "gap": null,
+      "limits": []
+    }
+  ]
+}

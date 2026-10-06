@@ -1,0 +1,3 @@
+# 明确本地文字提取器；无嵌入/生成模型。独立安装到项目.venv，不改变根requirements。
+pdfplumber==0.11.9
+pdfminer.six==20251230

@@ -1,0 +1,359 @@
+{
+  "status": "FROZEN_V2_SUPPLEMENT_NOT_RUN",
+  "original_dataset_sha256": "99eaeba3d2519f63c130b50c8a696809d60e68486e578546104e78a70a4e1d24",
+  "independent_basis": [
+    "任务06第22-24完整业务闭环和异常/回执",
+    "00第86复合任务依真实回执逐项推进",
+    "数据集事前封存service/customer_seed固定合同"
+  ],
+  "original_results_regraded": false,
+  "stable_row_binding": {
+    "scope": "当前workspace及绑定birthday_task；初始raw唯一绑定row.id，此后仅按原id定位",
+    "required_initial_rows": [
+      {
+        "binding": "birthday_step_budget",
+        "sequence": 1,
+        "action": "check_budget",
+        "amount_minor": 0,
+        "status": "planned",
+        "dependency_id": null
+      },
+      {
+        "binding": "birthday_step_hold",
+        "sequence": 2,
+        "action": "reserve_funds",
+        "amount_minor": 45800,
+        "status": "planned",
+        "dependency_id": "$birthday_step_budget"
+      },
+      {
+        "binding": "birthday_step_flowers",
+        "sequence": 3,
+        "action": "book_flowers",
+        "amount_minor": 19900,
+        "status": "planned",
+        "dependency_id": "$birthday_step_hold"
+      },
+      {
+        "binding": "birthday_step_cake",
+        "sequence": 4,
+        "action": "book_cake",
+        "amount_minor": 25900,
+        "status": "planned",
+        "dependency_id": "$birthday_step_hold"
+      }
+    ],
+    "expected_count": 4,
+    "all_identity_and_nonstatus_fields_immutable": true
+  },
+  "step_status_matrix": [
+    {
+      "case": "FB07",
+      "step": "read",
+      "expected_statuses_before_step": {
+        "check_budget": "planned",
+        "reserve_funds": "planned",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "planned",
+        "reserve_funds": "planned",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "allowed_status_transitions_this_step": [],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB07",
+      "step": "reserve-draft",
+      "expected_statuses_before_step": {
+        "check_budget": "planned",
+        "reserve_funds": "planned",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "planned",
+        "reserve_funds": "planned",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "allowed_status_transitions_this_step": [],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB07",
+      "step": "reserve-confirm",
+      "expected_statuses_before_step": {
+        "check_budget": "planned",
+        "reserve_funds": "planned",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "planned",
+        "reserve_funds": "succeeded",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "allowed_status_transitions_this_step": [
+        {
+          "action": "reserve_funds",
+          "from": "planned",
+          "to": "succeeded"
+        }
+      ],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB07",
+      "step": "booking-draft",
+      "expected_statuses_before_step": {
+        "check_budget": "planned",
+        "reserve_funds": "succeeded",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "planned",
+        "reserve_funds": "succeeded",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "allowed_status_transitions_this_step": [],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB07",
+      "step": "booking-confirm",
+      "expected_statuses_before_step": {
+        "check_budget": "planned",
+        "reserve_funds": "succeeded",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "succeeded",
+        "reserve_funds": "succeeded",
+        "book_flowers": "succeeded",
+        "book_cake": "succeeded"
+      },
+      "allowed_status_transitions_this_step": [
+        {
+          "action": "check_budget",
+          "from": "planned",
+          "to": "succeeded"
+        },
+        {
+          "action": "book_flowers",
+          "from": "planned",
+          "to": "succeeded"
+        },
+        {
+          "action": "book_cake",
+          "from": "planned",
+          "to": "succeeded"
+        }
+      ],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB07",
+      "step": "replay",
+      "expected_statuses_before_step": {
+        "check_budget": "succeeded",
+        "reserve_funds": "succeeded",
+        "book_flowers": "succeeded",
+        "book_cake": "succeeded"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "succeeded",
+        "reserve_funds": "succeeded",
+        "book_flowers": "succeeded",
+        "book_cake": "succeeded"
+      },
+      "allowed_status_transitions_this_step": [],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB08",
+      "step": "read",
+      "expected_statuses_before_step": {
+        "check_budget": "planned",
+        "reserve_funds": "planned",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "planned",
+        "reserve_funds": "planned",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "allowed_status_transitions_this_step": [],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB08",
+      "step": "reserve-draft",
+      "expected_statuses_before_step": {
+        "check_budget": "planned",
+        "reserve_funds": "planned",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "planned",
+        "reserve_funds": "planned",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "allowed_status_transitions_this_step": [],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB08",
+      "step": "reserve-confirm",
+      "expected_statuses_before_step": {
+        "check_budget": "planned",
+        "reserve_funds": "planned",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "planned",
+        "reserve_funds": "succeeded",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "allowed_status_transitions_this_step": [
+        {
+          "action": "reserve_funds",
+          "from": "planned",
+          "to": "succeeded"
+        }
+      ],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB08",
+      "step": "release-draft",
+      "expected_statuses_before_step": {
+        "check_budget": "planned",
+        "reserve_funds": "succeeded",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "planned",
+        "reserve_funds": "succeeded",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "allowed_status_transitions_this_step": [],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB08",
+      "step": "release-confirm",
+      "expected_statuses_before_step": {
+        "check_budget": "planned",
+        "reserve_funds": "succeeded",
+        "book_flowers": "planned",
+        "book_cake": "planned"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "cancelled",
+        "reserve_funds": "succeeded",
+        "book_flowers": "cancelled",
+        "book_cake": "cancelled"
+      },
+      "allowed_status_transitions_this_step": [
+        {
+          "action": "check_budget",
+          "from": "planned",
+          "to": "cancelled"
+        },
+        {
+          "action": "book_flowers",
+          "from": "planned",
+          "to": "cancelled"
+        },
+        {
+          "action": "book_cake",
+          "from": "planned",
+          "to": "cancelled"
+        }
+      ],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    },
+    {
+      "case": "FB08",
+      "step": "replay",
+      "expected_statuses_before_step": {
+        "check_budget": "cancelled",
+        "reserve_funds": "succeeded",
+        "book_flowers": "cancelled",
+        "book_cake": "cancelled"
+      },
+      "expected_cumulative_statuses": {
+        "check_budget": "cancelled",
+        "reserve_funds": "succeeded",
+        "book_flowers": "cancelled",
+        "book_cake": "cancelled"
+      },
+      "allowed_status_transitions_this_step": [],
+      "all_other_task_step_fields_unchanged": true,
+      "no_row_insertion_or_deletion": true
+    }
+  ],
+  "limits": [
+    "cumulative expected status never authorizes a model step to write task_steps",
+    "FB08 confirmed hold30000 does not rewrite original step-hold.amount_minor45800",
+    "remaining_planned aggregate cannot prove completed reserve stayed succeeded; exact four-row vector required",
+    "no same-task status wildcard; no v1 result regrading",
+    "FB07 booking binds only two exact quote IDs explicitly requested and independently confirmed after hold receipt; hold confirm cannot book"
+  ],
+  "forbidden_fields": [
+    "id",
+    "workspace_id",
+    "task_id",
+    "sequence",
+    "action",
+    "amount_minor",
+    "dependency_id"
+  ],
+  "unconfirmed_or_replay_status_writes": false,
+  "other_task_or_workspace_status_writes": false,
+  "contract_version": "formal-task-steps-v2",
+  "frozen_at": "2026-10-05T21:15:30.429231+00:00",
+  "review_evidence": {
+    "review_sha256": "38d212283ebca1bfe58704347dc76878314c21217d5b60d4bade79513b7833cb",
+    "proposal_sha256": "2368b616d2ce0d4a0740e0bb7272de803e953e81bbe4fcafd75563458c081a9d",
+    "completion_sha256": "1ee820c2cf96fd1afb842a77a83d3e58f9fd8a2f305e87f18f1b71cb512e8049"
+  },
+  "grade_contract": {
+    "original_v1_unchanged": true,
+    "original_v1_results_regraded": false,
+    "new_run_label": "original39_task_texts_with_explicit_task_steps_v2_supplement",
+    "supplement_applies_only_to_cases": [
+      "FB07",
+      "FB08"
+    ],
+    "formal_cloud_attempts_before_supplement": 0,
+    "expected_amounts_and_task_prompts_unchanged": true
+  }
+}

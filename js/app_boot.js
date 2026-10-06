@@ -1,6 +1,7 @@
 /** Navren 页面版本与内部跳转；不修改账户、聊天记录和阅读偏好。 */
 window.NavrenApp = (() => {
   const release = document.querySelector('meta[name="navren-release"]')?.content;
+  if((location.pathname==='/'||location.pathname.endsWith('index.html'))&&localStorage.getItem('navren_onboarded')==='true'){location.replace('/chat.html'+(release?'?ui='+encodeURIComponent(release):''));}
   const pages = new Set(['index.html', 'chat.html', 'recommend.html', 'account.html', 'mine.html', 'copilot.html']);
   function href(target, mode) {
     const url = new URL(target, location.href);

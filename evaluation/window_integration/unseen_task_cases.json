@@ -1,0 +1,109 @@
+{
+  "schema_version": "navren.window-integration.unseen-tasks.v1",
+  "frozen_on": "2026-10-06",
+  "freeze_stage": "before_implementing_test_market_voice_negotiation.py",
+  "purpose": "独立新增任务与异常验收；未用于业务实现调试。仅检验当前真实接口的确定行为。",
+  "evaluation_boundary": {
+    "formal_original_ten_questions_three_rounds": false,
+    "real_model_semantic_quality": false,
+    "real_microphone_or_cloud_audio": false,
+    "real_bank_or_current_market_truth": false,
+    "fixtures": "全部为临时库中的合成账户、公共事件、原文和服务规则。脚本模型只驱动原生工具及审核协议，语音上游为本机合成协议对象。",
+    "unavailable_interface_policy": "SkipTest 并明确缺失接口或依赖；不能编造 API 或把未执行条件列为通过。"
+  },
+  "isolation": {
+    "bank_path": "TemporaryDirectory/bank.sqlite3",
+    "personal_database": "从临时银行路径派生；独立临时 Fernet 密钥",
+    "knowledge_path": "TemporaryDirectory/knowledge.sqlite3",
+    "market_path": "TemporaryDirectory/unseen-market.sqlite3",
+    "fund_cache": "TemporaryDirectory/funds，包括 cached 已绑定的默认参数",
+    "negotiation_rules_copy": "TemporaryDirectory/service-benefits.json",
+    "network": "只允许 loopback HTTP/WS；禁止外网、真实模型、外部行情和真实语音提供器"
+  },
+  "cases": [
+    {
+      "id": "U01",
+      "test": "test_daily_reference_keeps_date_revision_and_event_version",
+      "task": "打开当天每日精选第1版中的某事件，解释原始事实、适用条件与不确定性，不执行金融操作。",
+      "fault": "查阅后发布事件第2版，并尝试使用错误的日期、归档版次、事件版本或局部历史参数。",
+      "expected": ["引用含 edition_date、revision、event_version 全部字段", "历史对象保留第1版及原位置；不回退最新事件", "旧摘要和事实被遮蔽，明确 revised", "错误或局部身份拒绝", "银行资金与操作数不变"]
+    },
+    {
+      "id": "U02",
+      "test": "test_weekly_reference_pins_period_and_supporting_event_version",
+      "task": "查阅指定期间的已审核周报，说明原始引用依据；不要把旧期间说成最新一周。",
+      "fault": "周报引用的事件升级到第2版，周报本身仍引用第1版。",
+      "expected": ["实际读取指定 period、周报 version 及对应事件 version", "快照记录 market_weekly 的确切参数", "事件版次不匹配触发 STALE_MARKET_EVIDENCE", "资金与金融操作数不变"]
+    },
+    {
+      "id": "U03",
+      "test": "test_market_revision_during_review_withholds_answer",
+      "task": "解释选中市场事件的事实和影响路径，等待独立审核后展示。",
+      "fault": "脚本审核器准备批准时，原始公共报道修订为新的原文版本。",
+      "expected": ["审核后再次回查来源与正文版本", "STALE_MARKET_EVIDENCE 阻止旧分析展示", "fallback 无操作卡、无市场来源和无可朗读凭据", "资金与金融操作数不变"]
+    },
+    {
+      "id": "U04",
+      "test": "test_public_withdrawal_during_review_withholds_answer_and_speech",
+      "task": "根据本轮检索到的产品原文分析本金风险，不创建交易；审核通过后才允许朗读。",
+      "fault": "独立审核期间撤回所引用的已发布公共证据。",
+      "expected": ["STALE_KNOWLEDGE_EVIDENCE 阻止旧分析展示", "无操作卡且 approve_speech 不发放凭据", "撤回的 citation 无法重新解析", "资金与金融操作数不变"]
+    },
+    {
+      "id": "U05",
+      "test": "test_receipt_only_tts_ignores_client_substitution",
+      "task": "朗读刚刚由后端核验的金额和完整本金风险提示。",
+      "fault": "浏览器在申请凭据或启动 WS 时提交替代正文。",
+      "expected": ["HTTP session 不接受自由 text 字段", "有效 receipt 经本机真实 WS 取得 ready、PCM、done", "上游仅收到后端核验正文，完整金额和风险提示保留", "会话不暴露提供器密钥，资金不变"]
+    },
+    {
+      "id": "U06",
+      "test": "test_cancel_stops_tts_upstream_and_releases_slots",
+      "task": "开始朗读已核验答复后立即取消。",
+      "fault": "合成上游保持任务进行中，浏览器发送 cancel。",
+      "expected": ["本机真实 WS 的 cancel 关闭上游连接", "3个语音容量全部归还", "资金不变", "此项不声明实际扬声器或云模型停播"]
+    },
+    {
+      "id": "U07",
+      "test": "test_workspace_change_cannot_reuse_speech_receipt_or_ticket",
+      "task": "账户A取得待朗读答复后切换到独立账户B，尝试朗读账户A答复。",
+      "fault": "账户B提交A的 speech_receipt 或A的一次性 WS ticket。",
+      "expected": ["跨工作区 receipt 请求403拒绝", "跨会话 ticket 握手403拒绝", "无合成上游任务启动", "两个账户资金各自不变", "仅验证后端账户边界，未验证前端切账户交互"]
+    },
+    {
+      "id": "U08",
+      "test": "test_privacy_change_invalidates_queued_speech_before_provider",
+      "task": "答复已获准朗读但尚未启动音频时，修改获准保存的财务记忆。",
+      "fault": "在获取 WS ticket 后变更隐私或个人资料版本，再启动旧朗读。",
+      "expected": ["旧 receipt 因版本冲突拒绝", "WS 首次 start 返回 PERSONAL_VERSION_CONFLICT", "提供器尚未启动", "金融资金不变"]
+    },
+    {
+      "id": "U09",
+      "test": "test_negotiation_respects_floor_and_exposes_pending_salary_eligibility",
+      "task": "愿意迁入工资账户，但不接受购买理财作为优惠条件；协商额外服务费减免，先展示方案。",
+      "fault": "预批准合成规则增加必须购买理财的高额诱导方案。",
+      "expected": ["拒绝购买的底线被记录，诱导方案被过滤", "工资方案明确每月600000分、连续3个月、资格待核验", "全部成本与期限符合预批准规则", "预览不生成申请或金融操作，资金不变"]
+    },
+    {
+      "id": "U10",
+      "test": "test_modified_negotiation_supersedes_draft_and_rejects_excluded_offer",
+      "task": "初次愿意迁入工资后改为不迁入工资，只查看不需买理财的电子账单服务减免；拒绝原工资方案。",
+      "fault": "尝试接受被新请求替代的旧草案，或在新草案中选择已排除的工资优惠。",
+      "expected": ["旧草案持久化 superseded", "旧草案接受 SERVICE_DRAFT_STALE", "新草案排除工资优惠，越选 SERVICE_OFFER_NOT_ELIGIBLE", "拒绝动作不产生申请，资金不变"]
+    },
+    {
+      "id": "U11",
+      "test": "test_expired_negotiation_rules_produce_no_offer_or_application",
+      "task": "仍希望服务费减免，且坚持不购买理财；请如实说明当前是否存在可申请方案。",
+      "fault": "全部合成预批准规则已早于模拟业务日到期。",
+      "expected": ["明确 no_offer，offers为空且无 draft_id", "不凭空生成优惠或申请", "金融资金和金融操作数不变"]
+    },
+    {
+      "id": "U12",
+      "test": "test_negotiation_explicit_accept_and_replay_have_single_simulation_receipt",
+      "task": "核对工资优惠条件后明确接受并提交模拟申请；网络重试时查询原申请，资格仍待核验。",
+      "fault": "先未明确确认、再由其他账户越权、随后本人确认与重复提交。",
+      "expected": ["未确认 CONFIRMATION_REQUIRED；越权 SERVICE_DRAFT_NOT_FOUND", "本人取得唯一 application_id，重复提交标记 idempotent_replay", "始终 submitted_simulation_pending_eligibility，不表示优惠已生效", "只有一条申请及提交审计；不迁入工资、不买理财、不改资金"]
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "suite_id": "navren-window-integration-public-handoff-20261006",
+  "owner_task": "navren-window-integration-20261006",
+  "expectations_frozen_before_execution": true,
+  "expectation_basis": "集成方直接以SQLite mode=ro读取交接库，核对原件完整字节SHA、解析正文与半开字符跨度，再冻结本文件；未使用RAG窗口的测试作为唯一裁判。",
+  "data_root": "outputs/window-progress/rag",
+  "data_sha256": {
+    "integration-data-manifest.json": "71bbc2512c91a8ad3d3e6e4d05deb7447dbeb41a6be411d2d7a546a2fd90cc60",
+    "reviewed-public.sqlite3": "230e16cbce15cedbe1f54ee2222a54466f442b7402e141e8721d5d26ed80fcf0",
+    "frozen-market.sqlite3": "e9fc757346ee556793764dc585cd60bec8896d71516c586f9212bb6308db982a",
+    "sources/nav/nav-delivery.json": "9e55a72c1aba4da5f3fa4dfb6c49ae7ff7af04a78ded15688702834665b386b1"
+  },
+  "source_baseline_sha256": {
+    "local_knowledge/__init__.py": "c51b947e26694762f842592a93fe4b963c226ebb53eb8d3148ef534cde5a95a3",
+    "local_knowledge/store.py": "5f04fe9ff015f6b5dd246c8a8cec12f322652946670268bc3a30b25fd63c72d4",
+    "local_knowledge/graph.py": "364b0b58cd8949884d26d8b69af58cfd5d0e367f95adb3497a0bb54a591b11bb",
+    "local_knowledge/supplement.py": "eaba10ab43879a287dbb9363d0c35b616f73b630268d1598debd502b9e6c3470",
+    "local_knowledge/sources.py": "dbd02a78602a579512cb6cf18834b0b19fdbe12b97a7e1449c11a560b1484741",
+    "agent_runtime/knowledge_retrieval.py": "82b634cb613c5c8c7f1067a3361f330dc4473a72e6fedff63540fe4204cb3390",
+    "market_content.py": "42684034b66225e7c153a30bb879380c843abb2e3410dffe10ebad8708e491c1",
+    "market_daily.py": "49f35921b0e1519a14637a07ac672995ddc8605d3b22aea9d1061ea6771f1734",
+    "market_sources.py": "99da73af71848b236167b228f1e2c3252edab72a4e9415677c47eaa5fdec08de"
+  },
+  "release_id": "pub-7a4f1c5fb3ab99d78eb2aae5846d5d3e17eb8330",
+  "as_of": "2026-10-06",
+  "market_now": "2026-10-06T12:00:00+08:00",
+  "public_catalog": {
+    "product_count": 3, "share_count": 4, "chunk_count": 22, "document_version_count": 6,
+    "channel_count": 0,
+    "share_to_product": {
+      "ORIENT-SHARE:001198": "ORIENT-FUND:001198",
+      "ORIENT-SHARE:006210": "ORIENT-FUND:006210",
+      "ORIENT-SHARE:006211": "ORIENT-FUND:006210",
+      "ORIENT-SHARE:021095": "ORIENT-FUND:021094"
+    },
+    "effective_from": null, "effective_to": null,
+    "sale_status": "unknown", "effective_status": "unknown",
+    "private_retrieval_available": false,
+    "excluded_private_tables": ["workspaces", "user_memories", "agent_dialogues", "personal_decisions", "bank_accounts", "bank_transactions"],
+    "interpretation": "ready只表示固定公共发布可检索；没有当前在售、客户资格、渠道优惠或C独立评级证明。"
+  },
+  "fee_evidence": [
+    {
+      "share_class_id": "ORIENT-SHARE:006210", "product_id": "ORIENT-FUND:006210", "channel_id": null,
+      "citation_id": "cc4a08a8f893f90c38a1c529275f0fdb536ce70a1",
+      "document_id": "d465e8ce57d9e36899b847b9433ce22ef",
+      "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+      "page": 3, "start_char": 1424, "end_char": 1615,
+      "raw_sha256": "9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500",
+      "parsed_sha256": "a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0",
+      "excerpt_sha256": "0e9413c63869ef16eeafc415bb7aca025bce70a046025a0d7f0323064a73a451",
+      "source_url": "https://www.orient-fund.com/upload/pdf/1789614790036-dfzbczzqxzqtzjjjjcpzlgygx.pdf",
+      "excerpt": "东方臻宝纯债债券A\n份额（S）或金额（M）\n费用类型 收费方式/费率\n/持有期限（N）\nM<1,000,000 0.80%\n申购费 1,000,000≤M＜3,000,000 0.50%\n（前收费） 3,000,000≤M＜5,000,000 0.30%\nM≥5,000,000 1,000元/笔\nN＜7日 1.50%\n赎回费 7日≤N＜30日 0.10%\nN≥30日 0.00%\n"
+    },
+    {
+      "share_class_id": "ORIENT-SHARE:006211", "product_id": "ORIENT-FUND:006210", "channel_id": null,
+      "citation_id": "c39b2f7f927893868b0bbb463e24c09dba7826ea9",
+      "document_id": "d465e8ce57d9e36899b847b9433ce22ef",
+      "version_id": "vbe0b827ad029538ae7b62edc9bd901cf5496b975",
+      "page": 3, "start_char": 1615, "end_char": 1701,
+      "raw_sha256": "9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500",
+      "parsed_sha256": "a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0",
+      "excerpt_sha256": "444531b345d3abf86597b8a901f251d29f6632a0d55a94d3e230d2ba3ae0af56",
+      "source_url": "https://www.orient-fund.com/upload/pdf/1789614790036-dfzbczzqxzqtzjjjjcpzlgygx.pdf",
+      "excerpt": "东方臻宝纯债债券C\n份额（S）或金额（M）\n费用类型 收费方式/费率\n/持有期限（N）\nN＜7日 1.50%\n赎回费 7日≤N＜30日 0.10%\nN≥30日 0.00%\n"
+    }
+  ],
+  "missing_identity_probes": [
+    {"product_id": "ORIENT-FUND:006210", "share_class_id": "ORIENT-SHARE:006210", "channel_id": "WEBANK", "gap": "identity_unverified"},
+    {"product_id": "ORIENT-FUND:006210", "share_class_id": "ORIENT-SHARE:001198", "channel_id": null, "gap": "no_verified_evidence"},
+    {"product_id": "ORIENT-FUND:021094", "share_class_id": "ORIENT-SHARE:021094", "channel_id": null, "gap": "identity_unverified"}
+  ],
+  "lifecycle_probes": {
+    "withdrawal": {"canonical": null, "consumer_error": "stale_knowledge_evidence"},
+    "revision_cutoff": {"revoked_from": "2026-10-06", "canonical": null, "consumer_error": "stale_knowledge_evidence", "query_gap": "expired_evidence"},
+    "freshness_policy_change": {"maximum_age_days": 7, "canonical": null, "consumer_error": "stale_knowledge_evidence", "query_gap": "expired_evidence", "notice": "仅在临时副本注入本地新鲜度门槛；不是PDF条款的法律失效日，源库策略原为null。"}
+  },
+  "market_history": {
+    "window_start": "2026-09-07", "window_end": "2026-10-06", "window_days": 30,
+    "archived_days": 3, "missing_days": 27, "members": 8,
+    "editions": [
+      {"edition_date": "2026-09-30", "revision": 1, "origin": "reconstructed", "period_state": "sealed", "item_count": 3},
+      {"edition_date": "2026-10-04", "revision": 1, "origin": "reconstructed", "period_state": "sealed", "item_count": 1},
+      {"edition_date": "2026-10-06", "revision": 1, "origin": "observed", "period_state": "updating", "item_count": 4}
+    ],
+    "membership": [
+      ["2026-09-30", 1, 1, "e_d1990af398e869a095229542", 1],
+      ["2026-09-30", 1, 2, "e_abaf4b03c48d62e02df43eb9", 4],
+      ["2026-09-30", 1, 3, "e_ef885877493a251bb70f42ca", 1],
+      ["2026-10-04", 1, 1, "e_96a88bfdfe87a8a6304cc1df", 1],
+      ["2026-10-06", 1, 1, "e_d1990af398e869a095229542", 1],
+      ["2026-10-06", 1, 2, "e_abaf4b03c48d62e02df43eb9", 4],
+      ["2026-10-06", 1, 3, "e_96a88bfdfe87a8a6304cc1df", 1],
+      ["2026-10-06", 1, 4, "e_ef885877493a251bb70f42ca", 1]
+    ],
+    "missing_archive_counts": null,
+    "latest_weeklies": {"2026-09-21": {"version": 2, "status": "source_revised"}, "2026-09-28": {"version": 4, "status": "source_revised"}},
+    "latest_active_weekly": null,
+    "daily_event_probe": {
+      "edition_date": "2026-09-30", "revision": 1, "event_id": "e_d1990af398e869a095229542", "event_version": 1,
+      "primary_article_id": "a_c809d7b15a25d7bf5e9ace5e", "article_versions": {"a_c809d7b15a25d7bf5e9ace5e": 1},
+      "snapshot_sha256": "0010fadf6eb5506e2b622763aa7b161edd7ad238d0ccbe3e13bdc3a228a4f5e2",
+      "baseline_availability": "active", "after_source_revision": "revised", "after_withdrawal": "withdrawn",
+      "wrong_event_version_error": "historical_version_conflict", "wrong_event_version_http_status": 409,
+      "nonmember_id": "e_96a88bfdfe87a8a6304cc1df", "nonmember_error": "historical_event_not_found", "nonmember_http_status": 404,
+      "missing_revision_error": "historical_event_not_found", "missing_revision_http_status": 404,
+      "invalidated_summary": "", "invalidated_facts": [], "invalidated_evidence_excerpt": "absent"
+    }
+  },
+  "nav_boundary": {
+    "products": 3, "nav_rows": 789, "nav_original_pages": 27, "interval_statements": 12,
+    "full_window_reinvested_total_return_ready": false,
+    "share_codes": ["001198", "006210", "021095"], "rows_per_share": 263,
+    "first_nav_on": "2025-09-01", "last_nav_on": "2026-09-30",
+    "missing_nav_share": "006211",
+    "interpretation": "C006211原文已登记，不意味着其净值历史已交付；第三季度事件完整性未知，不能称全期间分红再投收益已可算。"
+  },
+  "cases": [
+    {"id": "PH01", "purpose": "四个交接文件SHA、公共身份和固定发布代次"},
+    {"id": "PH02", "purpose": "A/C原文分开，错份额和无渠道映射不借用费用"},
+    {"id": "PH03", "purpose": "临时副本撤回、确认修订截止与新鲜度门槛阻断旧引用"},
+    {"id": "PH04", "purpose": "30日仅3日8成员、27缺档null，修订周报非active，净值交接缺项"},
+    {"id": "PH05", "purpose": "历史严格成员/事件版次与原快照不变，修订/撤回清空旧事实"}
+  ],
+  "not_covered": ["真实在售或客户可交易资格", "具体渠道优惠与C独立评级", "银行工作人员签核", "实时外网原件复读", "联合HTTP或文字/TTS最终放行", "真实Agent三轮语义成绩", "连续30天市场覆盖", "全区间真实总收益和投资效果"]
+}

@@ -1,2 +1,13 @@
-# 元景语音 WebSocket 客户端；文字服务可在未安装时启动。
+# 百炼语音客户端，以及同源浏览器 WebSocket 协议处理。
 websocket-client==1.9.0
+wsproto>=1.2,<2
+# 开源运行事件、官方语音协议、图数据及标准技能解析
+ag-ui-protocol==1.0.0
+dashscope==1.27.7
+networkx==3.7
+PyYAML==6.0.3
+# 官方订阅解析及公开文章结构提取
+feedparser==6.0.12
+beautifulsoup4==4.14.3
+# 本地个人资料正文加密；密钥由系统钥匙串提供
+cryptography>=46.0,<47

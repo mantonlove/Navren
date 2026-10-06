@@ -1,0 +1,323 @@
+/* Navren 品牌画面独立于业务界面的主题与阅读密度。 */
+html.navren-welcome,
+.navren-welcome body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #b9d9eb;
+}
+.welcome-stage {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100vh;
+  height: 100svh;
+  min-height: 240px;
+  overflow: hidden;
+  background: #b9d9eb;
+}
+.welcome-stage > .welcome-scene-fallback,
+.welcome-stage > .welcome-scene-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.welcome-scene-fallback {
+  z-index: 0;
+  background: linear-gradient(#70b8e4 0%, #c8e6f6 59%, #579bc3 60%, #286e9b 100%);
+}
+.welcome-scene-canvas {
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 450ms ease;
+  pointer-events: none;
+}
+.welcome-scene-canvas[data-ready="true"][data-renderer="three-webgl"] {
+  opacity: 1;
+}
+.welcome-copy {
+  position: absolute;
+  z-index: 2;
+  top: clamp(64px, 19vh, 256px);
+  left: 8%;
+  width: min(37%, 490px);
+  color: #233f5f;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  text-align: left;
+  animation: welcome-copy-arrive 1000ms ease-out both;
+}
+/* Crop the existing wordmark's transparent margins in CSS, preserving its pixels. */
+.welcome-wordmark {
+  position: relative;
+  width: clamp(188px, 19vw, 276px);
+  aspect-ratio: 1902 / 423;
+  overflow: hidden;
+}
+.welcome-wordmark img {
+  position: absolute;
+  left: -7.0978%;
+  top: -35.461%;
+  width: 114.1956%;
+  height: auto;
+  max-width: none;
+  display: block;
+}
+.welcome-headline {
+  margin: clamp(26px, 4.4vh, 40px) 0 0;
+  font-size: clamp(25px, 2.38vw, 38px);
+  font-weight: 300;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+.welcome-headline span {
+  display: block;
+  white-space: nowrap;
+}
+.welcome-enter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 154px;
+  min-height: 44px;
+  box-sizing: border-box;
+  margin-top: 32px;
+  padding: 7px 7px 7px 23px;
+  border: 1px solid rgba(224, 242, 255, 0.34);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #316a9a 0%, #23567f 62%, #1e496f 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 4px 12px rgba(30, 73, 111, 0.14);
+  color: #f5fbff;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+.welcome-enter-label { letter-spacing: 0.12em; }
+.welcome-enter-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(229, 246, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(238, 249, 255, 0.16);
+  transition: background 220ms ease;
+}
+.welcome-enter svg { transition: transform 220ms ease; }
+.welcome-enter:hover {
+  border-color: rgba(235, 248, 255, 0.65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 6px 16px rgba(30, 73, 111, 0.2);
+  transform: translateY(-2px);
+}
+.welcome-enter:hover .welcome-enter-icon { background: rgba(229, 246, 255, 0.2); }
+.welcome-enter:hover svg { transform: translateX(2px); }
+.welcome-enter:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: inset 0 1px 3px rgba(14, 45, 72, 0.2), 0 2px 6px rgba(30, 73, 111, 0.12);
+}
+.welcome-enter:focus-visible {
+  outline: 2px solid #233f5f;
+  outline-offset: 4px;
+}
+.welcome-enter:disabled { cursor: default; }
+
+/* The account page is a separate, immediately available composition. */
+.welcome-auth-shell[hidden], .welcome-auth-shell [hidden], .welcome-copy[hidden] { display: none; }
+.welcome-stage[data-phase="login"] { background: #f6f7f4; }
+.welcome-stage[data-phase="login"] > .welcome-scene-canvas,
+.welcome-stage[data-phase="login"] > .welcome-scene-fallback {
+  inset: 20px auto 20px 20px;
+  width: calc(54% - 32px);
+  height: calc(100% - 40px);
+  border-radius: 24px;
+  opacity: 1;
+  transition: none;
+}
+.welcome-auth-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: auto;
+  color: #18364b;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+.welcome-auth-header {
+  position: absolute;
+  top: 46px;
+  left: 52px;
+  right: 46px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.welcome-auth-brand { display: flex; align-items: center; gap: 10px; font-size: 25px; letter-spacing: -.025em; font-weight: 500; }
+.welcome-auth-brand img { width: 28px; height: 28px; object-fit: contain; }
+.welcome-auth-body { display: grid; grid-template-columns: 54% 46%; min-height: 600px; height: 100%; }
+.welcome-auth-visual { position: relative; }
+.welcome-auth-visual::after {
+  content: "";
+  position: absolute;
+  inset: 20px 12px 20px 20px;
+  border-radius: 24px;
+  background: linear-gradient(0deg, rgba(232,243,246,.94) 0%, rgba(232,243,246,.48) 20%, transparent 47%);
+  pointer-events: none;
+}
+.welcome-auth-visual-copy {
+  position: absolute;
+  left: 56px;
+  bottom: 52px;
+  z-index: 1;
+  margin: 0;
+  font-size: clamp(24px, 2.3vw, 34px);
+  line-height: 1.5;
+  font-weight: 300;
+  letter-spacing: -.025em;
+  color: #254c63;
+}
+.welcome-auth-visual-copy span { display: block; }
+.welcome-login {
+  align-self: center;
+  justify-self: center;
+  width: min(360px, calc(100% - 96px));
+  padding: 90px 0 64px;
+}
+.welcome-login h1 { margin: 0; font-size: 36px; font-weight: 500; line-height: 1.28; letter-spacing: -.04em; }
+.welcome-login-intro { margin: 12px 0 28px; font-size: 14px; line-height: 1.6; color: #7c8b94; }
+.welcome-login form, .welcome-credentials { display: grid; gap: 16px; }
+.welcome-login-field { display: grid; gap: 6px; }
+.welcome-login label { font-size: 12px; line-height: 1.4; color: #425b6b; }
+.welcome-login-input {
+  display: block;
+  width: 100%;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 16px;
+  border: 1px solid #dce3e7;
+  border-radius: 10px;
+  background: rgba(255,255,255,.8);
+  color: #18364b;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.welcome-login-input::placeholder { color: #a0acb4; }
+.welcome-login-input:focus { border-color: #4d86ad; box-shadow: 0 0 0 3px rgba(62,121,162,.09); }
+.welcome-password-field { position: relative; }
+.welcome-password-field input { padding-right: 62px; }
+.welcome-password-toggle { position: absolute; right: 6px; top: 4px; height: 36px; min-width: 42px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: #758b9b; font: inherit; font-size: 12px; cursor: pointer; }
+.welcome-password-toggle:hover { color: #255c82; background: #edf3f6; }
+.welcome-login-status { min-height: 0; margin: -6px 0; color: #b14b42; font-size: 12px; line-height: 1.5; }
+.welcome-login-status:empty { display: none; }
+.welcome-login-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 44px;
+  padding: 0 18px;
+  margin-top: 2px;
+  border: 1px solid rgba(19,59,84,.08);
+  border-radius: 10px;
+  background: linear-gradient(120deg, #28658e, #23547b);
+  box-shadow: 0 4px 10px rgba(30,73,111,.1), inset 0 1px 0 rgba(255,255,255,.1);
+  color: #f7fbfd;
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: .08em;
+  cursor: pointer;
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+.welcome-login-submit:hover { background: linear-gradient(120deg, #317399, #2a638b); box-shadow: 0 5px 16px rgba(30,73,111,.15); }
+.welcome-login-submit:disabled { opacity: .6; cursor: default; }
+.welcome-login-switch { display: block; width: 100%; margin-top: 20px; padding: 0; border: 0; background: transparent; color: #6a8090; font: inherit; font-size: 13px; line-height: 1.6; cursor: pointer; }
+.welcome-login-switch:hover { color: #245f87; }
+.welcome-experience-button {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin-top: 10px;
+  padding: 0 16px;
+  border: 1px solid #d3dfe6;
+  border-radius: 10px;
+  background: transparent;
+  color: #426b86;
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.welcome-experience-button:hover { background: #edf2f4; border-color: #94b1c4; }
+.welcome-experience-button[data-confirm="true"] { margin-top: 16px; background: linear-gradient(120deg, #28658e, #23547b); border-color: transparent; color: #f7fbfd; }
+.welcome-experience-button[data-confirm="true"]:hover { background: linear-gradient(120deg, #317399, #2a638b); }
+.welcome-auth-shell button:disabled { cursor: default; }
+.welcome-experience-button:disabled { opacity: .45; }
+.welcome-experience-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.welcome-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.welcome-experience-card { position: relative; cursor: pointer; }
+.welcome-experience-card input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.welcome-experience-surface { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 108px; box-sizing: border-box; height: 100%; padding: 14px 12px 12px; border: 1px solid #dce3e7; border-radius: 11px; background: rgba(255,255,255,.7); pointer-events: none; transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease; }
+.welcome-experience-icon { width: 24px; height: 24px; margin-bottom: 4px; stroke: #4c7b98; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.welcome-experience-card:nth-of-type(2) .welcome-experience-icon { stroke: #739280; }
+.welcome-experience-card:nth-of-type(3) .welcome-experience-icon { stroke: #9c8b71; }
+.welcome-experience-card:nth-of-type(4) .welcome-experience-icon { stroke: #728aa2; }
+.welcome-experience-name { color: #28485f; font-size: 18px; font-weight: 500; line-height: 1.4; }
+.welcome-experience-detail { margin-top: auto; color: #8897a2; font-size: 10px; line-height: 1.5; white-space: nowrap; }
+.welcome-experience-check { position: absolute; top: 13px; right: 12px; display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid #d9e3e8; border-radius: 50%; color: transparent; font-size: 10px; }
+.welcome-experience-card:hover .welcome-experience-surface { border-color: #a4bdce; background: #f9fcfd; }
+.welcome-experience-card input:checked + .welcome-experience-surface { border-color: #5a8aab; background: #edf4f8; box-shadow: inset 0 0 0 1px rgba(66,119,158,.08); }
+.welcome-experience-card input:checked + .welcome-experience-surface .welcome-experience-check { background: #366e96; border-color: #366e96; color: #fff; }
+.welcome-experience-card input:focus-visible + .welcome-experience-surface { outline: 2px solid #4d86ad; outline-offset: 3px; }
+.welcome-experience-card input:disabled { cursor: default; }
+.welcome-auth-shell a:focus-visible, .welcome-auth-shell button:focus-visible { outline: 2px solid #4d86ad; outline-offset: 4px; }
+@media (max-aspect-ratio: 1/1) {
+  .welcome-copy { top: clamp(24px, 3.5vh, 46px); left: 8%; width: 84%; }
+  .welcome-wordmark { width: clamp(140px, 41vw, 180px); }
+  .welcome-headline { margin-top: 22px; font-size: clamp(22px, 6.2vw, 28px); line-height: 1.45; }
+  .welcome-enter { width: 124px; margin-top: 26px; padding-left: 21px; }
+}
+@media (max-width: 900px) {
+  .welcome-stage[data-phase="login"] > .welcome-scene-canvas,
+  .welcome-stage[data-phase="login"] > .welcome-scene-fallback { display: none; }
+  .welcome-auth-visual { display: none; }
+  .welcome-auth-header { position: relative; inset: auto; padding: 28px; }
+  .welcome-auth-brand { font-size: 23px; }
+  .welcome-auth-body { display: block; height: auto; min-height: 0; }
+  .welcome-login { width: min(360px, calc(100% - 56px)); margin: 0 auto; padding: clamp(28px, 7vh, 70px) 0 44px; }
+  .welcome-login h1 { font-size: 32px; }
+  .welcome-login-intro { margin-bottom: 26px; }
+}
+@media (max-width: 360px) {
+  .welcome-auth-header { padding: 24px; }
+  .welcome-auth-brand { font-size: 21px; gap: 7px; }
+  .welcome-login { width: calc(100% - 48px); }
+  .welcome-login h1 { font-size: 30px; }
+}
+@media (min-aspect-ratio: 1/1) and (max-height: 620px) {
+  .welcome-copy { top: 14%; }
+  .welcome-wordmark { width: clamp(145px, 19vw, 200px); }
+  .welcome-headline { margin-top: 24px; font-size: clamp(21px, 2.38vw, 27px); }
+}
+@media (max-height: 580px) {
+  .welcome-copy { top: 18px; }
+  .welcome-wordmark { width: 128px; }
+  .welcome-headline { margin-top: 16px; font-size: 20px; line-height: 1.4; }
+  .welcome-enter { margin-top: 20px; }
+  .welcome-login { padding-top: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome-scene-canvas, .welcome-enter, .welcome-enter-icon, .welcome-enter svg,
+  .welcome-login-input, .welcome-login-submit, .welcome-experience-button, .welcome-experience-surface { transition: none; }
+  .welcome-enter:hover, .welcome-enter:active, .welcome-enter:hover svg { transform: none; }
+}

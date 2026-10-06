@@ -1,0 +1,24 @@
+.account-switcher { flex:none; position:relative; z-index:15; display:flex; gap:10px; align-items:center; min-height:44px; padding:4px clamp(16px,3vw,40px); border-bottom:1px solid var(--border); background:var(--surface-card); color:var(--ink); font-size:.84rem; }
+.account-switcher[hidden] { display:none; }
+.account-switch-label { color:var(--ink-50); white-space:nowrap; }
+.account-switch-status { color:var(--ink-50); }
+.account-switch-trigger { border:0; background:transparent; color:var(--primary); font:inherit; font-weight:650; padding:8px 24px 8px 8px; min-height:40px; cursor:pointer; position:relative; }
+.account-switch-trigger::after { content:'⌄'; position:absolute; right:6px; }
+.account-switcher button:focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
+.account-switch-menu { position:absolute; left:clamp(16px,3vw,40px); top:calc(100% + 6px); padding:8px; width:min(320px,calc(100vw - 48px)); background:var(--surface-card); border:1px solid var(--border); border-radius:16px; box-shadow:0 14px 36px #2338491a; }
+.account-switch-menu[hidden] { display:none; }
+.account-switch-menu > button { display:block; width:100%; min-height:44px; border:0; background:transparent; color:inherit; font:inherit; text-align:start; padding:10px 12px; border-radius:9px; cursor:pointer; }
+.account-switch-menu > button:hover,.account-switch-menu > button[aria-current="true"] { background:var(--primary-soft); color:var(--primary); }
+.account-switch-source { padding:8px 12px; color:var(--ink-50); font-size:.8rem; line-height:1.6; border-top:1px solid var(--border); }
+.account-switch-source summary { cursor:pointer; }
+.account-switch-dialog { color:var(--ink); background:var(--surface-card); border:1px solid var(--border); border-radius:20px; padding:24px; max-width:min(480px,calc(100vw - 32px)); }
+.account-switch-dialog::backdrop { background:#23384955; }
+.account-switch-dialog h2 { font-size:1.2em; margin:0 0 16px; }
+.account-switch-dialog li { line-height:1.7; margin:8px 0; }
+.account-switch-actions { display:flex; justify-content:flex-end; gap:12px; margin-top:20px; }
+.account-switch-actions button { min-height:44px; padding:10px 18px; font:inherit; border-radius:10px; border:1px solid var(--border); background:var(--surface-card); color:inherit; cursor:pointer; }
+.account-switch-actions button:last-child { background:var(--primary); color:white; border-color:transparent; }
+.navren-switch-pending .chat-input-area,.navren-switch-pending .page-scroll,.navren-switch-pending .chat-messages,.navren-switch-pending dialog:not(.account-switch-dialog) { visibility:hidden; pointer-events:none; }
+.mode-senior .account-switcher { font-size:1rem; min-height:52px; }
+.mode-senior .account-switch-menu > button,.mode-senior .account-switch-actions button { min-height:48px; }
+@media(max-width:480px) { .account-switcher { font-size:.82rem; padding-inline:12px; gap:6px; } .account-switch-menu { left:12px; } }

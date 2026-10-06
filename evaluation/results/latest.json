@@ -1,0 +1,144 @@
+{
+  "dataset_id": "navren-synthetic-financial-eval",
+  "dataset_version": "1.0.0",
+  "generated_at": "2026-10-04T04:30:00.577390+00:00",
+  "environment": "合成数据与本机模拟银行",
+  "limitations": [
+    "每项通过表示对应的工程回归断言通过，不代表真实客户表现、模型准确率或比赛评分。",
+    "不连接真实银行，不执行真实转账、申购、赎回或其他资金操作。"
+  ],
+  "summary": {
+    "case_count": 12,
+    "passed_cases": 12,
+    "failed_cases": 0,
+    "test_count": 15,
+    "failed_test_count": 0
+  },
+  "cases": [
+    {
+      "id": "income_bill_reconciliation",
+      "scenario": "月度收入、退款、消费与投资流转的口径核对",
+      "status": "passed",
+      "expected_invariant": "收入、退款、消费和投资流转分开统计，合计与账本逐笔数据一致。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_monthly_categories_and_investment_are_separate"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "refund_transfer_accounting",
+      "scenario": "退款和转账不得重复计为消费或收入",
+      "status": "passed",
+      "expected_invariant": "退款按退款口径入账；转账只按已确认流水影响账户，且不得重复执行。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_monthly_categories_and_investment_are_separate",
+        "test_simulated_bank.BankTests.test_confirmed_transfer_updates_ledger_once_and_enforces_daily_limit"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "duplicate_subscription_deduplication",
+      "scenario": "同一订阅与关联银行代扣去重",
+      "status": "passed",
+      "expected_invariant": "周期续费候选不得因订阅与代扣两条来源重复累计；取消订阅与关闭代扣保持分离。",
+      "tests": [
+        "test_cashflow_timeline.CashflowTimelineTest.test_recurrences_catch_up_once_and_deduplicate_linked_mandate",
+        "test_simulated_bank.BankTests.test_subscription_cancellation_does_not_close_bank_mandate"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "periodic_charge_false_positive",
+      "scenario": "高频但非周期消费的误判排除",
+      "status": "passed",
+      "expected_invariant": "高频餐饮等非周期消费不被直接认定为周期订阅。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_periodic_charges_exclude_frequent_restaurant"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "user_goal_correction",
+      "scenario": "用户纠正已保存的目标或支出记忆",
+      "status": "passed",
+      "expected_invariant": "后续读取只返回用户确认的最新内容，其他工作流不会越权读取。",
+      "tests": [
+        "test_user_memory.UserMemoryTests.test_default_off_manual_crud_and_explicit_scoped_use"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "expired_memory_exclusion",
+      "scenario": "财务记忆超过用户设置的有效期",
+      "status": "passed",
+      "expected_invariant": "过期记忆仍可查看和修改，但不进入资金分析上下文；模拟日期推进后自动过期。",
+      "tests": [
+        "test_user_memory.UserMemoryTests.test_expired_memory_remains_visible_but_is_excluded_from_analysis",
+        "test_bank_integration.IntegrationTest.test_expired_memory_is_visible_but_not_passed_to_cashflow_agent"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "no_authorization_no_action",
+      "scenario": "用户自然语言提问或未授权时不能执行写操作",
+      "status": "passed",
+      "expected_invariant": "查询与准备操作不改变资金；操作执行必须经过独立确认和权限检查。",
+      "tests": [
+        "test_bank_integration.IntegrationTest.test_natural_language_never_executes_and_external_catalog_is_excluded",
+        "test_simulated_bank.BankTests.test_prepare_is_side_effect_free"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "product_term_mismatch",
+      "scenario": "产品期限或风险不符合模拟用户画像",
+      "status": "passed",
+      "expected_invariant": "不匹配的产品被拒绝准备操作，最低金额和资金校验同时生效。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_risk_term_minimum_reserve_and_money_validation"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "insufficient_available_funds",
+      "scenario": "拟执行金额超过应急保留与已知到期款约束",
+      "status": "passed",
+      "expected_invariant": "资金不足时拒绝操作，不创建订单或扣减账户。",
+      "tests": [
+        "test_bank_integration.IntegrationTest.test_guard_requires_reserve_and_known_dues"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "cancelled_operation",
+      "scenario": "用户取消待确认操作",
+      "status": "passed",
+      "expected_invariant": "取消后无订单、无扣款；重复确认已取消操作仍被拒绝。",
+      "tests": [
+        "test_bank_integration.IntegrationTest.test_stale_confirmation_and_cancellation"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "duplicate_confirmation",
+      "scenario": "并发或重复提交相同确认",
+      "status": "passed",
+      "expected_invariant": "幂等回放返回同一操作，账户只扣款一次，只生成一笔订单。",
+      "tests": [
+        "test_simulated_bank.BankTests.test_repeat_and_concurrent_confirmation_execute_once"
+      ],
+      "failed_tests": []
+    },
+    {
+      "id": "simulated_service_timeout",
+      "scenario": "模拟服务在提交后超时或响应丢失",
+      "status": "passed",
+      "expected_invariant": "客户端先查询原操作状态并恢复回执，不重复扣款或误报成功。",
+      "tests": [
+        "test_bank_integration.IntegrationTest.test_http_timeout_while_backend_continues_recovers_receipt_without_duplicate"
+      ],
+      "failed_tests": []
+    }
+  ],
+  "runner_output": "...............\n----------------------------------------------------------------------\nRan 15 tests in 3.208s\n\nOK"
+}

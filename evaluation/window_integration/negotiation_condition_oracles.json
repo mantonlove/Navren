@@ -1,0 +1,73 @@
+{
+  "schema_version": "navren.window-integration.negotiation-conditions.v1",
+  "frozen_on": "2026-10-06",
+  "freeze_stage": "before_implementing_test_negotiation_conditions.py",
+  "purpose": "执行获批修复计划第3节的独立协商条件验收；已知反例与合同扩展，不称未见任务或正式三轮。",
+  "basis": [
+    "outputs/window-progress/integration/repair-plan-20261006.md 第3节",
+    "evaluation/window_integration/negotiation_consent_oracles.json 原NC01/NC02，只读保留",
+    "evaluation/window_integration/unseen_task_cases.json 原U12，只读保留",
+    "outputs/window-progress/agent/runtime-review-service-salary-negatives-candidate-2.json 原词已知反例"
+  ],
+  "boundaries": {
+    "real_model_semantics": false,
+    "formal_three_rounds": false,
+    "fixtures": "TemporaryDirectory银行、个人、知识、市场、缓存；独立Fernet密钥；受信合成服务规则临时副本。",
+    "network": "只允许真实loopback HTTP，不调用云模型、外网、现役库、真实规则或机构。",
+    "judge": "本人文字含义、原冻结合同、真实API返回、SQLite申请/审计/操作和财务原始行；模型与owner测试不作为唯一裁判。",
+    "missing_interface": "缺少preview/accept/applications真实接口时明确SkipTest；现有接口违约失败。"
+  },
+  "states": {
+    "consented": {"salary_deposit_intent": true, "salary_deposit_refused": false},
+    "refused": {"salary_deposit_intent": false, "salary_deposit_refused": true},
+    "unknown": {"salary_deposit_intent": false, "salary_deposit_refused": false}
+  },
+  "clarification": "unknown不能转成工资方案。现有preview.message应给出有关工资意愿的明确澄清；独立电子账单方案仍可展示。该提示不构成工资同意或申请授权。",
+  "expectations": {
+    "electronic_offer_id": "SYNTH-E-STATEMENT-FEE-90D",
+    "salary_offer_id": "SYNTH-PAYROLL-FEE-180D",
+    "accepted_status": "submitted_simulation_pending_eligibility",
+    "financial_operations": 0,
+    "financial_state_unchanged": true
+  },
+  "cases": [
+    {
+      "id":"NCOND01", "test":"test_explicit_consent_and_refusal_have_distinct_states",
+      "samples":[
+        {"text":"我愿意迁入工资账户，希望协商服务费减免。", "state":"consented"},
+        {"text":"我不愿意迁入工资账户，希望协商服务费减免。", "state":"refused"}
+      ],
+      "expected":"三态字段准确；仅明确同意可展示工资资格方案；电子账单保留；preview零申请、零提交审计、零金融操作。"
+    },
+    {
+      "id":"NCOND02", "test":"test_unknown_salary_keeps_electronic_offer_and_requests_clarification",
+      "samples":[
+        {"text":"我没有说愿意迁入工资账户，希望协商服务费减免。", "origin":"Agent候选2已知反例原词"},
+        {"text":"我没说愿意迁入工资账户，希望协商服务费减免。", "origin":"Agent候选2已知反例原词"},
+        {"text":"我只是问可以迁入工资账户换优惠吗，并未作出决定。", "origin":"Agent候选2已知反例原词"},
+        {"text":"银行说我可以迁入工资账户换优惠，但我还没做决定。", "origin":"Agent候选2已知反例原词"},
+        {"text":"如果费用减免条件满足，我可以迁入工资；只同意电子账单服务费减免，拒绝购买理财。", "origin":"获批条件句合同扩展"},
+        {"text":"如果费用减免条件满足我可以迁入工资；只同意电子账单服务费减免，拒绝购买理财。", "origin":"获批条件句合同扩展"},
+        {"text":"我现在既同意迁入工资又不同意迁入工资，尚未作最终决定；只同意电子账单服务费减免，拒绝购买理财。", "origin":"获批矛盾句合同扩展"}
+      ],
+      "expected":"所有样本unknown，零工资方案，电子账单保留，有工资条件澄清message，零申请/提交审计/金融操作，资金不变。"
+    },
+    {
+      "id":"NCOND03", "test":"test_electronic_acceptance_is_independent_and_replay_submits_once",
+      "text":"我不同意转入工资，但同意电子账单服务费减免；拒绝购买理财。",
+      "expected":"工资refused不妨碍电子账单。本人合法accept生成1申请、1提交审计、唯一application_id；重复accept返回同一条款和回执，不追加；工资及金融原始状态不变。"
+    },
+    {
+      "id":"NCOND04", "test":"test_known_salary_refusals_cannot_accept_excluded_payroll_offer",
+      "original_nc01":"原NC01四句逐字引用",
+      "additional_requests":["我可以接受电子账单服务费优惠但不转入工资。", "我愿意开通电子账单且不迁入工资，希望服务费减免。"],
+      "expected":"明确refused，电子账单保留，工资方案不出现；尝试accept工资方案HTTP409，零新增申请/提交审计/金融操作，资金不变。"
+    },
+    {
+      "id":"NCOND05", "test":"test_trusted_terms_or_eligibility_change_rejects_old_confirmation",
+      "original_nc02":"沿用原NC02同schema/offer_id改费用期限及工资资格的两个异常",
+      "expected":"prepare已展示原条款，accept前当前受信规则真实改变；旧accept HTTP409明确错误，草案数不增加，不隐形重建；零申请/提交审计/金融操作，资金不变。"
+    }
+  ],
+  "not_covered": ["真实云模型、前端实屏和设备语音", "Agent已知末端service_guard竞态由对应owner修复并另作独立冻结复验；本组不把三态通过推广为所有最终发布守卫通过"]
+}

@@ -1,6 +1,6 @@
 {
-  "schema_version": 2,
-  "dataset_version": "customer-bank-2026-10-03-v2",
+  "schema_version": 5,
+  "dataset_version": "customer-bank-2026-10-06-v5",
   "sources": [
     {
       "id": "fineract",
@@ -29,7 +29,7 @@
     {
       "id": "qingzhou",
       "name": "轻舟补充模拟场景",
-      "version": "customer-bank-2026-10-03-v2",
+      "version": "customer-bank-2026-10-06-v5",
       "url": "local:simulated_bank/customer_seed.py",
       "license": "项目原创模拟资料",
       "use": "全部演示客户、金融产品、现金金额、卡片和场景记录由本项目生成"
@@ -41,7 +41,7 @@
       "domain": "客户与机构",
       "schema_reference": "fineract:m_office",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "name",
@@ -80,7 +80,7 @@
       "domain": "客户与机构",
       "schema_reference": "fineract:m_client",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "branch_id",
@@ -97,7 +97,7 @@
         {
           "name": "birth_date",
           "kind": "date",
-          "nullable": false,
+          "nullable": true,
           "target": null
         },
         {
@@ -131,7 +131,7 @@
       "domain": "身份与授权",
       "schema_reference": "fineract:m_client_identifier",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -176,7 +176,7 @@
       "domain": "身份与授权",
       "schema_reference": "ibm:users",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -215,7 +215,7 @@
       "domain": "身份与授权",
       "schema_reference": "fineract:m_address",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -260,7 +260,7 @@
       "domain": "客户与机构",
       "schema_reference": "fineract:m_family_members",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -299,7 +299,7 @@
       "domain": "身份与授权",
       "schema_reference": "ibm:users",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -344,7 +344,7 @@
       "domain": "身份与授权",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -383,7 +383,7 @@
       "domain": "身份与授权",
       "schema_reference": "fineract:m_client",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -434,7 +434,7 @@
       "domain": "身份与授权",
       "schema_reference": "fineract:m_document",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -485,7 +485,7 @@
       "domain": "身份与授权",
       "schema_reference": "openbanking:account-access-consents",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -530,7 +530,7 @@
       "domain": "账户与存款",
       "schema_reference": "fineract:m_savings_account",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -593,7 +593,7 @@
       "domain": "账户与存款",
       "schema_reference": "openbanking:parties",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "account_id",
@@ -626,7 +626,7 @@
       "domain": "账户与存款",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "account_id",
@@ -665,7 +665,7 @@
       "domain": "账户与存款",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "account_id",
@@ -710,7 +710,7 @@
       "domain": "账户与存款",
       "schema_reference": "fineract:m_deposit_account_term_and_preclosure",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "account_id",
@@ -761,7 +761,7 @@
       "domain": "转账与收款",
       "schema_reference": "openbanking:beneficiaries",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "display_name",
@@ -818,7 +818,7 @@
       "domain": "转账与收款",
       "schema_reference": "openbanking:standing-orders",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "account_id",
@@ -857,7 +857,7 @@
       "domain": "转账与收款",
       "schema_reference": "ibm:bank_xfers",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟转账、定时转账及AA状态；所有资金变更须独立确认并记入模拟账本",
       "columns": [
         {
           "name": "account_id",
@@ -885,7 +885,7 @@
         },
         {
           "name": "status",
-          "kind": "status(draft|awaiting_confirmation|failed)",
+          "kind": "status(draft|awaiting_confirmation|succeeded|failed|cancelled)",
           "nullable": false,
           "target": null
         },
@@ -914,7 +914,7 @@
       "domain": "转账与收款",
       "schema_reference": "openbanking:scheduled-payments",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟转账、定时转账及AA状态；所有资金变更须独立确认并记入模拟账本",
       "columns": [
         {
           "name": "account_id",
@@ -948,7 +948,7 @@
         },
         {
           "name": "status",
-          "kind": "status(draft|cancelled)",
+          "kind": "status(draft|active|cancelled|completed|failed)",
           "nullable": false,
           "target": null
         },
@@ -965,7 +965,7 @@
       "domain": "转账与收款",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟转账、定时转账及AA状态；所有资金变更须独立确认并记入模拟账本",
       "columns": [
         {
           "name": "account_id",
@@ -987,7 +987,7 @@
         },
         {
           "name": "status",
-          "kind": "status(draft|cancelled)",
+          "kind": "status(draft|open|partially_paid|paid|cancelled)",
           "nullable": false,
           "target": null
         },
@@ -1004,7 +1004,7 @@
       "domain": "转账与收款",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟转账、定时转账及AA状态；所有资金变更须独立确认并记入模拟账本",
       "columns": [
         {
           "name": "split_id",
@@ -1032,7 +1032,7 @@
         },
         {
           "name": "status",
-          "kind": "status(unrequested|cancelled)",
+          "kind": "status(unrequested|requested|paid|declined|cancelled)",
           "nullable": false,
           "target": null
         },
@@ -1049,7 +1049,7 @@
       "domain": "账单与订阅",
       "schema_reference": "ibm:trans",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "name",
@@ -1082,7 +1082,7 @@
       "domain": "账单与订阅",
       "schema_reference": "fineract:m_savings_account_transaction",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "account_id",
@@ -1139,7 +1139,7 @@
       "domain": "账单与订阅",
       "schema_reference": "openbanking:statements",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "account_id",
@@ -1202,7 +1202,7 @@
       "domain": "账单与订阅",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟商户取消结果与银行代扣分别记录；不连接真实商户或银行",
       "columns": [
         {
           "name": "account_id",
@@ -1265,7 +1265,7 @@
       "domain": "账单与订阅",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟商户取消结果与银行代扣分别记录；不连接真实商户或银行",
       "columns": [
         {
           "name": "subscription_id",
@@ -1275,7 +1275,7 @@
         },
         {
           "name": "event_type",
-          "kind": "status(renewed|reminder|cancellation_requested)",
+          "kind": "status(renewed|reminder|cancellation_requested|cancelled)",
           "nullable": false,
           "target": null
         },
@@ -1304,7 +1304,7 @@
       "domain": "卡片与信用",
       "schema_reference": "ibm:cards",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟卡片控制、申请与演示审核；不代表真实发卡或授信",
       "columns": [
         {
           "name": "customer_id",
@@ -1373,7 +1373,7 @@
       "domain": "卡片与信用",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟卡片控制、申请与演示审核；不代表真实发卡或授信",
       "columns": [
         {
           "name": "card_id",
@@ -1412,7 +1412,7 @@
       "domain": "卡片与信用",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟卡片控制、申请与演示审核；不代表真实发卡或授信",
       "columns": [
         {
           "name": "customer_id",
@@ -1440,7 +1440,7 @@
         },
         {
           "name": "status",
-          "kind": "status(issued|draft|declined)",
+          "kind": "status(issued|draft|submitted|declined)",
           "nullable": false,
           "target": null
         },
@@ -1463,7 +1463,7 @@
       "domain": "卡片与信用",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟卡片控制、申请与演示审核；不代表真实发卡或授信",
       "columns": [
         {
           "name": "card_id",
@@ -1479,7 +1479,7 @@
         },
         {
           "name": "status",
-          "kind": "status(draft|declined)",
+          "kind": "status(draft|submitted|approved|declined)",
           "nullable": false,
           "target": null
         },
@@ -1502,7 +1502,7 @@
       "domain": "卡片与信用",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟卡片控制、申请与演示审核；不代表真实发卡或授信",
       "columns": [
         {
           "name": "card_id",
@@ -1512,7 +1512,7 @@
         },
         {
           "name": "event_type",
-          "kind": "status(issued|lost|blocked|unblocked)",
+          "kind": "status(issued|lost|blocked|unblocked|limit_updated)",
           "nullable": false,
           "target": null
         },
@@ -1541,7 +1541,7 @@
       "domain": "卡片与信用",
       "schema_reference": "openbanking:statements",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "card_id",
@@ -1598,7 +1598,7 @@
       "domain": "卡片与信用",
       "schema_reference": "ibm:trans",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "statement_id",
@@ -1643,7 +1643,7 @@
       "domain": "贷款与负债",
       "schema_reference": "fineract:m_loan",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -1666,7 +1666,7 @@
         {
           "name": "original_principal_minor",
           "kind": "money",
-          "nullable": false,
+          "nullable": true,
           "target": null
         },
         {
@@ -1684,13 +1684,13 @@
         {
           "name": "started_on",
           "kind": "date",
-          "nullable": false,
+          "nullable": true,
           "target": null
         },
         {
           "name": "matures_on",
           "kind": "date",
-          "nullable": false,
+          "nullable": true,
           "target": null
         },
         {
@@ -1712,7 +1712,7 @@
       "domain": "贷款与负债",
       "schema_reference": "fineract:m_loan_repayment_schedule",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "loan_id",
@@ -1763,7 +1763,7 @@
       "domain": "贷款与负债",
       "schema_reference": "fineract:m_loan_transaction",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "loan_id",
@@ -1808,7 +1808,7 @@
       "domain": "贷款与负债",
       "schema_reference": "fineract:m_loan_collateral",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "loan_id",
@@ -1841,7 +1841,7 @@
       "domain": "理财与适当性",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "product_id",
@@ -1892,7 +1892,7 @@
       "domain": "理财与适当性",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -1949,7 +1949,7 @@
       "domain": "理财与适当性",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -1978,7 +1978,7 @@
         {
           "name": "due_on",
           "kind": "date",
-          "nullable": false,
+          "nullable": true,
           "target": null
         },
         {
@@ -2000,7 +2000,7 @@
       "domain": "理财与适当性",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "account_id",
@@ -2039,7 +2039,7 @@
       "domain": "理财与适当性",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -2090,7 +2090,7 @@
       "domain": "跨场景任务",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "name",
@@ -2123,7 +2123,7 @@
       "domain": "跨场景任务",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "provider_id",
@@ -2168,7 +2168,7 @@
       "domain": "跨场景任务",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟任务编排、资金预留与服务预约；需用户确认，不连接真实商户",
       "columns": [
         {
           "name": "customer_id",
@@ -2196,7 +2196,7 @@
         },
         {
           "name": "status",
-          "kind": "status(draft|cancelled)",
+          "kind": "status(draft|cancelled|in_progress|completed|failed)",
           "nullable": false,
           "target": null
         },
@@ -2213,7 +2213,7 @@
       "domain": "跨场景任务",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟任务编排、资金预留与服务预约；需用户确认，不连接真实商户",
       "columns": [
         {
           "name": "task_id",
@@ -2241,7 +2241,7 @@
         },
         {
           "name": "status",
-          "kind": "status(planned|cancelled)",
+          "kind": "status(planned|succeeded|failed|cancelled)",
           "nullable": false,
           "target": null
         },
@@ -2258,7 +2258,7 @@
       "domain": "跨场景任务",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟任务编排、资金预留与服务预约；需用户确认，不连接真实商户",
       "columns": [
         {
           "name": "account_id",
@@ -2280,7 +2280,7 @@
         },
         {
           "name": "status",
-          "kind": "status(proposed|released)",
+          "kind": "status(proposed|held|consumed|expired|released)",
           "nullable": false,
           "target": null
         },
@@ -2309,7 +2309,7 @@
       "domain": "跨场景任务",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "本机模拟任务编排、资金预留与服务预约；需用户确认，不连接真实商户",
       "columns": [
         {
           "name": "task_id",
@@ -2331,7 +2331,7 @@
         },
         {
           "name": "status",
-          "kind": "status(draft|cancelled)",
+          "kind": "status(draft|confirmed|completed|failed|cancelled)",
           "nullable": false,
           "target": null
         },
@@ -2354,7 +2354,7 @@
       "domain": "提醒与服务",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -2405,7 +2405,7 @@
       "domain": "提醒与服务",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "transaction_id",
@@ -2444,7 +2444,7 @@
       "domain": "提醒与服务",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -2483,7 +2483,7 @@
       "domain": "安全与审计",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",
@@ -2528,7 +2528,7 @@
       "domain": "安全与审计",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "device_id",
@@ -2567,7 +2567,7 @@
       "domain": "安全与审计",
       "schema_reference": "qingzhou:extension",
       "record_origin": "qingzhou_synthetic",
-      "execution": "只读档案；该表不驱动实际扣款或发卡",
+      "execution": "只读档案；该表不驱动资金交易或真实银行业务",
       "columns": [
         {
           "name": "customer_id",

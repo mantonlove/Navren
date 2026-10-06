@@ -106,6 +106,7 @@ def create_server(bank, port=18766):
                 return 201, result, result['session_token']
             workspace, role = self._session()
             operation_match = re.fullmatch(PREFIX+r'/operations/([a-f0-9]{32})(?:/(verify|confirm|cancel))?',path)
+            periodic_mark_match = re.fullmatch(PREFIX+r'/periodic-charges/([a-f0-9]{64})/mark',path)
             if self.command=='GET':
                 allowed_query = {'year'} if path==PREFIX+'/annual-analysis' else {'month'} if path in (PREFIX+'/snapshot',PREFIX+'/transactions',PREFIX+'/analysis') else set()
                 if set(query)-allowed_query or any(len(v)!=1 for v in query.values()):
@@ -143,6 +144,10 @@ def create_server(bank, port=18766):
                     return 200,bank.products(workspace,data['product_ids']),None
                 if path==PREFIX+'/profile':
                     return 200,bank.profile(workspace,data),None
+                if periodic_mark_match:
+                    strict_fields(data,['decision'],['decision'])
+                    return 200,bank.mark_periodic_candidate(workspace,
+                        {'candidate_id':periodic_mark_match[1],'decision':data['decision']}),None
                 if operation_match:
                     op, action = operation_match[1],operation_match[2]
                     if action=='verify': return 200,bank.verify(workspace,op,data),None

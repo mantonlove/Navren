@@ -2,7 +2,7 @@
 const API_CONFIG = {
   endpoint: '/api/chat',
   token: '',
-  timeout: 30000,
+  timeout: 120000,
   useFallback: false,
   rateLimitDelay: 13000,
   models: {

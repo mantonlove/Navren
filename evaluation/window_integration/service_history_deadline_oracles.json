@@ -1,0 +1,97 @@
+{
+  "schema_version": 2,
+  "suite_id": "navren.integration.service-history-deadline/1",
+  "classification": "new_independent_engineering_regressions_not_formal_G1_or_cloud_semantic_score",
+  "frozen_before_first_execution": true,
+  "scope": "temporary_synthetic_actual_loopback_http_guarded_history_cas_and_original_105_second_deadline",
+  "basis": {
+    "approved_design": "outputs/window-progress/finance/solution-review/solution-v2.md",
+    "approved_design_sha256": "7e3ffe6996588cdd55733926ae294fff72a6e6b23454134ee9fa0708d2f100e8",
+    "section": "3.2",
+    "parent_authorization": "在原4项不变的前提下，补真实先前成功HTTP历史/组件、后来成功轮CAS保护、慢socket原105秒截止。先冻结3项，不实跑WIP。"
+  },
+  "fixture": {
+    "thread_timeout_seconds": 5,
+    "request_timeout_seconds": 7,
+    "original_turn_timeout_seconds": 105,
+    "synthetic_monotonic_start": 1000,
+    "remaining_at_review_approval_seconds": 0.15,
+    "deadline_excess_seconds": 0.001,
+    "backpressure_observation_seconds": 0.025,
+    "maximum_transport_wait_overhead_seconds": 0.8,
+    "tcp_buffer_bytes": 1024,
+    "transfer_minor": 10000,
+    "calendar_from": "2026-09-01",
+    "calendar_to": "2026-09-30",
+    "public_product": "WI-P",
+    "public_as_of": "2026-10-06",
+    "prior_request": "我明确愿意迁入工资，拒绝购买理财；只预览服务条件，读取2026年9月模拟日历并显示组件，不准备、不确认、不执行资金操作。",
+    "failed_request": "我明确愿意迁入工资，拒绝购买理财；本轮只预览服务条件，读取2026年9月模拟日历并显示组件，同时仅准备给妈妈转账100元草案，待本人核对，不确认、不执行。",
+    "later_request": "我明确愿意迁入工资，拒绝购买理财；后来这一轮只预览服务条件，读取2026年9月模拟日历并显示组件，不准备资金操作，也不执行。",
+    "prior_reply": "先前成功轮：服务条件仅供预览，须本人另行接受；公共测试条款说明本金风险；日历为只读组件，没有执行资金操作。",
+    "failed_reply": "本轮发送失败观察：服务条件仅供预览，须本人另行接受；公共测试条款说明本金风险；日历为只读组件，转账草案仅供核对，尚未执行。",
+    "later_reply": "后来成功轮：服务条件仅供预览，须本人另行接受；公共测试条款说明本金风险；日历为只读组件，没有执行资金操作。",
+    "deadline_request": "我明确愿意迁入工资，拒绝购买理财；只预览服务条件并显示2026年9月只读日历。请解释这些边界，不准备、不执行资金操作。",
+    "deadline_reply_prefix": "慢发送时限观察：服务条件仅供预览，须本人另行接受；公共测试条款说明本金风险；日历为只读组件。",
+    "deadline_reply_padding": "仅说明时限与风险边界。",
+    "deadline_reply_padding_repeats": 450,
+    "protected_prior_draft_origin": "真实认证工作台POST /api/finance/operations/prepare；非Agent草案，不预加载私库历史",
+    "uncommitted_reply": "私库未提交观察：服务条件仅供预览，须本人另行接受；公共测试条款说明本金风险；日历为只读组件，转账草案仅供核对，尚未执行。"
+  },
+  "expectations": {
+    "test_method_count": 4,
+    "minimum_real_prior_http_successes": 1,
+    "memory_enabled": false,
+    "prior_history_entries": 2,
+    "prior_widgets_minimum": 1,
+    "failed_round_own_widget_rows": 0,
+    "failed_round_receipt_retained": false,
+    "failed_round_financial_draft_state": "cancelled",
+    "prior_financial_draft_state": "pending_confirmation",
+    "first_case_cleanup_history_status": "discarded",
+    "first_case_guarded_save_status": "discarded",
+    "second_case_cleanup_history_status": "partial_or_stale",
+    "second_case_guarded_save_status": "discarded_partial",
+    "second_case_later_history_must_remain_byte_for_byte": true,
+    "failed_request_final_json_frames": 0,
+    "failed_request_second_result_frames": 0,
+    "native_socket_send_calls_started_after_deadline": 0,
+    "deadline_complete_success_json_frames": 0,
+    "deadline_receipt_retained": false,
+    "applications": 0,
+    "financial_execution_audits": 0,
+    "actual_cloud_calls": 0
+  },
+  "cases": [
+    {
+      "id": "SHD01",
+      "test": "test_delivery_failure_restores_prior_actual_http_history_and_widgets",
+      "expected": "长期记忆关闭仍由真实成功HTTP生成非空历史和组件，另以真实工作台API准备无关待确认草案。下一轮真实原生socket发送失败后，仅该轮CAS恢复先前历史密文与时间戳原件，先前组件/工作台草案/receipt保留；失败轮正文不留历史，其组件删除、receipt废弃、资金草案取消且不可执行；客户端无完整成功JSON或第二结果。"
+    },
+    {
+      "id": "SHD02",
+      "test": "test_late_cleanup_preserves_later_actual_http_history_and_reports_partial",
+      "expected": "真实第一失败轮清理入口有界暂停并释放发布银行锁；用另一受信本地Agent实例模拟后来独立worker，由真实HTTP成功保存后来历史/组件。原清理执行真实CAS，不覆盖后来历史密文/时间戳或组件，不将partial_or_stale/discarded_partial假报完全恢复；只废弃失败轮receipt/草案/匹配组件，不追加第二结果。后轮可能包含清理前读到的失败历史，必须如实保留partial而不能篡改后来已成功快照。"
+    },
+    {
+      "id": "SHD03",
+      "test": "test_slow_actual_socket_uses_original_deadline_remaining_and_stops",
+      "expected": "原ConversationAgent timeout为105秒，从同一模拟单调起点计算截止；审核后仅剩0.15秒。真实TCP客户端不读正文并缩小缓冲，原生socket.sendall被实际反压阻塞，等待timeout不得超过原剩余时间。跨同一deadline后不得开始后续成功帧/追加结果，客户端不能收到完整成功JSON，本轮receipt失效、历史按本请求清理。可保留截止前已有效交给TCP的响应头或部分前缀；不把截止后读取已缓冲字节误算成新发布，也不声称撤回既发字节。"
+    },
+    {
+      "id": "SHD04",
+      "test": "test_private_commit_then_permissions_error_restores_prior_actual_http_turn",
+      "expected": "先有真实成功HTTP历史/组件。在本轮真实save_turn_guarded私库commit成功后、_permissions提交后维护注入一次OSError，第二连接必须已看到精确response_id的saved代次及组件。writer未正常return仍按本请求真实CAS恢复先前密文/时点原件、撤回自身匹配组件/receipt/草案，保留无关工作台草案及先前receipt；客户端无成功旧金融帧/第二结果。未commit必须安全noop，不借补偿重保存或覆盖后来代次。"
+    }
+  ],
+  "limits_and_nonclaims": [
+    "这4项不是原服务4项或正式六业务多轮验收的追认通过；原文件、oracle及首轮失败均冻结不变。",
+    "使用真实发布守卫、guarded历史CAS、临时SQLite与loopback HTTP，只有主模型/审核是无付费本地脚本，故不验证云模型语义或供应商Token上界。",
+    "SHD02显式模拟多个独立受信Agent worker；单个原Agent工作区锁会阻止同实例并发，不能把此fixture当现役部署架构的运行证据。",
+    "SHD03模拟的仅是原单调时钟位置，实际socket阻塞、缓冲、编码帧和timeout均真实；测试失败或未到反压窗口不能当通过。",
+    "不验证真实TTS、麦克风、扬声器、浏览器设备或单调语音TTL；只观察后端receipt废弃和重放申请拒绝。",
+    "接口未闭合记录BLOCKED/skip，完整关卡要求4项、0 skip；设计冻结阶段实际执行次数为0。"
+  ],
+  "previous_oracle_sha256": "ecf0527b37cafcc9ebca45c5de30bc0a55bbc246a4210b3899e20ba89b6cf092",
+  "revision_reason": "首次执行前root明确授权增加真实HTTP私库commit后_permissions异常第四题；前三题题意不变，先前历史均真实HTTP生成。保护草案改用真实工作台API，以免将业务已定义的新Agent草案替代旧Agent草案误判为清理越权。没有任何测试执行结果驱动改预期。 SHD04同一方法再含真实原生私库commit失败子情境，独立第二连接须不见已提交本轮记录；只允许安全noop并禁止假报完全恢复。"
+}

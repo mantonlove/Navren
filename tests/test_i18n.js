@@ -1,0 +1,75 @@
+/* 国际化回归：NODE_PATH=<jsdom>/node_modules node tests/test_i18n.js；不连接业务服务。 */
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const {JSDOM}=require('jsdom');
+const dom=new JSDOM(`<body data-page="account"><nav class="sidebar"><a class="nav-item" href="chat.html"><span class="nav-label">对话</span></a><a class="nav-item" href="recommend.html"><span class="nav-label">发现</span></a></nav><main id="host"><p>总资产（本金）</p><p>现金余额</p><button>比较理财产品</button><button>管理银行卡</button><button>管理银行代扣</button><h3>账户与负债</h3><table><tr><th>已结算现金</th></tr></table><p class="memory-value">计划</p><p class="calendar-day-title">财务日历</p><p class="message user">现金余额</p><p translate="no">总资产（本金）</p><article class="market-panel-prose">管理银行卡</article><input id="entry" value="现金余额" placeholder="收款人"></main></body>`,{url:'https://navren.test/account.html',runScripts:'outside-only'});
+const w=dom.window,d=w.document,store=new Map([['navren_language','en']]);
+w.Storage={get:key=>store.get(key),set:(key,value)=>store.set(key,value)};
+w.STORAGE_KEYS={LANGUAGE:'navren_language'};
+w.matchMedia=()=>({matches:false,addEventListener(){}});
+w.requestAnimationFrame=()=>{throw Error('翻译不应等下一帧');};
+w.BankClient={ensure:async()=>({workspace_id:'fixture'}),get:async path=>path==='/products'?[]:{as_of:'2026-10-03',version:1}};
+w.NavrenPresentation={name:value=>String(value).replace(/^模拟/,''),text:value=>String(value)};
+const nativeCalls=[];
+w.confirm=message=>{nativeCalls.push(['confirm',message]);return false;};
+w.prompt=(message,value)=>{nativeCalls.push(['prompt',message,value]);return value;};
+w.alert=message=>nativeCalls.push(['alert',message]);
+let cycles=0;
+const OriginalObserver=w.MutationObserver;
+w.MutationObserver=class extends OriginalObserver {constructor(callback){super(records=>{cycles++;callback(records);});}};
+w.eval(fs.readFileSync('js/i18n.js','utf8'));
+w.eval(fs.readFileSync('js/bank_ui.js','utf8'));
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+let checks=0;
+function check(name,fn){fn();checks++;}
+(async()=>{
+ await tick();
+ const i=w.NavrenI18n,host=d.getElementById('host');
+ check('截图七项',()=>{
+  for(const text of ['总资产（本金）','现金余额','比较理财产品','管理银行卡','管理银行代扣','账户与负债','已结算现金'])assert.notEqual(i.t(text),text);
+  assert.equal(host.querySelector('p').textContent,'Total assets (principal)');
+ });
+ check('首屏语言与完成门槛',()=>{assert.equal(d.documentElement.lang,'en');assert.equal(d.documentElement.dataset.i18nReady,'true');});
+ check('用户与原始材料不改写',()=>{
+  for(const [selector,text] of [['.memory-value','计划'],['.calendar-day-title','财务日历'],['.message.user','现金余额'],['[translate=no]','总资产（本金）'],['.market-panel-prose','管理银行卡']])assert.equal(d.querySelector(selector).textContent,text);
+ });
+ check('输入原值不改写',()=>{assert.equal(d.getElementById('entry').value,'现金余额');assert.equal(d.getElementById('entry').placeholder,'Recipient');});
+ check('排除节点作为根也不改写',()=>{i.apply(d.querySelector('.memory-value'));assert.equal(d.querySelector('.memory-value').textContent,'计划');});
+ const input=d.createElement('input');input.placeholder='收款人';input.value='现金余额';i.apply(input);
+ check('未挂载根属性',()=>{assert.equal(input.placeholder,'Recipient');assert.equal(input.value,'现金余额');});
+ const textarea=d.createElement('textarea');textarea.placeholder='对当前信息有什么想了解的？';textarea.textContent='现金余额';textarea.value='账户与负债';host.append(textarea);await tick();
+ check('文本框提示语翻译且保留内容',()=>{assert.equal(textarea.placeholder,'What would you like to know about this information?');assert.equal(textarea.value,'账户与负债');assert.equal(textarea.textContent,'现金余额');i.setLanguage('zh-CN');assert.equal(textarea.placeholder,'对当前信息有什么想了解的？');assert.equal(textarea.value,'账户与负债');i.setLanguage('en');});
+ let clicked=0;
+ const button=w.BankUI.button('管理银行卡',()=>clicked++);
+ check('组件挂载前已是英文',()=>assert.equal(button.textContent,'Manage bank cards'));
+ const card=w.BankUI.panel('账户与负债');card.append(button);host.append(card);button.click();
+ check('事件保持原语义',()=>assert.equal(clicked,1));
+ const dynamic=d.createElement('p');dynamic.textContent='现金余额';host.append(dynamic);await tick();
+ check('异步新增文字绘制前本地化',()=>assert.equal(dynamic.textContent,'Cash balance'));
+ const countBefore=cycles;await tick();await tick();
+ check('观察器稳定',()=>assert.ok(cycles-countBefore<3));
+ const archived=card.outerHTML;card.remove();const restored=d.createElement('div');restored.innerHTML=archived;host.append(restored);await tick();
+ i.setLanguage('zh-CN');await tick();
+ check('历史HTML恢复后可切中文',()=>{assert.equal(restored.querySelector('h3').textContent,'账户与负债');assert.equal(restored.querySelector('button').textContent,'管理银行卡');});
+ check('普通节点与属性中英往返',()=>{assert.equal(dynamic.textContent,'现金余额');assert.equal(d.getElementById('entry').placeholder,'收款人');assert.equal(d.querySelector('a[href="recommend.html"] .nav-label').textContent,'发现');});
+ i.setLanguage('en');await tick();
+ check('历史再次切英文',()=>assert.equal(restored.querySelector('button').textContent,'Manage bank cards'));
+ check('动态资金与编号保真',()=>{
+  const source='贷款与信用卡负债 3,210.00 元 · 净资产（本金） 29,180.00 元。收益及市场估值未模拟。';
+  assert.match(i.t(source),/CNY 3,210.00/);assert.match(i.t(source),/CNY 29,180.00/);
+  assert.equal(i.t('金额：12.34 元；预计结算日：2026-10-05'),'Amount: CNY 12.34; Expected settlement date: 2026-10-05');
+  assert.equal(i.t('操作编号：opaque-id-123'),'Operation ID: opaque-id-123');
+ });
+ const weekday=d.createElement('span');weekday.className='calendar-weekday';weekday.textContent='日';host.append(weekday);await tick();
+ check('星期与期间单位区分',()=>{assert.equal(weekday.textContent,'Sun');assert.equal(i.t('日'),'Day');});
+ check('重要确认状态全有英文',()=>{for(const text of Object.values(w.BankUI.statuses))assert.notEqual(i.t(text),text);});
+ check('产品名称保留原文',()=>assert.equal(w.BankUI.node('h3','某机构正式产品甲').textContent,'某机构正式产品甲'));
+ check('原生确认与输入不改语义',()=>{assert.equal(w.confirm('取消'),false);assert.equal(w.prompt('收款人','现金余额'),'现金余额');assert.deepEqual(nativeCalls.slice(-2),[['confirm','Cancel'],['prompt','Recipient','现金余额']]);});
+ w.dispatchEvent(new w.Event('pagehide'));
+ check('缓存离开重新设显示门槛',()=>assert.equal(d.documentElement.dataset.i18nReady,undefined));
+ store.set('navren_language','zh-CN');w.dispatchEvent(new w.Event('pageshow'));await tick();
+ check('缓存回来核对当前语言',()=>{assert.equal(i.language,'zh-CN');assert.equal(dynamic.textContent,'现金余额');assert.equal(d.documentElement.dataset.i18nReady,'true');});
+ store.set('navren_language','en');w.dispatchEvent(new w.StorageEvent('storage',{key:'navren_language'}));await tick();
+ check('跨页语言同步',()=>assert.equal(dynamic.textContent,'Cash balance'));
+ console.log(`国际化回归通过：${checks} 项检查。`);
+ dom.window.close();
+})().catch(error=>{console.error(error);dom.window.close();process.exitCode=1;});

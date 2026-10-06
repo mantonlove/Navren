@@ -1,0 +1,74 @@
+[
+  {
+    "file": "outputs/window-progress/rag/sources/products/001198-prospectus.pdf",
+    "parser_id": "pdfplumber-text/1",
+    "shape": "pdfplumber-pages/1",
+    "extractor_version": "pdfplumber/0.11.9;pdfminer.six/20251230",
+    "raw_sha256": "843038a3b2dc6be1294b9f457128cfa2c0990c44635d1dabffc470ccb35d3eaf",
+    "text_sha256": "853f028ad634e02a13111027dd1ebe35b3d4fbc7f4900f0c6f070e3e6b074d11",
+    "pages": 153,
+    "text_chars": 114883,
+    "nontext_page_count": 0,
+    "matches_root_default_pages": true
+  },
+  {
+    "file": "outputs/window-progress/rag/sources/products/001198-summary.pdf",
+    "parser_id": "pdfplumber-text/1",
+    "shape": "pdfplumber-pages/1",
+    "extractor_version": "pdfplumber/0.11.9;pdfminer.six/20251230",
+    "raw_sha256": "7619b56a06f5e2661aafca007b362cad1812964a32cf9e53bf43169b5addfe42",
+    "text_sha256": "5561cb3ee29c793ced45bf9b49fff88cf53a4afeeef2fa45239f1a47ebed1dc7",
+    "pages": 5,
+    "text_chars": 3703,
+    "nontext_page_count": 0,
+    "matches_root_default_pages": true
+  },
+  {
+    "file": "outputs/window-progress/rag/sources/products/006210-prospectus.pdf",
+    "parser_id": "pdfplumber-text/1",
+    "shape": "pdfplumber-pages/1",
+    "extractor_version": "pdfplumber/0.11.9;pdfminer.six/20251230",
+    "raw_sha256": "6098fb45910b450474f980b8b969124b9850fbbde99eef1235aed8dadb45946c",
+    "text_sha256": "b87bcaee0a12c8e1ced5cdb225a4cee587409a526bbc8034ace4e227258a8a9a",
+    "pages": 141,
+    "text_chars": 109567,
+    "nontext_page_count": 0,
+    "matches_root_default_pages": true
+  },
+  {
+    "file": "outputs/window-progress/rag/sources/products/006210-summary.pdf",
+    "parser_id": "pdfplumber-text/1",
+    "shape": "pdfplumber-pages/1",
+    "extractor_version": "pdfplumber/0.11.9;pdfminer.six/20251230",
+    "raw_sha256": "9adfe48293c60ef1a0665236a0300b4b79f43bd7c33b1b65f86185251931f500",
+    "text_sha256": "a95955bca5382e55ddfa3ed13baf030e756770b55ebd3fa936ebadcfa13632d0",
+    "pages": 5,
+    "text_chars": 3787,
+    "nontext_page_count": 0,
+    "matches_root_default_pages": true
+  },
+  {
+    "file": "outputs/window-progress/rag/sources/products/021095-prospectus.pdf",
+    "parser_id": "pdfplumber-text/1",
+    "shape": "pdfplumber-pages/1",
+    "extractor_version": "pdfplumber/0.11.9;pdfminer.six/20251230",
+    "raw_sha256": "a98a00fff64151755ee437d3f1abe200c9ef2c207751311e1db8365c6e3c5bc4",
+    "text_sha256": "26cc559915ecdcc4f46c44cc21567f7caba425944c6685caf51c95fbf70ed913",
+    "pages": 150,
+    "text_chars": 114553,
+    "nontext_page_count": 0,
+    "matches_root_default_pages": true
+  },
+  {
+    "file": "outputs/window-progress/rag/sources/products/021095-summary.pdf",
+    "parser_id": "pdfplumber-text/1",
+    "shape": "pdfplumber-pages/1",
+    "extractor_version": "pdfplumber/0.11.9;pdfminer.six/20251230",
+    "raw_sha256": "2489e178e7c61d9ca567b2e0bbc99ba19ca9dbe0821fcdb364d657d194490838",
+    "text_sha256": "b8e322bcf5ec2dc0814c7614194e21e35218b8cba5cf9f70a37e40b3f4bc3b20",
+    "pages": 6,
+    "text_chars": 5124,
+    "nontext_page_count": 0,
+    "matches_root_default_pages": true
+  }
+]

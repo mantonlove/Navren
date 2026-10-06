@@ -1,0 +1,1535 @@
+{
+  "schema_version": 1,
+  "source_opened_read_only": true,
+  "mutations_on_temporary_clones_only": true,
+  "reviewed_release_id": "pub-431a2429c15de761da1ed0051bec15154a8cc7b4",
+  "current_provider_status": {
+    "schema_version": 1,
+    "ready": true,
+    "provider_id": "navren.sqlite.graphrag.v1",
+    "public_release_id": "pub-431a2429c15de761da1ed0051bec15154a8cc7b4",
+    "retrieval_method": "local_fts5_candidates_typed_evidence_graph",
+    "published_chunk_count": 386,
+    "private_retrieval_available": false,
+    "graph_ready": true,
+    "graph_schema": "typed-public-evidence/1",
+    "graph_entity_count": 872,
+    "published_evidenced_relation_count": 2116,
+    "neural_embeddings_available": false,
+    "llm_extraction_available": false,
+    "maximum_graph_depth": 4,
+    "maximum_release_chunks": 5000
+  },
+  "reviewed_raw_sha256": "dab1216c8bf2911dc5c90542b1d57423fd86d238a290d385e5c7720155a2f0ed",
+  "source_date": "2026-09-24",
+  "source_checks": [
+    {
+      "product_id": "WEBANK:000001",
+      "passed": true,
+      "original_locator": "productPresentation[0]",
+      "reviewed_fields": {
+        "code": "000001",
+        "name": "华夏成长混合",
+        "type": "开放式基金",
+        "risk": "R5高风险",
+        "investor": "C5激进型",
+        "charge": "详见产品页面",
+        "chargeWay": "详见产品页面",
+        "saleStatus": "在售"
+      }
+    },
+    {
+      "product_id": "WEBANK:000015",
+      "passed": true,
+      "original_locator": "productPresentation[5]",
+      "reviewed_fields": {
+        "code": "000015",
+        "name": "华夏纯债债券A",
+        "type": "开放式基金",
+        "risk": "R2中低风险",
+        "investor": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+        "charge": "详见产品页面",
+        "chargeWay": "详见产品页面",
+        "saleStatus": "在售"
+      }
+    },
+    {
+      "product_id": "WEBANK:000016",
+      "passed": true,
+      "original_locator": "productPresentation[6]",
+      "reviewed_fields": {
+        "code": "000016",
+        "name": "华夏纯债债券C",
+        "type": "开放式基金",
+        "risk": "R2中低风险",
+        "investor": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+        "charge": "详见产品页面",
+        "chargeWay": "详见产品页面",
+        "saleStatus": "在售"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "historical-risk-growth",
+      "passed": true,
+      "question": "2026-09-24微众目录如何披露华夏成长混合的风险？",
+      "request": {
+        "query": "2026-09-24微众目录如何披露华夏成长混合的风险？",
+        "scope": "public",
+        "product_id": "WEBANK:000001",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "risk"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "quote",
+        "contains": "R5高风险",
+        "semantic_limit": "仅支持该日微众渠道风险披露；不能推出底层产品身份或今天适合购买。"
+      },
+      "status": "partial",
+      "coverage_gaps": [
+        {
+          "code": "effective_period_unknown",
+          "message": "原文有效区间不完整，不能推断当前仍有效。",
+          "citation_id": "cb3ec6fa83665dc8d1d3e4752d1b32bc218e11486"
+        }
+      ],
+      "hits": [
+        {
+          "citation_id": "cb3ec6fa83665dc8d1d3e4752d1b32bc218e11486",
+          "version_id": "v15c72faab4dc307cb4dd4e7dedc1ba58c26a6c89",
+          "excerpt": "\"risk\":\"R5高风险\"",
+          "locator": {
+            "page": null,
+            "paragraph": "productPresentation:000001/risk",
+            "start_char": 163,
+            "end_char": 177
+          },
+          "source_url": "https://tctp.tctpwebankcdn.net/owb-admin/data/appsystems/owb-admin/productpresentation.json",
+          "published_on": "2026-09-24",
+          "effective_from": null,
+          "effective_to": null,
+          "same_original": true,
+          "identity_matches": true,
+          "frozen_version_matches": true,
+          "data_on": "2026-09-24",
+          "graph_trace": {
+            "citation_id": "cb3ec6fa83665dc8d1d3e4752d1b32bc218e11486",
+            "release_id": "pub-431a2429c15de761da1ed0051bec15154a8cc7b4",
+            "paths": [
+              {
+                "purpose": "original_source",
+                "relations": [
+                  {
+                    "id": "gr-2bf91132f5784dcaefa2674d326d315d9bb40305",
+                    "subject_id": "ge-clause-66b713fb071bae4465b2e20f73bc3c86",
+                    "object_id": "ge-document_version-eb3c1948ba0c5e2acb1bd9d0ced4d9a4",
+                    "predicate": "quoted_in",
+                    "version_id": "v15c72faab4dc307cb4dd4e7dedc1ba58c26a6c89",
+                    "citation_id": "cb3ec6fa83665dc8d1d3e4752d1b32bc218e11486",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-b0198fa0c9caa9b00d26bb2e8b6ecaddd3673ec5",
+                    "subject_id": "ge-document_version-eb3c1948ba0c5e2acb1bd9d0ced4d9a4",
+                    "object_id": "ge-document-838288de47b065978508578df7f351ad",
+                    "predicate": "version_of",
+                    "version_id": "v15c72faab4dc307cb4dd4e7dedc1ba58c26a6c89",
+                    "citation_id": "cb3ec6fa83665dc8d1d3e4752d1b32bc218e11486",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-09e88c6b0aeedfb0f1bd5d80b702a504e304d674",
+                    "subject_id": "ge-document-838288de47b065978508578df7f351ad",
+                    "object_id": "ge-source-2dff997d47d88ea2e78fcdc8ed928288",
+                    "predicate": "published_by",
+                    "version_id": "v15c72faab4dc307cb4dd4e7dedc1ba58c26a6c89",
+                    "citation_id": "cb3ec6fa83665dc8d1d3e4752d1b32bc218e11486",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "risk",
+                "subject_type": "product",
+                "subject_ref": "WEBANK:000001",
+                "relations": [
+                  {
+                    "id": "gr-747f51f41f7f36e0644c075af2ce7be31d689cbc",
+                    "subject_id": "ge-product-9e323ed5883c3168dca9126b1487be32",
+                    "object_id": "ge-clause-66b713fb071bae4465b2e20f73bc3c86",
+                    "predicate": "has_disclosure",
+                    "version_id": "v15c72faab4dc307cb4dd4e7dedc1ba58c26a6c89",
+                    "citation_id": "cb3ec6fa83665dc8d1d3e4752d1b32bc218e11486",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-2f9cd75ac1c9e0e1fc5396f56abd59e43a46c79b",
+                    "subject_id": "ge-clause-66b713fb071bae4465b2e20f73bc3c86",
+                    "object_id": "ge-risk_disclosure-423241fc4723690439598fd14e1ad329",
+                    "predicate": "has_rule",
+                    "version_id": "v15c72faab4dc307cb4dd4e7dedc1ba58c26a6c89",
+                    "citation_id": "cb3ec6fa83665dc8d1d3e4752d1b32bc218e11486",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "risk",
+                "subject_type": "channel",
+                "subject_ref": "WEBANK",
+                "relations": [
+                  {
+                    "id": "gr-3abd93480105d160f0d7e6cbc13b0b0df2ffbc46",
+                    "subject_id": "ge-channel-83b6e2f5a7e1f30d7eb027dd1e59cf34",
+                    "object_id": "ge-clause-66b713fb071bae4465b2e20f73bc3c86",
+                    "predicate": "channel_discloses",
+                    "version_id": "v15c72faab4dc307cb4dd4e7dedc1ba58c26a6c89",
+                    "citation_id": "cb3ec6fa83665dc8d1d3e4752d1b32bc218e11486",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-2f9cd75ac1c9e0e1fc5396f56abd59e43a46c79b",
+                    "subject_id": "ge-clause-66b713fb071bae4465b2e20f73bc3c86",
+                    "object_id": "ge-risk_disclosure-423241fc4723690439598fd14e1ad329",
+                    "predicate": "has_rule",
+                    "version_id": "v15c72faab4dc307cb4dd4e7dedc1ba58c26a6c89",
+                    "citation_id": "cb3ec6fa83665dc8d1d3e4752d1b32bc218e11486",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              }
+            ],
+            "coverage_gaps": []
+          }
+        }
+      ],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "historical-risk-bond-a",
+      "passed": true,
+      "question": "2026-09-24华夏纯债债券A的渠道风险披露是什么？",
+      "request": {
+        "query": "2026-09-24华夏纯债债券A的渠道风险披露是什么？",
+        "scope": "public",
+        "product_id": "WEBANK:000015",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "risk"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "quote",
+        "contains": "R2中低风险",
+        "semantic_limit": "不把名称中的A字当成已核验份额ID。"
+      },
+      "status": "partial",
+      "coverage_gaps": [
+        {
+          "code": "effective_period_unknown",
+          "message": "原文有效区间不完整，不能推断当前仍有效。",
+          "citation_id": "c51860e7c0b9879c186a92696ec8e2f9db2cb810e"
+        }
+      ],
+      "hits": [
+        {
+          "citation_id": "c51860e7c0b9879c186a92696ec8e2f9db2cb810e",
+          "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+          "excerpt": "\"risk\":\"R2中低风险\"",
+          "locator": {
+            "page": null,
+            "paragraph": "productPresentation:000015/risk",
+            "start_char": 182,
+            "end_char": 197
+          },
+          "source_url": "https://tctp.tctpwebankcdn.net/owb-admin/data/appsystems/owb-admin/productpresentation.json",
+          "published_on": "2026-09-24",
+          "effective_from": null,
+          "effective_to": null,
+          "same_original": true,
+          "identity_matches": true,
+          "frozen_version_matches": true,
+          "data_on": "2026-09-24",
+          "graph_trace": {
+            "citation_id": "c51860e7c0b9879c186a92696ec8e2f9db2cb810e",
+            "release_id": "pub-431a2429c15de761da1ed0051bec15154a8cc7b4",
+            "paths": [
+              {
+                "purpose": "original_source",
+                "relations": [
+                  {
+                    "id": "gr-4615310225e1727ff0955bd2390dc99c621db5b3",
+                    "subject_id": "ge-clause-706e1bf8d855f76bcf1ae7f23c06f762",
+                    "object_id": "ge-document_version-97f71235c97c8f7698760d04a4896d90",
+                    "predicate": "quoted_in",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c51860e7c0b9879c186a92696ec8e2f9db2cb810e",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-b336eea098e68b62bcfd6e0c736eece1c656a1d1",
+                    "subject_id": "ge-document_version-97f71235c97c8f7698760d04a4896d90",
+                    "object_id": "ge-document-8fa974e95ed6f9405cb4d15e6e736aa0",
+                    "predicate": "version_of",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c51860e7c0b9879c186a92696ec8e2f9db2cb810e",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-f5492019e7cce714f35dbcf8c91d2e12ceb9a9e8",
+                    "subject_id": "ge-document-8fa974e95ed6f9405cb4d15e6e736aa0",
+                    "object_id": "ge-source-2dff997d47d88ea2e78fcdc8ed928288",
+                    "predicate": "published_by",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c51860e7c0b9879c186a92696ec8e2f9db2cb810e",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "risk",
+                "subject_type": "product",
+                "subject_ref": "WEBANK:000015",
+                "relations": [
+                  {
+                    "id": "gr-2be15eb64f9d4fda9d804b9bf5a8485a3ee41066",
+                    "subject_id": "ge-product-219facf105019f2aa52c08493c0204b9",
+                    "object_id": "ge-clause-706e1bf8d855f76bcf1ae7f23c06f762",
+                    "predicate": "has_disclosure",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c51860e7c0b9879c186a92696ec8e2f9db2cb810e",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-01f89fee57d1b6d476425c62ce7f39ec09fc0b0b",
+                    "subject_id": "ge-clause-706e1bf8d855f76bcf1ae7f23c06f762",
+                    "object_id": "ge-risk_disclosure-60291a25f527c9dff8d5dc1676d1f60c",
+                    "predicate": "has_rule",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c51860e7c0b9879c186a92696ec8e2f9db2cb810e",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "risk",
+                "subject_type": "channel",
+                "subject_ref": "WEBANK",
+                "relations": [
+                  {
+                    "id": "gr-8f1d36078e2cfd0ff935fd2ae598effa67568a5b",
+                    "subject_id": "ge-channel-83b6e2f5a7e1f30d7eb027dd1e59cf34",
+                    "object_id": "ge-clause-706e1bf8d855f76bcf1ae7f23c06f762",
+                    "predicate": "channel_discloses",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c51860e7c0b9879c186a92696ec8e2f9db2cb810e",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-01f89fee57d1b6d476425c62ce7f39ec09fc0b0b",
+                    "subject_id": "ge-clause-706e1bf8d855f76bcf1ae7f23c06f762",
+                    "object_id": "ge-risk_disclosure-60291a25f527c9dff8d5dc1676d1f60c",
+                    "predicate": "has_rule",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c51860e7c0b9879c186a92696ec8e2f9db2cb810e",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              }
+            ],
+            "coverage_gaps": []
+          }
+        }
+      ],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "historical-risk-bond-c",
+      "passed": true,
+      "question": "2026-09-24华夏纯债债券C的渠道风险披露是什么？",
+      "request": {
+        "query": "2026-09-24华夏纯债债券C的渠道风险披露是什么？",
+        "scope": "public",
+        "product_id": "WEBANK:000016",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "risk"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "quote",
+        "contains": "R2中低风险",
+        "semantic_limit": "只引用C名称对应的渠道产品，不能复用A的产品ID。"
+      },
+      "status": "partial",
+      "coverage_gaps": [
+        {
+          "code": "effective_period_unknown",
+          "message": "原文有效区间不完整，不能推断当前仍有效。",
+          "citation_id": "c1cc873f1e431143af894df42f237196bdd2ed394"
+        }
+      ],
+      "hits": [
+        {
+          "citation_id": "c1cc873f1e431143af894df42f237196bdd2ed394",
+          "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+          "excerpt": "\"risk\":\"R2中低风险\"",
+          "locator": {
+            "page": null,
+            "paragraph": "productPresentation:000016/risk",
+            "start_char": 182,
+            "end_char": 197
+          },
+          "source_url": "https://tctp.tctpwebankcdn.net/owb-admin/data/appsystems/owb-admin/productpresentation.json",
+          "published_on": "2026-09-24",
+          "effective_from": null,
+          "effective_to": null,
+          "same_original": true,
+          "identity_matches": true,
+          "frozen_version_matches": true,
+          "data_on": "2026-09-24",
+          "graph_trace": {
+            "citation_id": "c1cc873f1e431143af894df42f237196bdd2ed394",
+            "release_id": "pub-431a2429c15de761da1ed0051bec15154a8cc7b4",
+            "paths": [
+              {
+                "purpose": "original_source",
+                "relations": [
+                  {
+                    "id": "gr-efd1ae14b9ab9aa50f8607c853a7e17ffaa4cd6f",
+                    "subject_id": "ge-clause-2ca0d156b1b616724b2459e34be6614f",
+                    "object_id": "ge-document_version-738c0d54210dec30b458f0f483be34e3",
+                    "predicate": "quoted_in",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1cc873f1e431143af894df42f237196bdd2ed394",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-efc6fda1f1fdc0096e91f1e949a18c93a1707b43",
+                    "subject_id": "ge-document_version-738c0d54210dec30b458f0f483be34e3",
+                    "object_id": "ge-document-8f778f3162340c9c62f98a2a0475b114",
+                    "predicate": "version_of",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1cc873f1e431143af894df42f237196bdd2ed394",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-98b88398f244ce577d1aa36569a26451a397b21c",
+                    "subject_id": "ge-document-8f778f3162340c9c62f98a2a0475b114",
+                    "object_id": "ge-source-2dff997d47d88ea2e78fcdc8ed928288",
+                    "predicate": "published_by",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1cc873f1e431143af894df42f237196bdd2ed394",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "risk",
+                "subject_type": "product",
+                "subject_ref": "WEBANK:000016",
+                "relations": [
+                  {
+                    "id": "gr-0c710226105340c8ed15ad71f6d44bf981c2b3a4",
+                    "subject_id": "ge-product-b6087ca594e7d91aecf4b42dc7fda9d6",
+                    "object_id": "ge-clause-2ca0d156b1b616724b2459e34be6614f",
+                    "predicate": "has_disclosure",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1cc873f1e431143af894df42f237196bdd2ed394",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-72190b5ee61126228a7acccbd18985026ff6c414",
+                    "subject_id": "ge-clause-2ca0d156b1b616724b2459e34be6614f",
+                    "object_id": "ge-risk_disclosure-435a1b88ce6c326ab3fe539e13cd8fe5",
+                    "predicate": "has_rule",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1cc873f1e431143af894df42f237196bdd2ed394",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "risk",
+                "subject_type": "channel",
+                "subject_ref": "WEBANK",
+                "relations": [
+                  {
+                    "id": "gr-39a611951cf6fb9e9dc2111e3716e563569e4d39",
+                    "subject_id": "ge-channel-83b6e2f5a7e1f30d7eb027dd1e59cf34",
+                    "object_id": "ge-clause-2ca0d156b1b616724b2459e34be6614f",
+                    "predicate": "channel_discloses",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1cc873f1e431143af894df42f237196bdd2ed394",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-72190b5ee61126228a7acccbd18985026ff6c414",
+                    "subject_id": "ge-clause-2ca0d156b1b616724b2459e34be6614f",
+                    "object_id": "ge-risk_disclosure-435a1b88ce6c326ab3fe539e13cd8fe5",
+                    "predicate": "has_rule",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1cc873f1e431143af894df42f237196bdd2ed394",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              }
+            ],
+            "coverage_gaps": []
+          }
+        }
+      ],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "current-risk-expired",
+      "passed": true,
+      "question": "2026-10-06华夏纯债债券A的当前风险是什么？",
+      "request": {
+        "query": "2026-10-06华夏纯债债券A的当前风险是什么？",
+        "scope": "public",
+        "product_id": "WEBANK:000015",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-10-06",
+        "facets": [
+          "risk"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "no_hits",
+        "gap": "expired_evidence",
+        "semantic_limit": "风险资料超出7天，不能把历史R2写成当前风险结论。"
+      },
+      "status": "empty",
+      "coverage_gaps": [
+        {
+          "code": "expired_evidence",
+          "message": "原文条款在查询时点已经到期。"
+        },
+        {
+          "code": "facet_uncovered",
+          "message": "请求的分析维度缺少已核验原文证据。",
+          "facet": "risk"
+        },
+        {
+          "code": "no_verified_evidence",
+          "message": "本次没有可输出的已核验公共原文证据。"
+        }
+      ],
+      "hits": [],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "fees-a-placeholder",
+      "passed": true,
+      "question": "华夏纯债债券A的申购费、赎回费具体多少？",
+      "request": {
+        "query": "华夏纯债债券A的申购费、赎回费具体多少？",
+        "scope": "public",
+        "product_id": "WEBANK:000015",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "fees"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "quote",
+        "contains": "详见产品页面",
+        "semantic_limit": "只提供费用入口占位文字；具体费率、条件和计算仍不可得，不能补成0。"
+      },
+      "status": "partial",
+      "coverage_gaps": [
+        {
+          "code": "effective_period_unknown",
+          "message": "原文有效区间不完整，不能推断当前仍有效。",
+          "citation_id": "c3f5af7c8627e09c0baabacb94a921ea6026f929a"
+        },
+        {
+          "code": "effective_period_unknown",
+          "message": "原文有效区间不完整，不能推断当前仍有效。",
+          "citation_id": "cbca8538d472b7a159b5aa2354fe53aff53d276be"
+        }
+      ],
+      "hits": [
+        {
+          "citation_id": "c3f5af7c8627e09c0baabacb94a921ea6026f929a",
+          "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+          "excerpt": "\"charge\":\"详见产品页面\"",
+          "locator": {
+            "page": null,
+            "paragraph": "productPresentation:000015/charge",
+            "start_char": 1,
+            "end_char": 18
+          },
+          "source_url": "https://tctp.tctpwebankcdn.net/owb-admin/data/appsystems/owb-admin/productpresentation.json",
+          "published_on": "2026-09-24",
+          "effective_from": null,
+          "effective_to": null,
+          "same_original": true,
+          "identity_matches": true,
+          "frozen_version_matches": true,
+          "data_on": "2026-09-24",
+          "graph_trace": {
+            "citation_id": "c3f5af7c8627e09c0baabacb94a921ea6026f929a",
+            "release_id": "pub-431a2429c15de761da1ed0051bec15154a8cc7b4",
+            "paths": [
+              {
+                "purpose": "original_source",
+                "relations": [
+                  {
+                    "id": "gr-0cb3ba882859b4e4df81bc6ca285a64903ef9e30",
+                    "subject_id": "ge-clause-bff03751084846620ae9f2a592842554",
+                    "object_id": "ge-document_version-97f71235c97c8f7698760d04a4896d90",
+                    "predicate": "quoted_in",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c3f5af7c8627e09c0baabacb94a921ea6026f929a",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-bdde0c86c238b2fb1f28735d87e5d771fced09fa",
+                    "subject_id": "ge-document_version-97f71235c97c8f7698760d04a4896d90",
+                    "object_id": "ge-document-8fa974e95ed6f9405cb4d15e6e736aa0",
+                    "predicate": "version_of",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c3f5af7c8627e09c0baabacb94a921ea6026f929a",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-2960af570c069941de3bfc07f93d1d75db8d87f3",
+                    "subject_id": "ge-document-8fa974e95ed6f9405cb4d15e6e736aa0",
+                    "object_id": "ge-source-2dff997d47d88ea2e78fcdc8ed928288",
+                    "predicate": "published_by",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c3f5af7c8627e09c0baabacb94a921ea6026f929a",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "fees",
+                "subject_type": "product",
+                "subject_ref": "WEBANK:000015",
+                "relations": [
+                  {
+                    "id": "gr-fd0c31e9c1d0a8b0744fdc0a5da48463284ef7bf",
+                    "subject_id": "ge-product-219facf105019f2aa52c08493c0204b9",
+                    "object_id": "ge-clause-bff03751084846620ae9f2a592842554",
+                    "predicate": "has_disclosure",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c3f5af7c8627e09c0baabacb94a921ea6026f929a",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-9f12d36dda354c7f9f8babe190ded3c20b70c8eb",
+                    "subject_id": "ge-clause-bff03751084846620ae9f2a592842554",
+                    "object_id": "ge-fee_rule-0aaaa01029ee7f0564e977bdacd9f259",
+                    "predicate": "has_rule",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c3f5af7c8627e09c0baabacb94a921ea6026f929a",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "fees",
+                "subject_type": "channel",
+                "subject_ref": "WEBANK",
+                "relations": [
+                  {
+                    "id": "gr-639a7907a13315f45f863b980b770f9391dff5aa",
+                    "subject_id": "ge-channel-83b6e2f5a7e1f30d7eb027dd1e59cf34",
+                    "object_id": "ge-clause-bff03751084846620ae9f2a592842554",
+                    "predicate": "channel_discloses",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c3f5af7c8627e09c0baabacb94a921ea6026f929a",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-9f12d36dda354c7f9f8babe190ded3c20b70c8eb",
+                    "subject_id": "ge-clause-bff03751084846620ae9f2a592842554",
+                    "object_id": "ge-fee_rule-0aaaa01029ee7f0564e977bdacd9f259",
+                    "predicate": "has_rule",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "c3f5af7c8627e09c0baabacb94a921ea6026f929a",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              }
+            ],
+            "coverage_gaps": []
+          }
+        },
+        {
+          "citation_id": "cbca8538d472b7a159b5aa2354fe53aff53d276be",
+          "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+          "excerpt": "\"chargeWay\":\"详见产品页面\"",
+          "locator": {
+            "page": null,
+            "paragraph": "productPresentation:000015/chargeWay",
+            "start_char": 19,
+            "end_char": 39
+          },
+          "source_url": "https://tctp.tctpwebankcdn.net/owb-admin/data/appsystems/owb-admin/productpresentation.json",
+          "published_on": "2026-09-24",
+          "effective_from": null,
+          "effective_to": null,
+          "same_original": true,
+          "identity_matches": true,
+          "frozen_version_matches": true,
+          "data_on": "2026-09-24",
+          "graph_trace": {
+            "citation_id": "cbca8538d472b7a159b5aa2354fe53aff53d276be",
+            "release_id": "pub-431a2429c15de761da1ed0051bec15154a8cc7b4",
+            "paths": [
+              {
+                "purpose": "original_source",
+                "relations": [
+                  {
+                    "id": "gr-636e2277d16ac54dcf923a3c304d0de1ff6e62cc",
+                    "subject_id": "ge-clause-7dc7d4dd9efdf8043eadfea22fdb18b2",
+                    "object_id": "ge-document_version-97f71235c97c8f7698760d04a4896d90",
+                    "predicate": "quoted_in",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "cbca8538d472b7a159b5aa2354fe53aff53d276be",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-a2cfdaef27c88dd39866b6f5247f56d321fbfa73",
+                    "subject_id": "ge-document_version-97f71235c97c8f7698760d04a4896d90",
+                    "object_id": "ge-document-8fa974e95ed6f9405cb4d15e6e736aa0",
+                    "predicate": "version_of",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "cbca8538d472b7a159b5aa2354fe53aff53d276be",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-d9c4d0ca0710649921d37c9576707eb0253b3885",
+                    "subject_id": "ge-document-8fa974e95ed6f9405cb4d15e6e736aa0",
+                    "object_id": "ge-source-2dff997d47d88ea2e78fcdc8ed928288",
+                    "predicate": "published_by",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "cbca8538d472b7a159b5aa2354fe53aff53d276be",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "fees",
+                "subject_type": "product",
+                "subject_ref": "WEBANK:000015",
+                "relations": [
+                  {
+                    "id": "gr-c3df4e8f4422d1025013935b48361fbab60514db",
+                    "subject_id": "ge-product-219facf105019f2aa52c08493c0204b9",
+                    "object_id": "ge-clause-7dc7d4dd9efdf8043eadfea22fdb18b2",
+                    "predicate": "has_disclosure",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "cbca8538d472b7a159b5aa2354fe53aff53d276be",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-54d93732ff6f2dbdfa61e6a9fd24f5532d3b39ed",
+                    "subject_id": "ge-clause-7dc7d4dd9efdf8043eadfea22fdb18b2",
+                    "object_id": "ge-fee_rule-22c812c6f7679d2e2125077596a0d463",
+                    "predicate": "has_rule",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "cbca8538d472b7a159b5aa2354fe53aff53d276be",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "fees",
+                "subject_type": "channel",
+                "subject_ref": "WEBANK",
+                "relations": [
+                  {
+                    "id": "gr-6fdce8f5d148b635a39e76e2d3104119baabebdd",
+                    "subject_id": "ge-channel-83b6e2f5a7e1f30d7eb027dd1e59cf34",
+                    "object_id": "ge-clause-7dc7d4dd9efdf8043eadfea22fdb18b2",
+                    "predicate": "channel_discloses",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "cbca8538d472b7a159b5aa2354fe53aff53d276be",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-54d93732ff6f2dbdfa61e6a9fd24f5532d3b39ed",
+                    "subject_id": "ge-clause-7dc7d4dd9efdf8043eadfea22fdb18b2",
+                    "object_id": "ge-fee_rule-22c812c6f7679d2e2125077596a0d463",
+                    "predicate": "has_rule",
+                    "version_id": "v1b3f4d9b40a9b3f5e65ff2e978c5bb07bf5d173c",
+                    "citation_id": "cbca8538d472b7a159b5aa2354fe53aff53d276be",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              }
+            ],
+            "coverage_gaps": []
+          }
+        }
+      ],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "fees-c-placeholder",
+      "passed": true,
+      "question": "华夏纯债债券C是否因名称C而没有费用？",
+      "request": {
+        "query": "华夏纯债债券C是否因名称C而没有费用？",
+        "scope": "public",
+        "product_id": "WEBANK:000016",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "fees"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "quote",
+        "contains": "详见产品页面",
+        "semantic_limit": "原件没有销售服务费或持有期费率表；不能从C名称推断费用规则。"
+      },
+      "status": "partial",
+      "coverage_gaps": [
+        {
+          "code": "effective_period_unknown",
+          "message": "原文有效区间不完整，不能推断当前仍有效。",
+          "citation_id": "c1c421fa140debb9c467e1edbe516343f901d0644"
+        },
+        {
+          "code": "effective_period_unknown",
+          "message": "原文有效区间不完整，不能推断当前仍有效。",
+          "citation_id": "c5ad97ff391e94477f988acfaebefb22e48f6335c"
+        }
+      ],
+      "hits": [
+        {
+          "citation_id": "c1c421fa140debb9c467e1edbe516343f901d0644",
+          "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+          "excerpt": "\"charge\":\"详见产品页面\"",
+          "locator": {
+            "page": null,
+            "paragraph": "productPresentation:000016/charge",
+            "start_char": 1,
+            "end_char": 18
+          },
+          "source_url": "https://tctp.tctpwebankcdn.net/owb-admin/data/appsystems/owb-admin/productpresentation.json",
+          "published_on": "2026-09-24",
+          "effective_from": null,
+          "effective_to": null,
+          "same_original": true,
+          "identity_matches": true,
+          "frozen_version_matches": true,
+          "data_on": "2026-09-24",
+          "graph_trace": {
+            "citation_id": "c1c421fa140debb9c467e1edbe516343f901d0644",
+            "release_id": "pub-431a2429c15de761da1ed0051bec15154a8cc7b4",
+            "paths": [
+              {
+                "purpose": "original_source",
+                "relations": [
+                  {
+                    "id": "gr-0242029ef6823f201c3a31ac45e2e338b3b2b7e8",
+                    "subject_id": "ge-clause-2d5bc5dd67614d2aee4022cdb8df281f",
+                    "object_id": "ge-document_version-738c0d54210dec30b458f0f483be34e3",
+                    "predicate": "quoted_in",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1c421fa140debb9c467e1edbe516343f901d0644",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-286af20f018d8096cadbe3aba4c04be60d60e3a6",
+                    "subject_id": "ge-document_version-738c0d54210dec30b458f0f483be34e3",
+                    "object_id": "ge-document-8f778f3162340c9c62f98a2a0475b114",
+                    "predicate": "version_of",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1c421fa140debb9c467e1edbe516343f901d0644",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-071ae3976d2b4ca24d61f7a8dcd6cb00d1469826",
+                    "subject_id": "ge-document-8f778f3162340c9c62f98a2a0475b114",
+                    "object_id": "ge-source-2dff997d47d88ea2e78fcdc8ed928288",
+                    "predicate": "published_by",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1c421fa140debb9c467e1edbe516343f901d0644",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "fees",
+                "subject_type": "product",
+                "subject_ref": "WEBANK:000016",
+                "relations": [
+                  {
+                    "id": "gr-7603cd4de5a199a06430e5440d54bfd760ec0112",
+                    "subject_id": "ge-product-b6087ca594e7d91aecf4b42dc7fda9d6",
+                    "object_id": "ge-clause-2d5bc5dd67614d2aee4022cdb8df281f",
+                    "predicate": "has_disclosure",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1c421fa140debb9c467e1edbe516343f901d0644",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-fc338a7402ca21e83d6b1b7d082aec3b79a18395",
+                    "subject_id": "ge-clause-2d5bc5dd67614d2aee4022cdb8df281f",
+                    "object_id": "ge-fee_rule-a3c1640d91d9cdb8a00bef69ec95e55e",
+                    "predicate": "has_rule",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1c421fa140debb9c467e1edbe516343f901d0644",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "fees",
+                "subject_type": "channel",
+                "subject_ref": "WEBANK",
+                "relations": [
+                  {
+                    "id": "gr-7a37a5fda8b531334133565613e73cd7797b4cf6",
+                    "subject_id": "ge-channel-83b6e2f5a7e1f30d7eb027dd1e59cf34",
+                    "object_id": "ge-clause-2d5bc5dd67614d2aee4022cdb8df281f",
+                    "predicate": "channel_discloses",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1c421fa140debb9c467e1edbe516343f901d0644",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-fc338a7402ca21e83d6b1b7d082aec3b79a18395",
+                    "subject_id": "ge-clause-2d5bc5dd67614d2aee4022cdb8df281f",
+                    "object_id": "ge-fee_rule-a3c1640d91d9cdb8a00bef69ec95e55e",
+                    "predicate": "has_rule",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c1c421fa140debb9c467e1edbe516343f901d0644",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              }
+            ],
+            "coverage_gaps": []
+          }
+        },
+        {
+          "citation_id": "c5ad97ff391e94477f988acfaebefb22e48f6335c",
+          "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+          "excerpt": "\"chargeWay\":\"详见产品页面\"",
+          "locator": {
+            "page": null,
+            "paragraph": "productPresentation:000016/chargeWay",
+            "start_char": 19,
+            "end_char": 39
+          },
+          "source_url": "https://tctp.tctpwebankcdn.net/owb-admin/data/appsystems/owb-admin/productpresentation.json",
+          "published_on": "2026-09-24",
+          "effective_from": null,
+          "effective_to": null,
+          "same_original": true,
+          "identity_matches": true,
+          "frozen_version_matches": true,
+          "data_on": "2026-09-24",
+          "graph_trace": {
+            "citation_id": "c5ad97ff391e94477f988acfaebefb22e48f6335c",
+            "release_id": "pub-431a2429c15de761da1ed0051bec15154a8cc7b4",
+            "paths": [
+              {
+                "purpose": "original_source",
+                "relations": [
+                  {
+                    "id": "gr-828c06d3b952eddd87395c781e0b86faf7628ea1",
+                    "subject_id": "ge-clause-d441489b7ef1adf0e4edd8d74cb09be4",
+                    "object_id": "ge-document_version-738c0d54210dec30b458f0f483be34e3",
+                    "predicate": "quoted_in",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c5ad97ff391e94477f988acfaebefb22e48f6335c",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-3779b235bb88c45d2d4af51f886f126c0c69166d",
+                    "subject_id": "ge-document_version-738c0d54210dec30b458f0f483be34e3",
+                    "object_id": "ge-document-8f778f3162340c9c62f98a2a0475b114",
+                    "predicate": "version_of",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c5ad97ff391e94477f988acfaebefb22e48f6335c",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-869d8091d018713f4c2e54d1df03ec243497808e",
+                    "subject_id": "ge-document-8f778f3162340c9c62f98a2a0475b114",
+                    "object_id": "ge-source-2dff997d47d88ea2e78fcdc8ed928288",
+                    "predicate": "published_by",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c5ad97ff391e94477f988acfaebefb22e48f6335c",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "fees",
+                "subject_type": "product",
+                "subject_ref": "WEBANK:000016",
+                "relations": [
+                  {
+                    "id": "gr-425fb080a678ec420d7fcc1ce4fcf4f3d76a91af",
+                    "subject_id": "ge-product-b6087ca594e7d91aecf4b42dc7fda9d6",
+                    "object_id": "ge-clause-d441489b7ef1adf0e4edd8d74cb09be4",
+                    "predicate": "has_disclosure",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c5ad97ff391e94477f988acfaebefb22e48f6335c",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-30630008aadb8634aa1babf25fa98d73a94403a6",
+                    "subject_id": "ge-clause-d441489b7ef1adf0e4edd8d74cb09be4",
+                    "object_id": "ge-fee_rule-4efdd6d7e7c9826fbc561005454112e8",
+                    "predicate": "has_rule",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c5ad97ff391e94477f988acfaebefb22e48f6335c",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              },
+              {
+                "purpose": "fees",
+                "subject_type": "channel",
+                "subject_ref": "WEBANK",
+                "relations": [
+                  {
+                    "id": "gr-36cf927f5f45ccce2373e3693aebb97c997c3e77",
+                    "subject_id": "ge-channel-83b6e2f5a7e1f30d7eb027dd1e59cf34",
+                    "object_id": "ge-clause-d441489b7ef1adf0e4edd8d74cb09be4",
+                    "predicate": "channel_discloses",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c5ad97ff391e94477f988acfaebefb22e48f6335c",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  },
+                  {
+                    "id": "gr-30630008aadb8634aa1babf25fa98d73a94403a6",
+                    "subject_id": "ge-clause-d441489b7ef1adf0e4edd8d74cb09be4",
+                    "object_id": "ge-fee_rule-4efdd6d7e7c9826fbc561005454112e8",
+                    "predicate": "has_rule",
+                    "version_id": "v45e8f55c528b95e4642b50beb32d1ac8cc38b27f",
+                    "citation_id": "c5ad97ff391e94477f988acfaebefb22e48f6335c",
+                    "valid_from": null,
+                    "valid_to": null,
+                    "status": "verified",
+                    "reviewed_by": "strict_webank_jsonp_field_identity_schema_v1"
+                  }
+                ]
+              }
+            ],
+            "coverage_gaps": []
+          }
+        }
+      ],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "redemption-missing",
+      "passed": true,
+      "question": "华夏纯债债券A赎回后几天到账？",
+      "request": {
+        "query": "华夏纯债债券A赎回后几天到账？",
+        "scope": "public",
+        "product_id": "WEBANK:000015",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "liquidity"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "no_hits",
+        "gap": "facet_uncovered",
+        "semantic_limit": "原件无到账规则；开放式基金标签不证明T+1或T+2。"
+      },
+      "status": "empty",
+      "coverage_gaps": [
+        {
+          "code": "facet_uncovered",
+          "message": "请求的分析维度缺少已核验原文证据。",
+          "facet": "liquidity"
+        },
+        {
+          "code": "no_verified_evidence",
+          "message": "本次没有可输出的已核验公共原文证据。"
+        }
+      ],
+      "hits": [],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "minimum-holding-missing",
+      "passed": true,
+      "question": "华夏成长混合最短持有期限多少？",
+      "request": {
+        "query": "华夏成长混合最短持有期限多少？",
+        "scope": "public",
+        "product_id": "WEBANK:000001",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "terms"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "no_hits",
+        "gap": "facet_uncovered",
+        "semantic_limit": "原件没有最短持有条款，不造期限或承诺可随时退出。"
+      },
+      "status": "empty",
+      "coverage_gaps": [
+        {
+          "code": "facet_uncovered",
+          "message": "请求的分析维度缺少已核验原文证据。",
+          "facet": "terms"
+        },
+        {
+          "code": "no_verified_evidence",
+          "message": "本次没有可输出的已核验公共原文证据。"
+        }
+      ],
+      "hits": [],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "unknown-share-mapping",
+      "passed": true,
+      "question": "按A份额身份检索华夏纯债债券A费用。",
+      "request": {
+        "query": "按A份额身份检索华夏纯债债券A费用。",
+        "scope": "public",
+        "product_id": "WEBANK:000015",
+        "share_class_id": "UNVERIFIED-SHARE-A",
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "fees"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "no_hits",
+        "gap": "identity_unverified",
+        "semantic_limit": "真实份额ID未核验，不将产品名中的A当成映射。"
+      },
+      "status": "empty",
+      "coverage_gaps": [
+        {
+          "code": "identity_unverified",
+          "message": "所需产品、份额或渠道身份尚未核实。"
+        },
+        {
+          "code": "facet_uncovered",
+          "message": "请求的分析维度缺少已核验原文证据。",
+          "facet": "fees"
+        },
+        {
+          "code": "no_verified_evidence",
+          "message": "本次没有可输出的已核验公共原文证据。"
+        }
+      ],
+      "hits": [],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "other-channel-not-inherited",
+      "passed": true,
+      "question": "其他渠道是否沿用微众这份费用披露？",
+      "request": {
+        "query": "其他渠道是否沿用微众这份费用披露？",
+        "scope": "public",
+        "product_id": "WEBANK:000015",
+        "share_class_id": null,
+        "channel_id": "UNVERIFIED-OTHER-CHANNEL",
+        "as_of": "2026-09-24",
+        "facets": [
+          "fees"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "no_hits",
+        "gap": "identity_unverified",
+        "semantic_limit": "渠道不匹配，不能套用微众披露。"
+      },
+      "status": "empty",
+      "coverage_gaps": [
+        {
+          "code": "identity_unverified",
+          "message": "所需产品、份额或渠道身份尚未核实。"
+        },
+        {
+          "code": "facet_uncovered",
+          "message": "请求的分析维度缺少已核验原文证据。",
+          "facet": "fees"
+        },
+        {
+          "code": "no_verified_evidence",
+          "message": "本次没有可输出的已核验公共原文证据。"
+        }
+      ],
+      "hits": [],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "current-sale-not-inferred",
+      "passed": true,
+      "question": "2026-10-06华夏纯债债券A在微众能否立即买入？",
+      "request": {
+        "query": "2026-10-06华夏纯债债券A在微众能否立即买入？",
+        "scope": "public",
+        "product_id": "WEBANK:000015",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-10-06",
+        "facets": [
+          "sale_status"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "no_hits",
+        "gap": "sale_status_unknown",
+        "semantic_limit": "历史在售并非当前可申购，更不证明本人资格或交易授权。"
+      },
+      "status": "empty",
+      "coverage_gaps": [
+        {
+          "code": "expired_evidence",
+          "message": "原文条款在查询时点已经到期。"
+        },
+        {
+          "code": "facet_uncovered",
+          "message": "请求的分析维度缺少已核验原文证据。",
+          "facet": "sale_status"
+        },
+        {
+          "code": "no_verified_evidence",
+          "message": "本次没有可输出的已核验公共原文证据。"
+        },
+        {
+          "code": "sale_status_unknown",
+          "message": "条款检索不能证明当前渠道在售或可交易。",
+          "facet": "sale_status"
+        }
+      ],
+      "hits": [],
+      "mutation_is_test_only": false,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "withdrawn-history-blocked",
+      "passed": true,
+      "question": "已撤回的2026-09-24风险披露能否继续作为引文？",
+      "request": {
+        "query": "已撤回的2026-09-24风险披露能否继续作为引文？",
+        "scope": "public",
+        "product_id": "WEBANK:000015",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "risk"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "no_hits",
+        "gap": "no_verified_evidence",
+        "semantic_limit": "历史正文仍归档，但撤回后不能作为公共有效引用。"
+      },
+      "status": "empty",
+      "coverage_gaps": [
+        {
+          "code": "evidence_unavailable",
+          "message": "原文引用不存在、已撤回或不再允许读取。"
+        },
+        {
+          "code": "facet_uncovered",
+          "message": "请求的分析维度缺少已核验原文证据。",
+          "facet": "risk"
+        },
+        {
+          "code": "no_verified_evidence",
+          "message": "本次没有可输出的已核验公共原文证据。"
+        }
+      ],
+      "hits": [],
+      "mutation_is_test_only": true,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "fee-conflict-blocked",
+      "passed": true,
+      "question": "两份费用资料冲突时是否仍可引用旧费用？",
+      "request": {
+        "query": "两份费用资料冲突时是否仍可引用旧费用？",
+        "scope": "public",
+        "product_id": "WEBANK:000015",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "fees"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "no_hits",
+        "gap": "conflicting_sources",
+        "semantic_limit": "此案例注入测试冲突，不能从占位原文推算费用。"
+      },
+      "status": "empty",
+      "coverage_gaps": [
+        {
+          "code": "conflicting_sources",
+          "message": "公开来源存在冲突，需要保留差异并进一步核实。"
+        },
+        {
+          "code": "facet_uncovered",
+          "message": "请求的分析维度缺少已核验原文证据。",
+          "facet": "fees"
+        },
+        {
+          "code": "no_verified_evidence",
+          "message": "本次没有可输出的已核验公共原文证据。"
+        }
+      ],
+      "hits": [],
+      "mutation_is_test_only": true,
+      "agent_final_answer_verified": false
+    },
+    {
+      "id": "source-outbound-revoked",
+      "passed": true,
+      "question": "来源取消出站许可后是否仍可用历史风险？",
+      "request": {
+        "query": "来源取消出站许可后是否仍可用历史风险？",
+        "scope": "public",
+        "product_id": "WEBANK:000015",
+        "share_class_id": null,
+        "channel_id": "WEBANK",
+        "as_of": "2026-09-24",
+        "facets": [
+          "risk"
+        ],
+        "limit": 4
+      },
+      "expected": {
+        "mode": "no_hits",
+        "gap": "source_permission_missing",
+        "semantic_limit": "当前许可是实时门禁，不因旧发布或历史时点绕过。"
+      },
+      "status": "empty",
+      "coverage_gaps": [
+        {
+          "code": "source_permission_missing",
+          "message": "所需来源的读取或出站许可未核实。"
+        },
+        {
+          "code": "facet_uncovered",
+          "message": "请求的分析维度缺少已核验原文证据。",
+          "facet": "risk"
+        },
+        {
+          "code": "no_verified_evidence",
+          "message": "本次没有可输出的已核验公共原文证据。"
+        }
+      ],
+      "hits": [],
+      "mutation_is_test_only": true,
+      "agent_final_answer_verified": false
+    }
+  ],
+  "case_count": 14,
+  "passed_count": 14,
+  "failed_count": 0,
+  "original_checks_passed": true,
+  "agent_final_answer_verified": false,
+  "code_sha256": {
+    "local_knowledge/store.py": "5f04fe9ff015f6b5dd246c8a8cec12f322652946670268bc3a30b25fd63c72d4",
+    "local_knowledge/graph.py": "364b0b58cd8949884d26d8b69af58cfd5d0e367f95adb3497a0bb54a591b11bb",
+    "local_knowledge/importers.py": "6d069cdddb652393a99aaecd812cd56489de4dbab11b106daa8b5274e382d163",
+    "agent_runtime/knowledge_retrieval.py": "82b634cb613c5c8c7f1067a3361f330dc4473a72e6fedff63540fe4204cb3390",
+    "local_knowledge/acceptance/run_review.py": "b22772233df8222153498468312d9bded619c19cd62e757f6884fe16b82f6b95"
+  }
+}

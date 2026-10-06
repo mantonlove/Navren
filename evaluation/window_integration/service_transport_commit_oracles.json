@@ -1,0 +1,79 @@
+{
+  "schema_version": 2,
+  "scope": "isolated_actual_serialized_http_sse_pcm_and_real_sqlite_commit_not_full_G1_or_model_semantic_score",
+  "classification": "new_engineering_contracts_for_approved_solution_v2_section_3_2",
+  "frozen_before_first_execution": true,
+  "independent_basis": "已批准 solution-v2.md 3.2：完成不可变序列化后的最后传输入口检查；已有效发送首片可保留，失效后不得继续旧队列、须废弃回执；银行 commit 或 rollback 完成前公共/规则保护不可释放；个人资料写入遵循银行先行锁序并有界完成。",
+  "fixture": {
+    "public_product": "WI-P",
+    "public_as_of": "2026-10-06",
+    "public_text": "这是隔离合成公共条款：产品有风险，投资者可能损失本金。",
+    "request": "我明确愿意迁入工资，拒绝购买理财；请协商服务费减免并说明条件，先只预览，不提交申请。",
+    "commit_request": "我明确愿意迁入工资，拒绝购买理财；请协商服务费减免并说明条件，同时只准备给妈妈转账100元草案，待本人核对，绝不确认或执行。",
+    "approved_reply": "本轮合成服务条件仅供预览，须本人另行接受，资格与优惠尚未兑现；公共测试条款说明可能损失本金；转账草案也仅供本人核对，尚未执行。",
+    "electronic_offer_id": "SYNTH-E-STATEMENT-FEE-90D",
+    "preview_seconds": 900,
+    "expiry_extra_seconds": 1,
+    "transfer_minor": 10000,
+    "first_pcm_hex": "1100220033004400",
+    "second_pcm_hex": "5500660077008800",
+    "third_pcm_hex": "9900aa00bb00cc00",
+    "pcm_repeats": 16,
+    "thread_timeout_seconds": 5,
+    "waiting_observation_seconds": 0.15,
+    "local_fixture_byte_budget": 1000000
+  },
+  "expectations": {
+    "applications": 0,
+    "submission_audits": 0,
+    "financial_operations": 0,
+    "old_json_body_bytes": 0,
+    "old_final_sse_events": 0,
+    "later_pcm_bytes": 0,
+    "receipt_discarded_after_invalid_frame": true,
+    "replay_ticket_must_be_rejected": true,
+    "voice_slots_restored": 3,
+    "cas_writer_finished_before_bank_exit": false,
+    "personal_writer_finished_before_bank_exit": false,
+    "public_writer_lock_available_before_bank_exit": false,
+    "normal_binding_rows_after_commit": 1,
+    "failed_binding_rows_after_rollback": 0,
+    "failed_binding_audits_after_rollback": 0,
+    "bank_commit_failure_rollback_observed": true,
+    "writers_finish_after_bank_exit": true,
+    "cloud_calls": 0,
+    "failed_commit_success_financial_frames": 0
+  },
+  "cases": [
+    {
+      "id": "STC01",
+      "test": "test_expiry_after_json_and_sse_serialization_before_real_socket_send",
+      "expected": "序列化已完成、实际socket写入前预览过期，真实末端守卫阻断原最终JSON/SSE内容和回执；已发送且当时有效的响应头/进度允许保留。不得把断流或HTTP200当完整成功。"
+    },
+    {
+      "id": "STC02",
+      "test": "test_first_pcm_valid_second_serialized_frame_expires_and_receipt_cannot_replay",
+      "expected": "真实WS收到且只收到有效首片；第二片已序列化后、实际发送前过期，不得发布第二或第三旧片；上游终止、槽归还，废弃本轮回执且重放申请拒绝。"
+    },
+    {
+      "id": "STC03",
+      "test": "test_actual_bind_commit_holds_public_and_rules_locks_with_personal_writer",
+      "expected": "真实HTTP审核、bind_answer SQL写入后，银行真实commit被有界阻塞；受信CAS作者、个人资料作者等待，公共写锁也不可越过；释放后真实commit、绑定记录和审计落盘，作者有界完成，无资金执行。"
+    },
+    {
+      "id": "STC04",
+      "test": "test_actual_bind_commit_failure_rolls_back_before_rules_and_public_unlock",
+      "expected": "真实提交窗口注入SQLite commit失败，客户端不得收到成功金融帧；规则/公共保护保持至银行rollback，绑定记录与绑定审计均未落盘，CAS和个人作者随后有界完成，草案不得执行且0资金变更。必须先commit成功再传输，而非声称收回已发正文。"
+    }
+  ],
+  "explicitly_uncovered": [
+    "跨进程CAS作者与稳定锁inode压力",
+    "实际公共撤回作者等待与历史版次语义",
+    "相反锁序攻击、全量个人写入路径",
+    "单调语音TTL与轮次deadline的独立时钟反例",
+    "慢客户端和sendall跨到期",
+    "真实云模型、真实TTS服务、浏览器设备与完整G1"
+  ],
+  "previous_oracle_sha256": "d9e7d866852bb5a44b946bd4f96a60348f54897c6ffcc5f01d870cd314ce7df7",
+  "revision_reason": "root在适配轮运行期间明确增补STC04：commit失败时客户端成功金融帧为0；旧oracle/两轮原始结果保留。不是因结果放宽预期。"
+}

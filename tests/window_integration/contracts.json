@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "suite": "navren-window-integration",
+  "frozen_on": "2026-10-06",
+  "scope": "隔离的当前源码与合成夹具；脚本模型只证明协议，不评判真实模型语义或生产安全",
+  "configuration": {
+    "bank_database": "每案 TemporaryDirectory/bank.sqlite3",
+    "personal_database": "每案 TemporaryDirectory/bank.personal.sqlite3",
+    "knowledge_database": "每案 TemporaryDirectory/knowledge.sqlite3",
+    "fund_cache": "每案 TemporaryDirectory/funds；禁止回落现役缓存",
+    "personal_key": "每案生成 Fernet 密钥，仅保留进程内存",
+    "cloud_calls": "禁止；DeepSeek/GLM 方法设拒绝哨兵",
+    "evidence": "每案打印 WINDOW_INTEGRATION_EVIDENCE JSON；操作 ID、状态、账本数值和原始行计数，不含密钥/验证码/个人原件"
+  },
+  "expectations": {
+    "default_fixture_cash_minor": 2439000,
+    "default_fixture_holding_minor": 800000,
+    "transfer_minor": 10000,
+    "purchase_minor": 10000,
+    "reserve_minor": 50000,
+    "imported_income_minor": 10001,
+    "imported_expense_minor": 2010,
+    "imported_refund_minor": 510,
+    "imported_transfer_minor": 3300,
+    "imported_surplus_minor": 8501,
+    "public_evidence_as_of": "2026-10-06"
+  },
+  "cases": [
+    {"id":"WI-01","test":"test_isolated_paths_and_local_provider_wiring","expect":"三个数据库均在临时目录且互异；本地提供器真实注入 BankTools"},
+    {"id":"WI-02","test":"test_six_business_reads_and_analysis_have_no_financial_effect","expect":"六业务读取返回真实证据；分析不增加 operations、不改变资金、持仓、卡片、订阅或预留"},
+    {"id":"WI-03","test":"test_four_workspaces_isolate_accounts_history_memory_calendar_and_operations","expect":"四真实工作区的账户、历史、已确认记忆、日历、草案和回执严格隔离"},
+    {"id":"WI-04","test":"test_four_contest_profiles_current_data_connection","expect":"四画像使用同一问题，差异由实际已接入数据与约束产生；接口缺失单独跳过，不能把同质工作区当画像验收"},
+    {"id":"WI-05","test":"test_transfer_draft_confirmation_unique_ledger_and_receipt","expect":"准备不扣款；本人确认后仅减少10000分，并产生唯一原操作回执"},
+    {"id":"WI-06","test":"test_purchase_draft_receipt_preserves_cash_plus_principal","expect":"准备不变账；申购10000分后现金减少、持仓本金增加同额，唯一订单与账本记录"},
+    {"id":"WI-07","test":"test_subscription_cancel_keeps_bank_mandate_and_cash","expect":"确认前商户订阅有效；确认后仅商户合同取消，银行代扣不自动关闭，不扣款"},
+    {"id":"WI-08","test":"test_card_control_changes_only_confirmed_control","expect":"准备不改变开关；黄色操作明确确认后只变卡片开关，现金及订单不变"},
+    {"id":"WI-09","test":"test_statement_import_receipt_source_and_unknown_cash_direction","expect":"账单确认导入与重复提交只有一次入库；报告精确复算、未知转账方向保持null，不影响银行资金或其他工作区"},
+    {"id":"WI-10","test":"test_cross_scene_reserve_then_release_never_books_cash","expect":"生效预留减少可安排资金、不扣余额；释放恢复约束，两动作各有本人确认回执"},
+    {"id":"WI-11","test":"test_cancelled_and_withdrawn_drafts_cannot_execute","expect":"用户取消与 Agent 撤回使旧草案不可执行，资金与交易记录不变"},
+    {"id":"WI-12","test":"test_repeat_and_concurrent_same_confirmation_are_idempotent","expect":"重复/并发确认同一操作最多记账一次，所有成功返回同一回执"},
+    {"id":"WI-13","test":"test_concurrent_distinct_drafts_allow_only_one_account_version","expect":"同账本版本两个草案并发确认仅一项执行，另一项失效，无双扣"},
+    {"id":"WI-14","test":"test_lost_http_receipt_recovers_original_operation_after_restart","expect":"提交后真实HTTP断连；通过原ID在重建隔离网关后恢复成功状态，重放不再扣款"},
+    {"id":"WI-15","test":"test_agent_review_rejection_and_version_change_block_execution","expect":"拒绝审核草案与账户变更后旧审核均不能执行；独立审核从不替代本人确认"},
+    {"id":"WI-16","test":"test_public_evidence_withdrawal_blocks_tool_final_and_speech","expect":"真实公共SQLite原文撤回后，已引用工具、最终展示和旧语音凭据均失效"},
+    {"id":"WI-17","test":"test_public_text_revision_invalidates_old_citation","expect":"同原件新正文批准发布后，旧引用和同轮消费失效，不沿用旧摘录"},
+    {"id":"WI-18","test":"test_public_share_channel_mismatch_and_private_outbound_boundary","expect":"错份额/渠道无命中；私人姓名电话邮箱业务ID不发送到脚本主模型或审核器"},
+    {"id":"WI-19","test":"test_cashflow_calendar_graph_share_period_and_independent_cash_basis","expect":"同期间日历收支与原始流水分币种独立复算一致；图谱计算具有原始引用，时间轴底线只扣一次"},
+    {"id":"WI-20","test":"test_calendar_plan_is_not_cash_and_cross_owner_details_are_denied","expect":"保存生日预算不扣余额、不变预留；跨工作区查视图/事项拒绝，未覆盖期间不当作零"},
+    {"id":"WI-21","test":"test_linked_reserve_is_deduplicated_against_actual_commitment","expect":"额外留款关联已计义务只扣增量，同一义务不能重复扣除"},
+    {"id":"WI-22","test":"test_cross_scene_booking_requires_receipt_and_exact_quote_total","expect":"先预留不扣款；后续服务预约重新本人确认后仅扣当前报价合计、消费原预留并产生每项预约回执"},
+    {"id":"WI-23","test":"test_insufficient_budget_risk_and_horizon_reject_before_operation","expect":"资金不足、风险超限、期限不匹配在草案入库之前拒绝；各拒绝不写资金"},
+    {"id":"WI-24","test":"test_model_timeout_has_no_fabricated_actions_or_money_effect","expect":"脚本注入模型超时返回技术未完成，不产生操作/成功回执或资金变动"}
+  ],
+  "not_covered": [
+    "真实云模型对十条语义题的质量、正式三轮冻结成绩与延迟成本",
+    "真实银行交易、生产身份认证和现实世界安全保证",
+    "浏览器实屏、四账户切换前端、现场麦克风设备级验收",
+    "未提供的金融指标服务与市场历史版次回查接口"
+  ]
+}

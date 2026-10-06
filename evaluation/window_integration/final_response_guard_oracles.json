@@ -1,0 +1,58 @@
+{
+  "schema_version": "navren.window-integration.final-response-guards.v1",
+  "frozen_on": "2026-10-06",
+  "freeze_stage": "before_implementing_test_final_response_guards.py",
+  "purpose": "独立晚到竞态验收，冻结后不按实现结果改预期。正式身份、事务、指标、最终响应和语音发布守卫保持真实实现。",
+  "evaluation_boundary": {
+    "formal_original_ten_questions_three_rounds": false,
+    "real_model_semantic_quality": false,
+    "real_microphone_or_speaker": false,
+    "real_bank_or_private_database": false,
+    "demo_account_dataset_import": false,
+    "directory_lookup_fixture": "只把正式选择器 user_id grain_farmer 映射至同一临时库中另一合成工作区；不读取真实画像包。select、令牌撤销、CSRF、请求上下文和事务守卫均为正式实现。",
+    "network": "只允许 loopback HTTP/WS；主模型、审核器、TTS 上游均为确定性合成对象。",
+    "unavailable_interface_policy": "接口缺失或运行依赖缺失明确 SkipTest；已经存在的接口违约必须失败，不虚构 API 或修改冻结预期。"
+  },
+  "independent_judgment": {
+    "financial_contract": "tests/window_integration/contracts.json 的准备/取消/拒绝不改变资金合同及 financial_methods/funding.py 底线只扣一次的数学口径；owner 回归测试不是唯一裁判。",
+    "financial_state": "临时 SQLite 中 accounts、holdings、orders、transactions、fund_holds、subscriptions、mandates、card_controls 原始行，操作状态、实际交易数及 executed 审计数。",
+    "metric_state": "变更前后的真实 source_versions 和 snapshot_id，额外增加应急保留10000分应使 current_budget 恰好减少10000分；既有资金账本不得变化。",
+    "response_state": "真实 HTTP 最终 JSON 及真实 WS 收到的全部有界帧、speech_receipt 是否发放。"
+  },
+  "expectations": {
+    "transfer_minor": 15700,
+    "reserve_increment_minor": 10000,
+    "no_financial_change": true,
+    "old_audio_bytes_published": 0
+  },
+  "cases": [
+    {
+      "id": "FG01",
+      "test": "test_authenticated_confirmation_after_account_switch_cannot_execute",
+      "task": "A账户准备15700分转账，本人确认请求已通过 cookie 和 CSRF 后，另一请求切换到B账户。",
+      "fault": "确认进入正式 confirm 前撤销 A 的会话令牌。",
+      "expected": ["确认HTTP409 SESSION_CHANGED", "A草案保持pending_confirmation，无成功回执", "两账户全部资金与业务原始行不变，A操作对应交易及executed审计均为0", "旧令牌永久失效"]
+    },
+    {
+      "id": "FG02",
+      "test": "test_personal_revision_during_metric_binding_leaves_non_executable_draft",
+      "task": "准备15700分转账时，在金融草案已入库而指标快照尚未绑定的窗口更新已确认个人目标。",
+      "fault": "资料revision增加，尝试绑定旧指标，再尝试本人确认留下的草案。",
+      "expected": ["prepare HTTP409 METRIC_VERSION_CONFLICT", "指标要求行存在而指标绑定行为0，个人revision确实增加", "该无绑定草案confirm HTTP409 METRIC_BINDING_REQUIRED", "草案不执行，交易及executed审计为0，资金与业务原始行不变"]
+    },
+    {
+      "id": "FG03",
+      "test": "test_actual_ws_withholds_old_audio_returned_after_account_switch",
+      "task": "A账户的后端核验答复开始 receipt-only TTS，合成上游已阻塞等待音频时，通过真实HTTP切换到B账户。",
+      "fault": "旧账户的PCM在切换完成后才从合成SpeechTask上游返回。",
+      "expected": ["实际WS先完成ready，真实账户切换HTTP200且旧令牌失效", "实际WS不得发布任何bytes帧或done，报告SESSION_CHANGED后关闭", "上游被关闭，语音槽位归还", "两账户资金与业务原始行不变"]
+    },
+    {
+      "id": "FG04",
+      "test": "test_actual_agent_final_response_rejects_metric_change_during_review",
+      "task": "通过真实/api/agent读取账户事实并申请审核无操作的文字结论。",
+      "fault": "审核器批准返回之前，在临时账户上把应急保留增加10000分，改变正式指标输入。",
+      "expected": ["审核实际进入一次，before/after source_versions及snapshot_id不同", "独立复算current_budget恰好减少10000分，资金原始行不变", "最终HTTP409 METRIC_VERSION_CONFLICT且fallback，旧结论不得出现", "无bank_actions、无新speech_receipt、无金融草案和执行"]
+    }
+  ]
+}

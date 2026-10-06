@@ -5,6 +5,8 @@
 
 const STORAGE_KEYS = {
   MODE: 'qingzhou_mode',
+  THEME: 'navren_theme',
+  LANGUAGE: 'navren_language',
   FONT_SIZE: 'qingzhou_fontSize',
   MODE_FONT_SIZES: 'qingzhou_modeFontSizes',
   VOICE_ENABLED: 'qingzhou_voiceEnabled',
@@ -22,6 +24,8 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULTS = {
+  [STORAGE_KEYS.THEME]: {id:'light'},
+  [STORAGE_KEYS.LANGUAGE]: 'zh-CN',
   [STORAGE_KEYS.MODE]: 'classic',
   [STORAGE_KEYS.FONT_SIZE]: 'medium',
   [STORAGE_KEYS.VOICE_ENABLED]: false,
@@ -29,6 +33,7 @@ const DEFAULTS = {
     recommendByRisk: true,
     recommendByHorizon: true,
     marketHotPush: false,
+    marketHotVisible: true,
     weeklyReport: true
   }
 };
@@ -67,6 +72,8 @@ const Storage = {
   /** 退出登录：保留档案+评估，清除对话 */
   logout() {
     const keep = [
+      STORAGE_KEYS.THEME,
+      STORAGE_KEYS.LANGUAGE,
       STORAGE_KEYS.RISK_PROFILE,
       STORAGE_KEYS.USER_PROFILE,
       STORAGE_KEYS.PROFILE_HISTORY,
@@ -150,11 +157,11 @@ function applyFontSize(size) {
   document.documentElement.style.setProperty('--fs-xl', (pxi+10)+'px');
 }
 
-// ══════ 语音预设（5种可选声音，映射到系统真实语音）══════
+// 百炼 Qwen-Audio-3.1 系统音色；沿用旧偏好 ID，保持已有选择。
 const VOICE_PRESETS = [
-  { id: 'female_sweet',   name: '甜美女生', icon: '🎙️', desc: '亲切温暖，自然流畅', rate: 1.3, pitch: 1.05, voiceName: 'female_sweet' },
-  { id: 'male_warm',      name: '温暖男生', icon: '🎧', desc: '低沉稳重，专业可信', rate: 1.3, pitch: 0.90, voiceName: 'male_warm' },
-  { id: 'male_podcast',   name: '播客男生', icon: '🎵', desc: '磁性醇厚，娓娓道来', rate: 1.3, pitch: 0.95, voiceName: 'male_podcast' }
+  { id: 'female_sweet', name: '知性女声', icon: '🎙️', desc: '龙安温 · 清晰平和', rate: 1.0, cloudVoice: 'longanwen_v3.1' },
+  { id: 'male_warm', name: '温暖男声', icon: '🎧', desc: '龙安洋 · 自然明朗', rate: 1.0, cloudVoice: 'longanyang_v3.1' },
+  { id: 'male_podcast', name: '沉稳男声', icon: '🎵', desc: '龙三叔 · 沉稳质感', rate: 1.0, cloudVoice: 'longsanshu_v3.1' }
 ];
 
 function getVoicePreset() {
