@@ -133,6 +133,10 @@ class FinanceGateway:
     def query_read_capability(self, workspace, capability_id, parameters=None):
         return self.read_capabilities.invoke(workspace,capability_id,parameters)
 
+    def statement_details(self, workspace, **parameters):
+        from base_runtime.statement_details import query
+        return query(self, workspace, parameters)
+
     def financial_method_report(self,workspace,name,arguments):
         """只读A/B/C服务入口；权威输入、预算及指标表由基座适配器读取。"""
         if name not in ('accounting_report','returns_report','allocation_preview') or not isinstance(arguments,dict):

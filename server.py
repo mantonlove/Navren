@@ -326,7 +326,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 options['graph_context']=gc
             from copy import copy
             from base_runtime.evidence import PublicEvidenceObserver, MetricEvidenceObserver, EvidenceGuardedClient
-            from base_runtime.tool_scope import ScopedEvidenceClient, statement_tool_scope
+            from base_runtime.tool_scope import ScopedEvidenceClient, statement_tool_scope, statement_month_context
             request_gateway=copy(gateway)
             # 冷补充在首个云请求前完成；每轮固定快照，不改Agent检索中的版本。
             from local_knowledge.runtime import RoundProductCatalog
@@ -337,9 +337,14 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             metric_observer=MetricEvidenceObserver(gateway.financial_metrics)
             request_gateway.financial_metrics=metric_observer
             request_agent=copy(self.server.conversation_agent)
+            statement_history=gateway.personal_data.read_history(workspace)
             tool_scope=statement_tool_scope(text,has_attachment=bool(data.get('image')),
                 has_context=any(value is not None for value in
-                    (page_context,data.get('market_context'),data.get('graph_context'))))
+                    (page_context,data.get('market_context'),data.get('graph_context'))),
+                history=statement_history)
+            with closing(gateway.bank.connect()) as statement_db:
+                statement_as_of=gateway.bank._workspace(statement_db,workspace)['as_of']
+            statement_month=statement_month_context(text,statement_history,statement_as_of) if tool_scope else None
             for client_name in ('primary','reviewer'):
                 client=getattr(request_agent,client_name,None)
                 if client is not None:
@@ -353,8 +358,12 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                             '按本轮as_of解析未指定的年份，再根据返回的分类、facts和metrics回答。'
                             '没有调用对应工具前，不得声称没有账单、要求用户上传已有账单，或让用户换一种问法再查。'
                             '只有工具明确返回无记录或不可用时才说明缺项。'
+                            '追问某项分几笔、具体日期或明细，调用statement_details，category使用本人所问的分类，'
+                            '笔数和合计用返回的transaction_count与total_minor，不以页长或总额猜测笔数。'
                             '独立历史库的银行账户、银行卡、保险、持仓和资产可用financial_*工具读取；'
                             '历史合成资料与现行模拟操作分开，不把历史估值当可执行余额。')
+                        if statement_month:
+                            guarded.notice+='\n本轮本人账单问句的月份上下文：'+statement_month+'。沿用月份只为读取；必须重新查工具取得本轮证据。'
                     setattr(request_agent,client_name,guarded)
             def finalize_result(result,commit_history=None):
                 history_attempted=False

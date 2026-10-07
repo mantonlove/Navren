@@ -30,7 +30,7 @@ WORKFLOW_CAPABILITIES = (
         "name": "账单分析",
         "selector": r"账单|流水|消费|支出|收入|月报|年报|年度|异常",
         "read_capabilities": ("statements.monthly_analysis", "statements.annual_analysis",
-                              "statements.anomalies", "subscriptions.periodic_charges"),
+                              "statements.details", "statements.anomalies", "subscriptions.periodic_charges"),
         "draft_actions": (),
     },
     {
@@ -147,6 +147,7 @@ class ReadCapabilityRegistry:
 def finance_read_capabilities(gateway):
     """把现有 FinanceGateway 查询端口登记为统一、严格校验的只读工具。"""
     registry = ReadCapabilityRegistry()
+    from base_runtime.statement_details import parameters as detail_parameters
 
     def no_parameters(values):
         if values:
@@ -205,6 +206,16 @@ def finance_read_capabilities(gateway):
                        'statements.annual_summary', ({'name': 'year', 'type': 'integer', 'required': True},),
                        statement_year,
                        lambda workspace, params: gateway.annual_analysis(workspace, params['year'])),
+        ReadCapability('statements.details', '按月及类别读取同源流水明细、完整笔数和合计。',
+                       'statements.filtered_details',
+                       ({'name': 'month', 'type': 'YYYY-MM', 'required': True},
+                        {'name': 'category', 'type': 'string', 'required': False},
+                        {'name': 'kind', 'type': 'string', 'required': False},
+                        {'name': 'currency', 'type': 'string', 'required': False},
+                        {'name': 'offset', 'type': 'integer', 'required': False},
+                        {'name': 'limit', 'type': 'integer', 'required': False}),
+                       detail_parameters,
+                       lambda workspace, params: gateway.statement_details(workspace, **params)),
         ReadCapability('statements.anomalies', '读取流水规则标记的异常候选。',
                        'statements.anomaly_candidates', (), no_parameters,
                        lambda workspace, _: gateway.anomalies(workspace)),

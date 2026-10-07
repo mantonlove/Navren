@@ -143,6 +143,13 @@ SPECS = {
                           obj({'month': {**STR, 'pattern': r'^\d{4}-\d{2}$'}}, ('month',))),
     'annual_statement': ('查询指定年份报告及覆盖月份；不假设缺失月份为零。',
                          obj({'year': {'type': 'integer', 'minimum': 2025, 'maximum': 2100}}, ('year',))),
+    'statement_details': ('查询某月某类别的逐笔账单。笔数/合计由本地完整筛选后计算；items仅当前页，最多12笔。沿用本人上一轮月份并重新读取；类别须与月报或本人原话一致。',
+                          obj({'month': {**STR, 'pattern': r'^\d{4}-(0[1-9]|1[0-2])$'},
+                               'category': {'type':'string','minLength':1,'maxLength':80},
+                               'kind': {**STR, 'enum':['expense','income','refund','transfer','investment_purchase','investment_redemption','loan_repayment']},
+                               'currency': {**STR, 'enum':['CNY','USD','EUR','GBP','JPY']},
+                               'offset': {'type':'integer','minimum':0,'maximum':200000},
+                               'limit': {'type':'integer','minimum':1,'maximum':12}}, ('month',))),
     'anomalies': ('读取规则识别的疑似重复和异常消费，候选不等于欺诈。', obj()),
     'periodic_charges': ('读取周期扣费候选；候选不等于已确认的商户订阅。', obj()),
     'cashflow': ('按账户和币种推演1至365天事项。available/minimum_available是已扣底线与预留的余量，与零比较判断缺口；current_available尚未扣未来到期事项，不是当前可安排资金，后者查询budget。缺少必要支出、收入稳定性与目标依据时，不能定性缓冲薄、厚或足够。未来流入零不证明无历史收入。',
@@ -656,6 +663,8 @@ class BankTools:
             for key, item in value.items():
                 if key == 'opening_balance_minor': continue
                 label = LABELS.get(key)
+                if path.startswith('statement_details'):
+                    label = {'transaction_count':'笔数','total_minor':'合计','amount_minor':'金额'}.get(key, label)
                 if key == 'investable_minor' and value.get('budget_scope') == 'planning_scenario':
                     label = '情景可安排资金'
                 if type(item) is int and (key.endswith('_minor') or label or path.endswith('_minor')):
@@ -666,7 +675,8 @@ class BankTools:
                         'unit':'minor_currency' if is_money else 'scalar','currency':currency if is_money else None,
                         'text':str(prefix)+' · '+(label or key.removesuffix('_minor'))+'：'+display}
                 elif isinstance(item, (dict,list)):
-                    self.add_facts(evidence_id, item, (str(prefix)+'/'+key).strip('/'), currency)
+                    child_path=(path+'/'+key) if path.startswith('statement_details') else (str(prefix)+'/'+key).strip('/')
+                    self.add_facts(evidence_id, item, child_path, currency)
         elif isinstance(value, list):
             for i, item in enumerate(value):
                 self.add_facts(evidence_id, item, path+'/'+str(i), currency)
@@ -879,6 +889,7 @@ class BankTools:
         elif name == 'statement_source': data = self.g.source(self.w)
         elif name == 'monthly_statement': data = self.g.query_read_capability(self.w,'statements.monthly_analysis',args)
         elif name == 'annual_statement': data = self.g.query_read_capability(self.w,'statements.annual_analysis',args)
+        elif name == 'statement_details': data = self.g.query_read_capability(self.w,'statements.details',args)
         elif name == 'anomalies': data = self.g.anomalies(self.w)
         elif name == 'periodic_charges': data = self.g.periodic_charges(self.w)
         elif name == 'cashflow':
@@ -1004,7 +1015,7 @@ class BankTools:
             'public_knowledge' if name=='knowledge_search' else 'local_knowledge_status' if name=='knowledge_status' else
             'verified_public_market' if name.startswith('market_') else 'webank_public_disclosure' if name=='public_products' else
             'profile_sources' if name=='personal_graph' else 'conversation_candidate' if name=='remember_profile' else
-            'maintainer_skill' if name=='load_skill' else 'simulation' if name not in ('monthly_statement','annual_statement','money_calculation') else data.get('source'))
+            'maintainer_skill' if name=='load_skill' else 'simulation' if name not in ('monthly_statement','annual_statement','statement_details','money_calculation') else data.get('source'))
         self.evidence[evidence_id] = {'id':evidence_id,'tool':name,'parameters':safe_data(args),
                                       'data':data,'source':evidence_source,
                                       'context_hash':self.start_context}

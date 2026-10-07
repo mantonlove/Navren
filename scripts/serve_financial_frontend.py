@@ -31,7 +31,7 @@ def arguments():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, default=DEFAULT_STATE)
     parser.add_argument('--financial-database', type=Path,
-        default=ROOT / 'outputs/financial-data/navren-financial-v2.sqlite3')
+        default=ROOT / 'outputs/financial-data/navren-financial-v3.sqlite3')
     parser.add_argument('--market-database', type=Path,
         default=Path.home() / 'Library/Application Support/Navren/market.sqlite3')
     parser.add_argument('--port', type=int, default=60291)
