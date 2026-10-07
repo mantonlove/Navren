@@ -326,6 +326,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 options['graph_context']=gc
             from copy import copy
             from base_runtime.evidence import PublicEvidenceObserver, MetricEvidenceObserver, EvidenceGuardedClient
+            from base_runtime.tool_scope import ScopedEvidenceClient, statement_tool_scope
             request_gateway=copy(gateway)
             # 冷补充在首个云请求前完成；每轮固定快照，不改Agent检索中的版本。
             from local_knowledge.runtime import RoundProductCatalog
@@ -336,9 +337,25 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             metric_observer=MetricEvidenceObserver(gateway.financial_metrics)
             request_gateway.financial_metrics=metric_observer
             request_agent=copy(self.server.conversation_agent)
+            tool_scope=statement_tool_scope(text,has_attachment=bool(data.get('image')),
+                has_context=any(value is not None for value in
+                    (page_context,data.get('market_context'),data.get('graph_context'))))
             for client_name in ('primary','reviewer'):
                 client=getattr(request_agent,client_name,None)
-                if client is not None:setattr(request_agent,client_name,EvidenceGuardedClient(client,public_observer,prepared.report))
+                if client is not None:
+                    guarded=(ScopedEvidenceClient(client,public_observer,prepared.report,
+                        allowed_tools=tool_scope) if client_name=='primary' else
+                        EvidenceGuardedClient(client,public_observer,prepared.report))
+                    if client_name=='primary':
+                        # 后端已接通的读取能力属于服务端事实；不能把尚未调用说成没有数据。
+                        guarded.notice=(guarded.notice or '')+'\n本机已接通当前登录主体的财务读取工具。'+(
+                            '询问某月钱花在哪、收入支出或消费分类，先调用monthly_statement(month=YYYY-MM)，'
+                            '按本轮as_of解析未指定的年份，再根据返回的分类、facts和metrics回答。'
+                            '没有调用对应工具前，不得声称没有账单、要求用户上传已有账单，或让用户换一种问法再查。'
+                            '只有工具明确返回无记录或不可用时才说明缺项。'
+                            '独立历史库的银行账户、银行卡、保险、持仓和资产可用financial_*工具读取；'
+                            '历史合成资料与现行模拟操作分开，不把历史估值当可执行余额。')
+                    setattr(request_agent,client_name,guarded)
             def finalize_result(result,commit_history=None):
                 history_attempted=False
                 failure_stage='finalization'
@@ -431,7 +448,15 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         except (PublicationInterrupted,BrokenPipeError,ConnectionResetError):
             # 已发送部分帧后失效，关闭连接；不能追加另一份HTTP或续播旧内容。
             self.close_connection=True
-        except Exception:
+        except Exception as error:
+            # 保留可定位的服务端异常；不记录问题正文、密钥或异常消息。
+            import traceback
+            frames = [{'file':Path(frame.filename).name, 'line':frame.lineno,
+                       'function':frame.name}
+                      for frame in traceback.extract_tb(error.__traceback__)]
+            self.log_error('agent failure %s', json.dumps({
+                'request_id':locals().get('request_id'),
+                'exception_type':type(error).__name__, 'frames':frames}, ensure_ascii=False))
             if self.request.published:
                 self.close_connection=True
                 return

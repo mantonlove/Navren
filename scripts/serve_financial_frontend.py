@@ -17,6 +17,16 @@ OUTPUT = ROOT / 'outputs/financial-frontend'
 DEFAULT_STATE = ROOT / 'outputs/window-progress/integration/execution-20261006/ordinary-runtime-run-3/state'
 
 
+def ensure_runtime():
+    """本机优先复用项目依赖环境，监听端口前确认流式事件组件可用。"""
+    environment = ROOT / '.venv'
+    interpreter = environment / 'bin/python'
+    if interpreter.is_file() and Path(sys.prefix).resolve() != environment.resolve():
+        os.execv(str(interpreter), [str(interpreter), str(Path(__file__).resolve()), *sys.argv[1:]])
+    sys.path.insert(0, str(ROOT))
+    from agent_runtime.events import RuntimeEvents
+
+
 def arguments():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, default=DEFAULT_STATE)
@@ -88,6 +98,7 @@ def save_receipt(value):
 
 
 def main():
+    ensure_runtime()
     args = arguments()
     paths, metadata = prepare(args)
     base = {
@@ -99,6 +110,8 @@ def main():
         'upstream_port': args.upstream_port, 'existing_four_workspaces_verified': True,
         'existing_personal_key_verified': True, 'model_provider': 'aiping',
         'model_checks': 0, 'source_static_files': True,
+        'runtime_python': sys.executable, 'runtime_prefix': sys.prefix,
+        'stream_events_ready': True,
     }
     if args.prepare:
         print(json.dumps({**base, 'prepared': True, 'runtime_enabled': False}, ensure_ascii=False))
