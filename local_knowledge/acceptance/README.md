@@ -1,5 +1,7 @@
 # 首批原件人工核对与提供端复现
 
+下列 `/数据目录`、`/日志目录` 是部署路径占位，运行时需替换为自己的配置；示例命令执行前应在环境中配置所需密钥。
+
 人工核对日期：2026-10-06。原件是库中保存的微众官方 JSONP，不是实时网页抓取。目录日期为 **2026-09-24**；保存日 2026-10-06 不能刷新业务字段时效。原件摘要、选定行序号和预期原字段在 `reviewed_cases.json` 中冻结。预期先按原件人工核定，随后运行提供器，不能用提供器返回填充预期。
 
 | 稳定公共ID | 原件名称 | 选择依据 | 可核对的历史内容 | 本次仍缺资料 |
@@ -17,7 +19,7 @@
 ## 安全复现
 
 ```sh
-python3 local_knowledge/acceptance/run_review.py --source-database "$HOME/Library/Application Support/Qingzhou/simulated-bank.knowledge.sqlite3" --output local_knowledge/acceptance/latest_review_result.json
+python3 local_knowledge/acceptance/run_review.py --source-database "/数据目录/simulated-bank.knowledge.sqlite3" --output local_knowledge/acceptance/latest_review_result.json
 ```
 
 执行器以 `mode=ro` 打开源库，通过 SQLite backup 创建临时克隆；所有初始化、检索、冲突、撤回及撤权试验只作用于克隆。它不访问网络、不启动服务、不调用模型，不改源库。期望固定在题集，原件不匹配会失败，不能自动重写期望。克隆保留选定发布代次；同时记录现役源库当前代次与源码摘要，避免把旧题集当成新运行版本。

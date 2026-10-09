@@ -1,6 +1,10 @@
 # Navren 市场定期更新与周报卡片实施记录
 
-实施日期：2026-10-05。现役代码目录：`/Users/manton/CC/projects/Navren`。
+下列 `/数据目录`、`/日志目录` 是部署路径占位，运行时需替换为自己的配置；示例命令执行前应在环境中配置所需密钥。
+
+> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
+
+实施日期：2026-10-05。现役代码目录：`项目根目录`。
 
 ## 更新规则
 
@@ -34,7 +38,7 @@
 ## 验证证据
 
 1. 第一次真实刷新：`outputs/market-acceptance/periodic-refresh-result.json`。六个来源发现成功，原始资料新增/修订13条（12条FT订阅元数据、1条欧央行原始发布），不等同于13条已发布热点。该次候选新热点引用未通过校验，热点状态为部分完成并安排重试；周报保持2026-09-28期第2版。
-2. 运行与定时配置：`outputs/market-acceptance/periodic-runtime-check.json`，包含实际接口返回、页面版本、任务日历及300秒检查间隔。任务标识 `com.manton.navren.market`，本地服务由 `com.manton.navren.preview` 托管。
+2. 运行与定时配置：`outputs/market-acceptance/periodic-runtime-check.json`，包含实际接口返回、页面版本、任务日历及300秒检查间隔。当时由本机定时任务触发采集，预览服务由本机服务管理器托管。
 3. 后端回归：市场内容37项、调度11项、Agent市场证据11项通过；原生Agent31项也在本次实施中通过。覆盖失败重试上限、跨日补跑、采集与发布分离、完整周截止、大小写恢复与虚构引用拒绝等。
 4. 周报组件：`tests/test_market_weekly_ui.js` 在隔离的内存DOM中通过。验证文本安全、版本去重、失败保留、可见轮询、并发去重、目录定位、收藏同步、来源去重、滚动锁和对象问答。测试用jsdom安装在临时目录，不添加生产依赖。
 5. 热点卡片：`tests/test_market_deck.js` 通过，现有连续划卡、版本绑定、手势及循环边界保持。`scripts/audit_market_evidence.py` 对发布内容的逐字引用与周报期间检查通过。
@@ -46,8 +50,8 @@
 
 安装/更新独立任务：`.venv/bin/python scripts/install_market_refresh.py`。
 
-手工采集：`/Users/manton/CC/services/cc-secrets/cc-with-secrets .venv/bin/python scripts/refresh_market.py --force-check --backfill-weeks 1`。
+手工采集：`.venv/bin/python scripts/refresh_market.py --force-check --backfill-weeks 1`。
 
 按计划检查：上述命令改用 `--scheduled`，未到期直接退出。所有密钥继续使用钥匙串，任务配置和报告不包含密钥值。
 
-日志：`~/Library/Logs/Navren/market-refresh.log`、`market-refresh-error.log`。成功以公开数据库发布状态和运行报告为准，不能凭任务存在、进程启动或HTTP200判断资讯已经更新。
+日志：`/日志目录/market-refresh.log`、`market-refresh-error.log`。成功以公开数据库发布状态和运行报告为准，不能凭任务存在、进程启动或HTTP200判断资讯已经更新。

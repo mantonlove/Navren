@@ -28,11 +28,11 @@ ORACLE_PATH = ROOT / "evaluation/window_integration/finance_adapter_oracles.json
 HELPER_PATH = ROOT / "tests/window_integration/test_finance_adapter_handoff.py"
 DESIGN_PATH = ROOT / "evaluation/window_integration/finance_adapter_remaining_design.json"
 MATRIX_PATH = ROOT / "evaluation/window_integration/finance_adapter_remaining_coverage_matrix.json"
-ORACLE_SHA256 = "04dde7576f4dec85ddf3ac2e0ecbc0940de16a3a52ef32c7bd79625ab513bb14"
-DESIGN_SHA256 = "1f0acbaf6d9452397ad0a9ec79db49b1fe4d9159a16ac54ebb08634ba91f02b9"
+ORACLE_SHA256 = "91cfb1dc3f3cfbe99d39785535bd2d1861b10273e1a337b006357f96b2ebee6b"
+DESIGN_SHA256 = "af0f18f6c21e4d47271807af5e87905e2396f6a793a4e4229fc16f00cf44f06c"
 MATRIX_SHA256 = "f4143d3069010bdaa4bed5be5f2963f268dd316c27520ff1da917e7de3ea5b67"
 # 已批准C01夹具补齐评估/本人确认出处；原设计和SqliteAuditedSource保持冻结。
-HELPER_INPUT_SHA256 = "14b69d6deb4649d543580f5e0da43b5be240ca2c3b7cd15ed30282a8a32e57d4"
+HELPER_INPUT_SHA256 = "d102610d1166f41a26f667562806ad5bb171d4e26ebda3cfd2df494adf471075"
 
 
 def sha(path):

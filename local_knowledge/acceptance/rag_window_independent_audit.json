@@ -15,7 +15,7 @@
   },
   "originals": [
     {
-      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/006210-summary.pdf",
+      "file": "006210-summary.pdf",
       "raw_hash_passed": true,
       "span_count": 6,
       "spans": [
@@ -52,7 +52,7 @@
       ]
     },
     {
-      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/006210-prospectus.pdf",
+      "file": "006210-prospectus.pdf",
       "raw_hash_passed": true,
       "span_count": 4,
       "spans": [
@@ -79,7 +79,7 @@
       ]
     },
     {
-      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/001198-summary.pdf",
+      "file": "001198-summary.pdf",
       "raw_hash_passed": true,
       "span_count": 3,
       "spans": [
@@ -101,7 +101,7 @@
       ]
     },
     {
-      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/001198-prospectus.pdf",
+      "file": "001198-prospectus.pdf",
       "raw_hash_passed": true,
       "span_count": 3,
       "spans": [
@@ -123,7 +123,7 @@
       ]
     },
     {
-      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/021095-summary.pdf",
+      "file": "021095-summary.pdf",
       "raw_hash_passed": true,
       "span_count": 4,
       "spans": [
@@ -150,7 +150,7 @@
       ]
     },
     {
-      "file": "/Users/manton/CC/projects/Navren/outputs/window-progress/rag/sources/products/021095-prospectus.pdf",
+      "file": "021095-prospectus.pdf",
       "raw_hash_passed": true,
       "span_count": 2,
       "spans": [
@@ -678,5 +678,6 @@
       "This evaluation checks bounded original retrieval and metadata, not final Agent financial answers or comprehensive recommendation suitability.",
       "All 12 lexical baseline expected keys are already covered; this set cannot prove semantic vector retrieval is required."
     ]
-  }
+  },
+  "publication_note": "历史只读审计摘要；原始 PDF 和本机运行环境未随仓库发布。来源文件仅保留文件名，原检查结论及哈希不变。"
 }

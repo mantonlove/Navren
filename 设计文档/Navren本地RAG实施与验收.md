@@ -1,6 +1,10 @@
 # Navren 本地知识图谱 RAG：实施与验收
 
-更新日期：2026-10-06。实现目录：`/Users/manton/CC/projects/Navren`。
+下列 `/数据目录`、`/日志目录` 是部署路径占位，运行时需替换为自己的配置；示例命令执行前应在环境中配置所需密钥。
+
+> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
+
+更新日期：2026-10-06。实现目录：`项目根目录`。
 
 ## 1. 本次落地的框架
 
@@ -122,10 +126,10 @@ TTS 只接受服务器签发的 `speech_receipt`；浏览器任意 text 不能�
 ## 8. 本地操作入口
 
 ```bash
-cd /Users/manton/CC/projects/Navren
-/Users/manton/CC/services/cc-secrets/cc-with-secrets .venv/bin/python scripts/verify_local_rag.py
-/Users/manton/CC/services/cc-secrets/cc-with-secrets .venv/bin/python scripts/sync_local_knowledge.py --database "$HOME/Library/Application Support/Qingzhou/simulated-bank.knowledge.sqlite3" --market-database "$HOME/Library/Application Support/Navren/market.sqlite3" --webank --limit 24 --publish
-/Users/manton/CC/services/cc-secrets/cc-with-secrets env NAVREN_PORT=18767 .venv/bin/python -u server.py
+# 在克隆后的 Navren 项目根目录执行
+.venv/bin/python scripts/verify_local_rag.py
+.venv/bin/python scripts/sync_local_knowledge.py --database "/数据目录/simulated-bank.knowledge.sqlite3" --market-database "/数据目录/market.sqlite3" --webank --limit 24 --publish
+env NAVREN_PORT=18767 .venv/bin/python -u server.py
 ```
 
-同步命令显式访问已登记公开源；运行服务前应确认同端口没有旧 Navren 进程。不要关闭占用其他端口的 Memory Center 或独立预览服务。
+同步命令显式访问已登记公开源；运行服务前应确认同端口没有旧 Navren 进程。不要关闭无关服务。

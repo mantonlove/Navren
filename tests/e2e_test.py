@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""轻舟 Qingzhou — 全功能 E2E 回归测试 v2"""
+"""Navren — 旧版页面的 E2E 回归测试 v2，不代表当前版本验收。"""
 import os, sys, json, time
 from pathlib import Path
 from playwright.sync_api import sync_playwright

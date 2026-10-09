@@ -17,3 +17,6 @@ outputs/
 .playwright-cli/
 *.bak
 *.backup
+
+# 本机私人会话路由，不随源码发布
+/设计文档/多窗口执行方案/07-会话路由与分发规则.md

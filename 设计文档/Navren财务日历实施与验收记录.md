@@ -1,6 +1,10 @@
 # Navren 财务日历实施与验收记录
 
-日期：2026-10-04。执行目录：`/Users/manton/CC/projects/Navren`。对应方案：`Navren财务日历与对话组件落地方案.md`。
+下列 `/数据目录`、`/日志目录` 是部署路径占位，运行时需替换为自己的配置；示例命令执行前应在环境中配置所需密钥。
+
+> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
+
+日期：2026-10-04。执行目录：`项目根目录`。对应方案：`Navren财务日历与对话组件落地方案.md`。
 
 ## 交付结果
 
@@ -53,7 +57,7 @@
 运行命令：
 
 ```sh
-cd /Users/manton/CC/projects/Navren
+# 在克隆后的 Navren 项目根目录执行
 .venv/bin/python -m unittest discover -s tests
 node --test tests/test_voice_frontend.js tests/test_api_response.js
 .venv/bin/python scripts/verify_calendar_acceptance.py
@@ -91,16 +95,15 @@ git diff --check
 
 ## 运行状态与限制
 
-本地服务：`http://127.0.0.1:18767`。最后启动前端版本：`navren-d830a1cefeaa`。验收使用 `/tmp/navren-qa-20261004.sqlite3` 中的隔离模拟工作区。交付前已切回原本地数据库 `/Users/manton/Library/Application Support/Qingzhou/simulated-bank.sqlite3`；保留旧目录名以兼容原配置，没有迁移或重置用户记录。
+当时使用仅绑定回环地址的本机验收服务。最后启动前端版本：`navren-d830a1cefeaa`。验收使用 `/tmp/navren-qa-20261004.sqlite3` 中的隔离模拟工作区。交付前已切回原有本机演示数据库；没有迁移或重置用户记录。
 
 原数据库已实际原位升级：工作区、账户、交易、操作数量及账户余额总额在启动前后完全一致，新日历/估值表已存在。证据为 `outputs/calendar-acceptance/main-database-upgrade.json`；没有复制账户密钥或会话票据到验收产物。
 
 最后浏览器核对的聊天、我的关系图和账户日历 URL 均为该版本；账户当前月视图有 31 个日期按钮。最后预算情景请求实际耗时约 8.1 秒，原生工具完成、GLM 审核通过，最终消息只保留一枚 AI 朗读控制。
 
 ```sh
-/Users/manton/CC/services/cc-secrets/cc-with-secrets \
-  env NAVREN_PORT=18767 \
-  NAVREN_SIM_DB='/Users/manton/Library/Application Support/Qingzhou/simulated-bank.sqlite3' \
+env NAVREN_PORT=18767 \
+  NAVREN_SIM_DB='/数据目录/simulated-bank.sqlite3' \
   .venv/bin/python server.py
 ```
 

@@ -132,7 +132,7 @@ python3 -m unittest discover -s tests -p test_knowledge_retrieval.py
 ```sh
 .venv/bin/python -B scripts/verify_evidence_runtime.py --mode offline --out /绝对路径/新的验收目录
 # 仅明确联网时选择 --mode official 或 --mode cloud。
-# cloud须用CC统一密钥加载器；只运行一个合成公共目录问题，不证明真实产品质量。
+# cloud须用已配置的密钥注入方式；只运行一个合成公共目录问题，不证明真实产品质量。
 ```
 
 每次验收冻结代码和测试输入，写 `results.json` 与来源哈希；验收成功须同时检查结果中的 `passed`、失败计数、候选未变化及进程退出情况。存在 JSON 文件或执行器报告产物就绪不等于测试通过。规模上限仍为单发布5000片段、一次12对象；尚未完成银行规模负载、临时快照保留期治理和真实金融语义评测。

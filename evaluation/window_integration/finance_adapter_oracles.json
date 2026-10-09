@@ -1,8 +1,9 @@
 {
   "schema_version": 1,
+  "publication_note": "2026-10-10 本发布版本仅清理本机路径；路径以仓库根目录为基准。outputs 中原始材料未随源码发布，须另行取得并核验。以下原冻结日期、预期、未运行状态和历史结果保留原版本含义；本次未运行金融、模型或 E2E 验收，不继承旧版本通过结论。",
   "artifact_type": "independent_adapter_oracles",
   "as_of_task_date": "2026-10-06",
-  "repository": "/Users/manton/CC/projects/Navren",
+  "repository": ".",
   "implementation_status": "A_B_C_adapter_cases_not_run",
   "oracle_policy": "预期为独立手算字面量和既有冻结字面量整理，未调用被测函数生成；fixture是合成审计输入，不是实际客户确认/资格/行情。",
   "write_scope": [
@@ -120,11 +121,11 @@
     }
   },
   "existing_literal_sources": [
-    "/Users/manton/CC/projects/Navren/outputs/window-progress/finance/manual-cases.json",
-    "/Users/manton/CC/projects/Navren/tests/test_financial_methods_accounting.py",
-    "/Users/manton/CC/projects/Navren/tests/test_financial_methods_returns.py",
-    "/Users/manton/CC/projects/Navren/tests/test_financial_methods_allocation.py",
-    "/Users/manton/CC/projects/Navren/tests/test_financial_methods_audit.py"
+    "outputs/window-progress/finance/manual-cases.json",
+    "tests/test_financial_methods_accounting.py",
+    "tests/test_financial_methods_returns.py",
+    "tests/test_financial_methods_allocation.py",
+    "tests/test_financial_methods_audit.py"
   ],
   "four_synthetic_source_scope_oracles": {
     "status": "source_snapshot_literals_only_not_new_A_B_C_service_acceptance",
@@ -135,7 +136,7 @@
     "accounts": [
       {
         "account": "grain_farmer",
-        "source_file": "/Users/manton/CC/projects/Navren/outputs/contest-finances/grain_farmer/current_finances.json",
+        "source_file": "outputs/contest-finances/grain_farmer/current_finances.json",
         "book_net_assets": 1998346366,
         "cash_balance": 1216248131,
         "actual_quantity": null,
@@ -144,7 +145,7 @@
       },
       {
         "account": "retired_entrepreneur",
-        "source_file": "/Users/manton/CC/projects/Navren/outputs/contest-finances/retired_entrepreneur/current_finances.json",
+        "source_file": "outputs/contest-finances/retired_entrepreneur/current_finances.json",
         "book_net_assets": 332985415,
         "cash_balance": 73633324,
         "actual_quantity": null,
@@ -153,7 +154,7 @@
       },
       {
         "account": "tycoon",
-        "source_file": "/Users/manton/CC/projects/Navren/outputs/contest-finances/tycoon/current_finances.json",
+        "source_file": "outputs/contest-finances/tycoon/current_finances.json",
         "book_net_assets": 262520039660,
         "cash_balance": 9466265796,
         "actual_quantity": null,
@@ -162,7 +163,7 @@
       },
       {
         "account": "working_landlady",
-        "source_file": "/Users/manton/CC/projects/Navren/outputs/contest-finances/working_landlady/current_finances.json",
+        "source_file": "outputs/contest-finances/working_landlady/current_finances.json",
         "book_net_assets": 710212760,
         "cash_balance": 13508826,
         "actual_quantity": null,

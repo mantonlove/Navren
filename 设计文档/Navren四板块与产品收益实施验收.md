@@ -1,6 +1,8 @@
 # Navren 四板块与产品收益实施验收
 
-日期：2026-10-05。执行目录：`/Users/manton/CC/projects/Navren`。对应合同：[一体化落地方案](/Users/manton/CC/projects/Navren/设计文档/Navren四板块图谱与微众产品收益一体化落地方案.md)。
+> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
+
+日期：2026-10-05。执行目录：`项目根目录`。对应合同：[一体化落地方案](Navren四板块图谱与微众产品收益一体化落地方案.md)。
 
 四板块图谱、官方净值历史、独立历史组合、权益核算、日历与产品详情、共用说明、聊天工具联动已落地并通过技术验收。**原有 24 个工作区的当前组合尚未整体切换**：官方候选不能覆盖原 R1 活钱用途，旧组合继续使用原账本。当前组合转换执行、适配货币基金、真实渠道核验、真实用户理解研究仍未完成；本文件不把独立示例当作用户组合迁移。
 
@@ -40,7 +42,7 @@
 
 实际官方样例：006210 在 09-28、09-29、09-30 的单位净值为 3.6844、3.6874、3.6834。1000 份、无交易时连续贡献 **+3.00 / −4.00 元**。09-30 权益 **3683.40 元**、剩余成本 **3575.70 元**、累计未实现损益 **107.70 元**。独立三基金组合 2026 年 9 月损益 **−433.00 元**，09-30 合计 **−116.00 元**，截至该日持仓累计损益 **1572.30 元**；三者期间与含义不同。
 
-[核算案例](/Users/manton/CC/projects/Navren/output/equity/calculation_examples.json) 导出 12 个带输入、预期值和实际输出的构造案例，包括除息应收、同日/跨日再投、赎回应收与到账、待确认申购、费用与所有者代付。100 元除息后 90 元市值加 10 元应收，损益为零；次日市值 92 元加 10 元待再投权益，损益为 2 元；到账转换不重复获利。另有转换金额守恒及家庭口径对账：期初现金 10000、收入 6000、消费 2000、申购本金 1000、借款 3000，期末现金 16000、投资 1000、负债 3000、净资产 14000、日常结余 4000，不能把借款计收入或把结余叠加到净资产。
+核算案例（历史资料未随仓库发布） 导出 12 个带输入、预期值和实际输出的构造案例，包括除息应收、同日/跨日再投、赎回应收与到账、待确认申购、费用与所有者代付。100 元除息后 90 元市值加 10 元应收，损益为零；次日市值 92 元加 10 元待再投权益，损益为 2 元；到账转换不重复获利。另有转换金额守恒及家庭口径对账：期初现金 10000、收入 6000、消费 2000、申购本金 1000、借款 3000，期末现金 16000、投资 1000、负债 3000、净资产 14000、日常结余 4000，不能把借款计收入或把结余叠加到净资产。
 
 转换帮助函数已核验分值守恒；它不是已完成的当前组合迁移执行器，尚未切换默认组合或建立净值基金申赎执行通路。
 
@@ -69,26 +71,26 @@
 
 | 检查 | 实际结果 | 文件 |
 |---|---|---|
-| 全部 Python 回归 | 340 项通过；包含原系统回归及本轮权益/来源/隔离/决策测试 | [测试输出](/Users/manton/CC/projects/Navren/output/equity/final-full-tests.txt) |
-| 前端既有回归 | 11 项通过；新增/修改脚本语法检查通过 | [前端输出](/Users/manton/CC/projects/Navren/output/equity/js-tests.txt) |
-| 官方分页与完整性 | 三基金各 263 条净值，缺日期不补零；公告索引及费用/风险/销售核验留存 | [来源](/Users/manton/CC/projects/Navren/output/equity/source_probe.json)、[覆盖](/Users/manton/CC/projects/Navren/output/equity/history_coverage.json)、[产品依据](/Users/manton/CC/projects/Navren/output/equity/product_evidence.json) |
-| 三种界面与两种尺寸 | 经典/关怀/青春，1440×980 与 390×844；四总览卡、30 日期格，无文档横溢、收益金额裁切 | [页面记录](/Users/manton/CC/projects/Navren/output/equity/browser_acceptance.json) |
+| 全部 Python 回归 | 340 项通过；包含原系统回归及本轮权益/来源/隔离/决策测试 | 测试输出（历史资料未随仓库发布） |
+| 前端既有回归 | 11 项通过；新增/修改脚本语法检查通过 | 前端输出（历史资料未随仓库发布） |
+| 官方分页与完整性 | 三基金各 263 条净值，缺日期不补零；公告索引及费用/风险/销售核验留存 | 来源（历史资料未随仓库发布）、覆盖（历史资料未随仓库发布）、产品依据（历史资料未随仓库发布） |
+| 三种界面与两种尺寸 | 经典/关怀/青春，1440×980 与 390×844；四总览卡、30 日期格，无文档横溢、收益金额裁切 | 页面记录（历史资料未随仓库发布） |
 | 日期/产品详情 | 09-30 三项合计 −116 元；006210 1000 份、净值 3.6834、权益 3683.4、损益 −4、5 原文链接、263 历史行 | 浏览器记录及产品截图 |
-| 真实模型 HTTP | 两个查询均为 DeepSeek 实际工具调用→GLM 审核→返回，未执行资金动作 | [运行记录](/Users/manton/CC/projects/Navren/output/equity/real-runtime.json) |
-| 浏览器到模型 | 真实发送、显示正确金额、审核标识可见；最终 `.runtime-panel/.runtime-step` 均为 0 | [审计与页面记录](/Users/manton/CC/projects/Navren/output/equity/browser-runtime.json) |
+| 真实模型 HTTP | 两个查询均为 DeepSeek 实际工具调用→GLM 审核→返回，未执行资金动作 | 运行记录（历史资料未随仓库发布） |
+| 浏览器到模型 | 真实发送、显示正确金额、审核标识可见；最终 `.runtime-panel/.runtime-step` 均为 0 | 审计与页面记录（历史资料未随仓库发布） |
 | 独立只读复核 | 已报告的来源失效、缺项聚合、历史数量及记忆关联问题已修复 | 本会话独立 reviewer 记录；对应回归用例 |
 
 模型检查是实际冒烟测试，未做未见题评测或用户任务成功率研究。测试计数包括继承的回归用例，不等同于 340 种独立金融场景。
 
-查看截图：[青春桌面总览](/Users/manton/CC/projects/Navren/output/equity/graph-desktop-youth.png)、[青春手机总览](/Users/manton/CC/projects/Navren/output/equity/graph-mobile-youth.png)、[桌面收益日历](/Users/manton/CC/projects/Navren/output/equity/calendar-desktop-youth.png)、[手机收益日历](/Users/manton/CC/projects/Navren/output/equity/calendar-mobile-youth.png)、[收支图](/Users/manton/CC/projects/Navren/output/equity/graph-cashflow-desktop.png)、[手机路径列表](/Users/manton/CC/projects/Navren/output/equity/graph-cashflow-mobile.png)、[实际模型回答](/Users/manton/CC/projects/Navren/output/equity/chat-real-model.png)。其余经典/关怀模式截图位于相同证据目录。
+查看截图：青春桌面总览（历史资料未随仓库发布）、青春手机总览（历史资料未随仓库发布）、桌面收益日历（历史资料未随仓库发布）、手机收益日历（历史资料未随仓库发布）、收支图（历史资料未随仓库发布）、手机路径列表（历史资料未随仓库发布）、实际模型回答（历史资料未随仓库发布）。其余经典/关怀模式截图位于相同证据目录。
 
 ## 6. 真实数据库与恢复演练
 
-本地服务：`http://127.0.0.1:18767`。实际数据库：`/Users/manton/Library/Application Support/Qingzhou/simulated-bank.sqlite3`，没有把旧项目目录或另一个数据库的检查结果当成线上状态。
+当时使用仅绑定回环地址的本机服务。实际数据库为原有演示银行库（本机路径未公开），没有把旧项目目录或另一个数据库的检查结果当成线上状态。
 
-备份：`/Users/manton/Library/Application Support/Qingzhou/backups/four-equity-20261005T015711.sqlite3`。恢复演练副本：同目录 `four-equity-restore-verification.sqlite3`，权限 600。通过 SQLite backup 复制原备份并做完整性检查，未以演练替换正在使用的数据库。
+现场备份与恢复演练副本未随仓库发布；恢复副本名为 `four-equity-restore-verification.sqlite3`，权限 600。通过 SQLite backup 复制原备份并做完整性检查，未以演练替换正在使用的数据库。
 
-[实际盘点](/Users/manton/CC/projects/Navren/output/equity/migration_audit.json)：原 24 工作区仍存在，原账户/持仓/订单/操作记录逐字段摘要相同、现金未改；当前共 27 工作区，多出的 3 个是隔离查询验收会话。原备份、现场库与恢复副本完整性均通过。迁移清单逐工作区保留风险缺口，未声明全量转换完成。
+实际盘点（历史资料未随仓库发布）：原 24 工作区仍存在，原账户/持仓/订单/操作记录逐字段摘要相同、现金未改；当前共 27 工作区，多出的 3 个是隔离查询验收会话。原备份、现场库与恢复副本完整性均通过。迁移清单逐工作区保留风险缺口，未声明全量转换完成。
 
 如需恢复，先停止该端口服务，另外保全现场最新 SQLite 一致性快照，再从所选完整备份恢复到临时库、运行 `PRAGMA integrity_check`，确认工作区/现金/持仓/订单/组合活动配置后替换并重启。旧备份会回退本轮新增表和测试后资料，因此不能在运行中直接覆盖或只换一张持仓表。
 
@@ -115,6 +117,6 @@ PYTHONPATH=tests .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -
 node --test tests/test_voice_frontend.js tests/test_api_response.js
 ```
 
-同步脚本写公开缓存；组合 provision 及迁移审计会写版本/投影与审计表，不会改当前现金或把旧持仓换名。备份路径为本轮现场备份，换机器运行审计前须改成对应已核验备份。真实模型检查通过统一钥匙串加载器运行，密钥不进入证据文件。
+同步脚本写公开缓存；组合 provision 及迁移审计会写版本/投影与审计表，不会改当前现金或把旧持仓换名。备份路径为本轮现场备份，换机器运行审计前须改成对应已核验备份。真实模型检查由配置了凭据的运行环境执行，密钥不进入证据文件。
 
 后续必须补齐：适配原 R1 场景且每日收益/结转/风险/销售证据完整的候选；按具体条款实现当前组合转换与订单生命周期；核验微众当前渠道及费率优惠；如公开发布，核验来源长期访问/再展示范围；进行真实用户理解研究。个人家庭责任和认知反馈只能来自本人确认，缺少资料继续保持未知。
