@@ -117,6 +117,17 @@ def build_server(config: ServerConfig | None = None):
         return await query("list_transactions", arguments)
 
     @read_tool
+    async def financial_list_transfers(account_id: str | None = None, start_date: str | None = None,
+                                       end_date: str | None = None, limit: int = 8, offset: int = 0) -> dict:
+        """读取历史转账的完整事件统计与最多12笔明细；本人账户调拨按事件计一次。"""
+        arguments = date_range(start_date, end_date)
+        account = identifier(account_id)
+        if account:
+            arguments["account_id"] = account
+        arguments.update(limit=bounded_integer(limit, 1, 12), offset=bounded_integer(offset, 0, 100000))
+        return await query("list_transfers", arguments)
+
+    @read_tool
     async def financial_list_positions(account_id: str | None = None) -> dict:
         """查看投资持仓、成本、模拟估值和关联结算账户。"""
         account = identifier(account_id)

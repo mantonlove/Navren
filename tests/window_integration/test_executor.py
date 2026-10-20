@@ -70,12 +70,15 @@ if {mutate_candidate!r}:
 sys.exit(17 if {fail_offline!r} and '--offline' in args else 0)
 ''')
 
-    def invoke_main(self, *, stage='preflight', run_name='run', handoff=None, timeout=5):
+    def invoke_main(self, *, stage='preflight', run_name='run', handoff=None,
+                    preflight_manifest=None, timeout=5):
         args = ['run_window_integration.py', '--stage', stage, '--source-root', str(self.source),
                 '--out-dir', str(self.output / run_name), '--budget-seconds', '20',
                 '--stage-timeout-seconds', str(timeout), '--rounds', '1']
         if handoff is not None:
             args += ['--handoff', str(handoff)]
+        if preflight_manifest is not None:
+            args += ['--paid-preflight-manifest', str(preflight_manifest)]
         # 禁止默认现役源目录、数据库/网络检查与密钥读取进入这些测试。
         with patch.object(EXECUTOR, 'ROOT', self.source), \
                 patch.object(EXECUTOR, 'OUTPUT_ROOT', self.output), \
@@ -83,6 +86,47 @@ sys.exit(17 if {fail_offline!r} and '--offline' in args else 0)
                 patch.object(EXECUTOR, 'isolated_environment', return_value=self.environment), \
                 patch.object(sys, 'argv', args), contextlib.redirect_stdout(io.StringIO()):
             return EXECUTOR.main()
+
+    def paid_preflight_inputs(self, result, *, returncode=0, stale_source=False):
+        from hashlib import sha256
+
+        preflight_dir = self.source / EXECUTOR.PAID_PREFLIGHT_RELATIVE
+        script = self.write(str(EXECUTOR.PAID_PREFLIGHT_RELATIVE / 'preflight.py'),
+            'import json,sys,hashlib\nfrom pathlib import Path\n'
+            f'result={result!r}\n'
+            "manifest=Path(sys.argv[sys.argv.index('--manifest')+1])\n"
+            "result['manifest_sha256']=hashlib.sha256(manifest.read_bytes()).hexdigest()\n"
+            "out=Path(sys.argv[sys.argv.index('--out')+1]);out.parent.mkdir(parents=True,exist_ok=True)\n"
+            "out.write_text(json.dumps(result),encoding='utf-8')\n"
+            f'sys.exit({returncode})\n')
+        delivery = {'schema': 'navren.baseline-preflight-delivery.v1',
+            'status': 'component_verified_pending_integration_adoption',
+            'files': {'preflight.py': sha256(script.read_bytes()).hexdigest()},
+            'models_called': 0, 'external_reviews': 0, 'resource_preparation_only': True}
+        (preflight_dir / 'delivery.json').write_text(json.dumps(delivery), encoding='utf-8')
+
+        source_manifest = EXECUTOR.source_manifest(self.source)
+        if stale_source:
+            source_manifest['business.py'] = '0' * 64
+        source_manifest_path = preflight_dir / 'source-manifest.json'
+        source_manifest_path.write_text(json.dumps(source_manifest, sort_keys=True), encoding='utf-8')
+        manifest_path = preflight_dir / 'paid-manifest.json'
+        manifest_path.write_text(json.dumps({
+            'schema': 'navren.baseline-preflight.v1', 'stage': 'paid',
+            'source_root': str(self.source.resolve()),
+            'source_manifest': {'path': str(source_manifest_path),
+                                'sha256': sha256(source_manifest_path.read_bytes()).hexdigest()},
+            'entrypoint': {'path': 'business.py', 'sha256': EXECUTOR.sha(self.source / 'business.py')},
+        }), encoding='utf-8')
+        return manifest_path, sha256(script.read_bytes()).hexdigest()
+
+    def handoff(self, name='handoff.json'):
+        path = self.root / name
+        payload = {key: True for key in ('agent_handed_off', 'existing_semantic_run_finished',
+            'cloud_retest_authorized', 'isolated_fixture_preflight_passed')}
+        payload['source_sha256'] = EXECUTOR.source_manifest(self.source)
+        path.write_text(json.dumps(payload), encoding='utf-8')
+        return path
 
     @staticmethod
     def process_alive(pid):
@@ -218,11 +262,21 @@ sys.exit(17 if {fail_offline!r} and '--offline' in args else 0)
     def test_snapshot_hashes_match_and_exclude_outputs(self):
         self.write('business.py', 'VALUE = 1\n')
         self.write('agent_runtime/tool.py', 'ANSWER = 2\n')
+        self.write('financial_mcp/contract.py', 'SCHEMA_VERSION = 1\n')
+        self.write('financial_data_service/__init__.py', 'from .service import FinancialDataService\n')
+        self.write('financial_data_service/service.py', 'class FinancialDataService: pass\n')
+        self.write('dependency-resources/deepseek-v4/tokenizer.json', '{"version": 1}\n')
+        self.write('dependency-resources/deepseek-v4/provenance.json', '{"note": "not a runtime dependency"}\n')
         self.write('outputs/old-results.json', '{"old": true}\n')
         destination = self.root / 'candidate'
         expected = EXECUTOR.copy_snapshot(self.source, destination)
         self.assertEqual(expected, EXECUTOR.source_manifest(destination))
         self.assertEqual(expected, EXECUTOR.source_manifest(self.source))
+        self.assertEqual(expected['financial_mcp/contract.py'], EXECUTOR.sha(destination / 'financial_mcp/contract.py'))
+        self.assertEqual(expected['financial_data_service/service.py'], EXECUTOR.sha(destination / 'financial_data_service/service.py'))
+        self.assertEqual(expected['dependency-resources/deepseek-v4/tokenizer.json'],
+                         EXECUTOR.sha(destination / 'dependency-resources/deepseek-v4/tokenizer.json'))
+        self.assertNotIn('dependency-resources/deepseek-v4/provenance.json', expected)
         self.assertNotIn('outputs/old-results.json', expected)
         with self.assertRaises(FileExistsError):
             EXECUTOR.copy_snapshot(self.source, destination)
@@ -247,6 +301,50 @@ sys.exit(17 if {fail_offline!r} and '--offline' in args else 0)
         self.assertEqual(report['status'], 'waiting_for_module_handoff')
         self.assertFalse(report['cloud_models_called'])
         self.assertEqual(report['rounds_executed'], 0)
+        self.assertEqual(report['cloud_runner_launch_attempts'], 0)
+
+    def test_cloud_paid_preflight_negative_controls_never_launch_provider_runner(self):
+        self.fixture_runner()
+        success = {'schema': 'navren.baseline-preflight.v1', 'status': 'PRECHECK_PENDING',
+            'stage': 'paid', 'paid_start_allowed': True, 'models_called': 0,
+            'external_reviews': 0, 'overall_accepted': False, 'release_allowed': False, 'blockers': []}
+        controls = [
+            ('nonzero_returncode', success, 2, False),
+            ('wrong_stage', {**success, 'stage': 'free'}, 0, False),
+            ('paid_start_false', {**success, 'paid_start_allowed': False,
+                                  'status': 'PRECHECK_BLOCKED'}, 0, False),
+            ('source_drift', success, 0, True),
+        ]
+        for name, result, returncode, stale_source in controls:
+            with self.subTest(control=name):
+                manifest, script_sha = self.paid_preflight_inputs(
+                    result, returncode=returncode, stale_source=stale_source)
+                handoff = self.handoff(name + '-handoff.json')
+                with patch.object(EXECUTOR, 'PAID_PREFLIGHT_SCRIPT_SHA256', script_sha), \
+                        patch.object(EXECUTOR, 'execute') as execute:
+                    exit_code = self.invoke_main(stage='cloud', run_name=name, handoff=handoff,
+                                                 preflight_manifest=manifest)
+                self.assertEqual(exit_code, 2)
+                execute.assert_not_called()
+                report = json.loads((self.output / name / 'run.json').read_text())
+                self.assertEqual(report['status'], 'paid_preflight_blocked')
+                self.assertEqual(report['cloud_runner_launch_attempts'], 0)
+                self.assertEqual(report['rounds_executed'], 0)
+                self.assertFalse(report['cloud_models_called'])
+                self.assertFalse(report['paid_preflight_gate']['ready'])
+
+    def test_cloud_paid_preflight_missing_manifest_fails_closed(self):
+        self.fixture_runner()
+        handoff = self.handoff()
+        with patch.object(EXECUTOR, 'execute') as execute:
+            self.assertEqual(self.invoke_main(stage='cloud', handoff=handoff), 2)
+        execute.assert_not_called()
+        report = json.loads((self.output / 'run/run.json').read_text())
+        self.assertEqual(report['status'], 'paid_preflight_blocked')
+        self.assertEqual(report['paid_preflight_gate']['reason'], 'paid_preflight_manifest_required')
+        self.assertEqual(report['cloud_runner_launch_attempts'], 0)
+        self.assertEqual(report['rounds_executed'], 0)
+        self.assertFalse(report['cloud_models_called'])
 
     def test_handoff_requires_exact_source_and_explicit_booleans(self):
         manifest = {'business.py': 'expected-hash'}
@@ -268,18 +366,22 @@ sys.exit(17 if {fail_offline!r} and '--offline' in args else 0)
         # 既有semantic-results逐题原记录字段；本地假执行器不调用模型。
         examples = [({'primary': [], 'reviewer': []}, False),
                     ({'primary': [{'response_id': 'fixture-local-only'}], 'reviewer': []}, True)]
+        ready = {'schema': 'navren.baseline-preflight.v1', 'status': 'PRECHECK_PENDING',
+            'stage': 'paid', 'paid_start_allowed': True, 'models_called': 0,
+            'external_reviews': 0, 'overall_accepted': False, 'release_allowed': False, 'blockers': []}
         for number, (metadata, expected) in enumerate(examples):
             with self.subTest(metadata=metadata):
                 self.fixture_runner(response_metadata=metadata)
-                handoff = self.root / f'handoff-{number}.json'
-                payload = {k: True for k in ('agent_handed_off', 'existing_semantic_run_finished',
-                                             'cloud_retest_authorized', 'isolated_fixture_preflight_passed')}
-                payload['source_sha256'] = EXECUTOR.source_manifest(self.source)
-                handoff.write_text(json.dumps(payload))
+                manifest, script_sha = self.paid_preflight_inputs(ready)
+                handoff = self.handoff(f'handoff-{number}.json')
                 run_name = f'cloud-schema-{number}'
-                self.assertEqual(self.invoke_main(stage='cloud', handoff=handoff, run_name=run_name), 0)
+                with patch.object(EXECUTOR, 'PAID_PREFLIGHT_SCRIPT_SHA256', script_sha):
+                    self.assertEqual(self.invoke_main(stage='cloud', handoff=handoff, run_name=run_name,
+                                                      preflight_manifest=manifest), 0)
                 report = json.loads((self.output / run_name / 'run.json').read_text())
                 self.assertEqual(report['cloud_models_called'], expected)
+                self.assertEqual(report['cloud_runner_launch_attempts'], 1)
+                self.assertTrue(report['paid_preflight_gate']['ready'])
 
     def test_unknown_model_cost_stays_none(self):
         result = self.root / 'semantic-results.json'

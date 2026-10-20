@@ -25,6 +25,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 import test_cross_module as _cross
 import test_service_transport_commit as _transport
+import test_market_voice_negotiation as _voice
 import agent_runtime.conversation as _conversation
 from finance_gateway import COOKIE
 from server import PublicationSocket
@@ -93,7 +94,6 @@ class ServiceHistoryDeadlineContracts(unittest.TestCase):
     operation_count = _transport.ServiceTransportCommitContracts.operation_count
     public_fixture = _transport.ServiceTransportCommitContracts.public_fixture
     http_json = _transport.ServiceTransportCommitContracts.http_json
-    actual_server = _transport.ServiceTransportCommitContracts.actual_server
     counts = _transport.ServiceTransportCommitContracts.counts
     no_side_effects = _transport.ServiceTransportCommitContracts.no_side_effects
     confirm_body = _transport.ServiceTransportCommitContracts.confirm_body
@@ -141,18 +141,30 @@ class ServiceHistoryDeadlineContracts(unittest.TestCase):
         self.require(self.g.personal_data, 'save_turn_guarded', 'discard_turn_guarded')
         self.assertIs(self.g.memories.state(self.w)['enabled'], EXPECT['memory_enabled'])
         self.rounds, self.cleanups = [], []
-        original = self.g.approve_speech
 
-        def observe_round(workspace, result, session_token=None):
-            receipt = original(workspace, result, session_token)
-            self.rounds.append({'reply': result.get('reply'), 'response_id': result.get('bank_response_id'),
-                'handler_thread_ident': threading.get_ident(),
-                'receipt': receipt, 'operation_ids': [item['operation_id'] for item in result.get('bank_actions', [])
-                    if item.get('operation_id')], 'widget_count': len(result.get('widgets', []))})
-            return receipt
-        recorder = patch.object(self.g, 'approve_speech', side_effect=observe_round)
-        recorder.start()
-        self.addCleanup(recorder.stop)
+    @contextmanager
+    def actual_server(self):
+        """用生产create_server默认AssembledGateway并观察它实际使用的同一对象。"""
+        previous_gateway = self.g
+        try:
+            with _voice.MarketVoiceNegotiationIntegrationTests.local_server(self, assembled=True) as server:
+                self.g = server.finance
+                self.assertIs(server.finance, self.g)
+                self.assertTrue(Path(self.g.bank.database).is_relative_to(self.directory))
+                original = self.g.approve_speech
+
+                def observe_round(workspace, result, session_token=None):
+                    receipt = original(workspace, result, session_token)
+                    self.rounds.append({'reply': result.get('reply'), 'response_id': result.get('bank_response_id'),
+                        'handler_thread_ident': threading.get_ident(),
+                        'receipt': receipt, 'operation_ids': [item['operation_id'] for item in result.get('bank_actions', [])
+                            if item.get('operation_id')], 'widget_count': len(result.get('widgets', []))})
+                    return receipt
+
+                with patch.object(self.g, 'approve_speech', side_effect=observe_round):
+                    yield server
+        finally:
+            self.g = previous_gateway
 
     def evidence(self, **values):
         record = {'case': CASES[self._testMethodName], 'test': self._testMethodName,
@@ -195,6 +207,11 @@ class ServiceHistoryDeadlineContracts(unittest.TestCase):
         server.conversation_agent = _conversation.ConversationAgent(self.primary, self.reviewer,
             timeout_seconds=FIXTURE['original_turn_timeout_seconds'])
         self.assertEqual(server.conversation_agent.timeout_seconds, 105)
+        approved = getattr(server.finance, 'approved_responses', None)
+        self.assertIsNotNone(approved, 'SHD真实服务必须装配批准原件提供端')
+        approved.validator = server.conversation_agent.validate_final_response
+        self.assertIs(getattr(approved.validator, '__self__', None), server.conversation_agent,
+                      '发布validator必须绑定当前实际会话Agent')
         return server.conversation_agent
 
     def request_wire(self, text):
@@ -506,6 +523,7 @@ class ServiceHistoryDeadlineContracts(unittest.TestCase):
             prior, original_private, _ = self.successful_prior(server)
             agent = self.local_agent(server, reply, reviewer_hook=approved)
             with self.observe_cleanup() as (_, _, cleanup_done), patch.object(_conversation, 'time', new=clock), \
+                    patch.object(agent._final_proofs, '_clock', new=clock.monotonic), \
                     self.native_socket_layer(transmit):
                 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:

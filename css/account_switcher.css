@@ -11,13 +11,27 @@
 .account-switch-menu > button:hover,.account-switch-menu > button[aria-current="true"] { background:var(--primary-soft); color:var(--primary); }
 .account-switch-source { padding:8px 12px; color:var(--ink-50); font-size:.8rem; line-height:1.6; border-top:1px solid var(--border); }
 .account-switch-source summary { cursor:pointer; }
-.account-switch-dialog { color:var(--ink); background:var(--surface-card); border:1px solid var(--border); border-radius:20px; padding:24px; max-width:min(480px,calc(100vw - 32px)); }
+.account-switch-source p { margin:0; }
+#accountSwitcher { display:none!important; }
+.account-switch-dialog { color:var(--ink); background:var(--surface-card); border:1px solid var(--border); border-radius:20px; padding:24px; margin:auto; max-height:calc(100dvh - 32px); overflow-y:auto; max-width:min(480px,calc(100vw - 32px)); }
 .account-switch-dialog::backdrop { background:#23384955; }
 .account-switch-dialog h2 { font-size:1.2em; margin:0 0 16px; }
 .account-switch-dialog li { line-height:1.7; margin:8px 0; }
 .account-switch-actions { display:flex; justify-content:flex-end; gap:12px; margin-top:20px; }
 .account-switch-actions button { min-height:44px; padding:10px 18px; font:inherit; border-radius:10px; border:1px solid var(--border); background:var(--surface-card); color:inherit; cursor:pointer; }
 .account-switch-actions button:last-child { background:var(--primary); color:white; border-color:transparent; }
+.account-select-dialog { width:min(440px,calc(100vw - 32px)); box-sizing:border-box; }
+.account-select-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.account-select-heading h2 { margin:0; }
+.account-select-close { display:grid; place-items:center; width:40px; height:40px; border:0; border-radius:10px; background:transparent; color:var(--ink-50); font:inherit; font-size:24px; cursor:pointer; }
+.account-select-close:hover { background:var(--surface-hover); }
+.account-select-list { display:grid; gap:8px; }
+.account-select-choice { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-height:52px; padding:12px 16px; text-align:start; border:1px solid var(--border); border-radius:12px; background:var(--surface-card); color:var(--ink); font:inherit; cursor:pointer; }
+.account-select-choice:hover { background:var(--surface-hover); }
+.account-select-choice[aria-current="true"] { background:var(--primary-soft); border-color:var(--primary); color:var(--primary-deep); }
+.account-select-current { flex:none; font-size:var(--font-size-xs); color:var(--primary-deep); }
+.account-select-dialog .account-switch-source { padding:16px 0 0; margin-top:16px; }
+.account-select-dialog button:focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
 .navren-switch-pending .chat-input-area,.navren-switch-pending .page-scroll,.navren-switch-pending .chat-messages,.navren-switch-pending dialog:not(.account-switch-dialog) { visibility:hidden; pointer-events:none; }
 .mode-senior .account-switcher { font-size:1rem; min-height:52px; }
 .mode-senior .account-switch-menu > button,.mode-senior .account-switch-actions button { min-height:48px; }

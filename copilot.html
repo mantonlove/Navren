@@ -1,75 +1,39 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-
-<title>Navren · 顾问工作台</title>
-<link rel="icon" type="image/png" href="assets/brand/navren-icon.png">
-<link rel="stylesheet" href="css/style.css?v=ui-20261003-3">
-<link rel="stylesheet" href="css/design.css?v=navren-brand-20261005-1">
-<link rel="stylesheet" href="css/account_switcher.css">
+  <meta charset="UTF-8">
+<script data-navren-theme-bootstrap>
+(() => {
+  try {
+    const theme=localStorage.getItem('navren:paint-theme:v1');
+    if(theme!=='light'&&theme!=='dark')return;
+    const root=document.documentElement;
+    root.dataset.theme=theme;root.style.colorScheme=theme;
+    root.style.backgroundColor=theme==='dark'?'#0d1725':'#edf3fa';
+  } catch(_) {}
+})();
+</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Navren · 我的</title>
+<link rel="stylesheet" href="css/form_controls.css?dq=546db5bc506d">
+  <link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
 </head>
-<body data-page="copilot">
-<a class="skip-link" href="#mainContent">跳到主要内容</a>
-
-<div class="app">
-  <nav class="sidebar" aria-label="顾问演示导航">
-    <a class="logo" href="chat.html" aria-label="返回个人视角"><img class="brand-icon" src="assets/brand/navren-icon.png" alt=""></a>
-    <a class="nav-item" id="advisorReturn" href="chat.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m14 6-6 6 6 6"/></svg><span class="nav-label">返回</span></a>
-  </nav>
-  <main class="main" id="mainContent" tabindex="-1">
-    <header class="header">
-      <div class="header-identity"><a class="brand" href="chat.html" aria-label="Navren首页"><img class="brand-wordmark" src="assets/brand/navren-wordmark.png" width="2172" height="724" alt=""></a><h1 class="header-location" data-view-heading tabindex="-1">顾问视角 · 演示</h1></div>
-
-    </header>
-    <section id="accountSwitcher" aria-label="演示账户" class="account-switcher" hidden></section>
-
-    <div class="page-scroll">
-    <div class="rec-page workbench-page">
-
-
-      <!-- 客户信息摘要 -->
-      <div class="mine-section">
-        <div class="sec-label">客户信息</div>
-        <div class="card" id="clientProfile"></div>
-      </div>
-
-      <!-- 最近关注 + 推荐话术 -->
-      <div class="mine-section">
-        <div class="sec-label">对话记录与沟通建议</div>
-        <div class="card" id="talkingPoints"></div>
-      </div>
-
-      <!-- 产品推荐亮点 -->
-      <div class="mine-section">
-        <div class="sec-label">参考产品</div>
-        <div class="rec-current" id="productHighlights"></div>
-      </div>
-
-      <!-- 合规提示 -->
-      <div class="mine-section">
-        <div class="sec-label">建议边界</div>
-        <p class="workbench-boundary">当前服务对象是你的本机演示账户。本视角没有额外银行顾问权限，仅在已授权范围内整理信息。</p>
-        <div id="complianceNotes" style="padding:14px;border-radius:var(--r-sm);font-size:var(--font-size-xs);line-height:1.8"></div>
-      </div>
-
-    </div>
-    </div>
-  </main>
-</div>
-
-<script src="js/storage.js?v=ui-20261003-3"></script>
-<script src="js/i18n.js"></script>
-<script src="js/design.js?v=ui-20261003-3"></script>
-<script src="js/help.js"></script>
-<script src="js/bank_client.js"></script>
-<script src="js/account_switcher.js"></script>
-<script src="js/bank_ui.js"></script>
-<script src="js/view_context.js"></script>
-<script src="js/copilot.js?v=ui-20261003-3"></script>
+<body>
+  <p>正在返回我的…</p>
+  <a id="returnMine" href="mine.html">返回我的</a>
+  <script>
+    (() => {
+      const target = new URL('mine.html', location.href);
+      const current = new URLSearchParams(location.search);
+      for (const key of ['ui', 'mode']) {
+        const value = current.get(key);
+        if (value) target.searchParams.set(key, value);
+      }
+      document.getElementById('returnMine').href = target.href;
+      location.replace(target.href);
+    })();
+  </script>
+<script src="js/form_controls.js?dq=b4539a70b618"></script>
 </body>
 </html>

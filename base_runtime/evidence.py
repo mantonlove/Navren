@@ -1,12 +1,25 @@
 """草案的公开证据绑定。模型只能引用；执行在原确认事务内再回查。"""
 from contextlib import contextmanager, ExitStack
+from contextvars import ContextVar
 from copy import deepcopy
+import asyncio
 import json
 import hashlib
+import sqlite3
+import threading
 
 
 def public_digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+
+
+_held_market_connection=ContextVar('navren_held_market_publication_connection',default=None)
+
+
+def _market_guard_owner():
+    try:task=asyncio.current_task()
+    except RuntimeError:task=None
+    return threading.get_ident(),id(task) if task is not None else None
 
 
 class MetricEvidenceObserver:
@@ -118,15 +131,59 @@ class EvidenceGuardedClient:
     """请求内云客户端代理；保留原适配器、预算和使用量记录。"""
     def __init__(self,client,observer,preparation=None):
         self.client,self.observer=client,observer
+        # 请求内已有prepare_round原件的副本；不增加来源读取，也不从模型取范围。
+        self._review_preparation=deepcopy(preparation)
+        self._original_review_preparation_digest=public_digest(self._review_preparation)
         self.notice=None
         if preparation and preparation.get('status') in ('prepared','reused','gap'):
             self.notice='本轮只核验选中公开对象的目录字段，不能据此推断即时可买、完整费率、收益或底层份额。'
             if preparation.get('coverage_gaps'):
                 self.notice+='仍有对象、维度或时效未核实；只能回答已核实部分并说明缺口，比较对象不齐须追问。'
+        self._original_review_notice=self.notice
+        self._notice_sealed=False
+        self._catalog_information=None
+        if preparation and 'catalog_information' in preparation:
+            from local_knowledge.catalog_information import validate_snapshot_shape, CatalogInformationObserver
+            information=getattr(observer,'information',None)
+            if type(information) is not CatalogInformationObserver or information.snapshot()!=preparation['catalog_information']:
+                raise BankError('CATALOG_INFORMATION_BINDING_REQUIRED','历史目录缺少实际宿主固定来源。',503)
+            self._catalog_information=validate_snapshot_shape(preparation['catalog_information'])
     def __getattr__(self,name):return getattr(self.client,name)
+    def append_notice(self,text):
+        """仅本地装配在首次估算前追加受信工具说明，公开原范围仍封口。"""
+        if (self._notice_sealed or type(text) is not str or not text or len(text)>8000
+                or self.notice!=self._original_review_notice
+                or public_digest(self._review_preparation)!=self._original_review_preparation_digest):
+            raise BankError('PUBLIC_REVIEW_SCOPE_CHANGED','受信提示已封存或原公开范围变化。',409)
+        self.notice=(self.notice or '')+text
+        self._original_review_notice=self.notice
+    def prepare_review_packet(self,packet,*,publication_sources):
+        """Agent在原始审核包投影/预算前调用；仅复用已捕获的固定来源。"""
+        if (type(packet) is not dict or type(publication_sources) is not dict
+                or set(publication_sources)!={'knowledge_preparation','financial_metric_snapshot'}
+                or type(publication_sources['knowledge_preparation']) is not dict
+                or publication_sources['financial_metric_snapshot'] is not None and type(publication_sources['financial_metric_snapshot']) is not dict):
+            raise BankError('PUBLIC_REVIEW_SOURCE_INVALID','公开审核包缺少原固定来源。',503)
+        if public_digest(publication_sources['knowledge_preparation'])!=self._original_review_preparation_digest:
+            raise BankError('PUBLIC_REVIEW_SOURCE_CHANGED','公开审核包来源已变化。',409)
+        self._before_request()
+        return self._request_args((deepcopy(packet),))[0]
     def _request_args(self,args):
-        if not self.notice or not args:return args
+        if (self.notice!=self._original_review_notice or type(self.notice) is not type(self._original_review_notice)
+                or public_digest(self._review_preparation)!=self._original_review_preparation_digest):
+            raise BankError('PUBLIC_REVIEW_SCOPE_CHANGED','公开审核范围已变化。',409)
+        self._notice_sealed=True
+        if not args:return args
         value=args[0]
+        if isinstance(value,dict) and 'public_evidence_limits' in value:
+            if type(value['public_evidence_limits']) is not str or value['public_evidence_limits']!=self.notice:
+                raise BankError('PUBLIC_REVIEW_PACKET_INVALID','公开审核范围不是本轮可信原件。',503)
+        if self._catalog_information is not None and isinstance(value,dict):
+            if 'catalog_information' in value and value['catalog_information']!=self._catalog_information:
+                raise BankError('CATALOG_INFORMATION_SOURCE_CHANGED','历史审核包来源变化。',409)
+            value={**value,'catalog_information':deepcopy(self._catalog_information)}
+            args=(value,*args[1:])
+        if not self.notice:return args
         if isinstance(value,list):value=[*value,{'role':'system','content':self.notice}]
         elif isinstance(value,dict):value={**value,'public_evidence_limits':self.notice}
         else:raise TypeError('模型输入格式不支持公开证据提示。')
@@ -146,6 +203,13 @@ class EvidenceGuardedClient:
         if getattr(self.client,'billing_mode',None)=='unpaid_fixture':
             return len(json.dumps(guarded,ensure_ascii=False,allow_nan=False).encode('utf-8'))
         raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','模型请求的完整预算接口尚未接入。',503)
+
+    def request_input_token_estimate(self,*args):
+        # 原生Token估计也必须先经过与发送相同的公开提示/工具目录变换。
+        guarded=self._request_args(args)
+        estimator=getattr(self.client,'request_input_token_estimate',None)
+        if callable(estimator):return estimator(*guarded)
+        raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','模型请求的完整Token估计接口尚未接入。',503)
 
     def complete(self,messages,*args,**kwargs):
         self._before_request()
@@ -174,19 +238,38 @@ class OperationEvidence:
                 snapshot TEXT NOT NULL,created_at REAL NOT NULL)''')
         self.bank.base_evidence_guard=self.execution_guard
 
+    def current_market_connection(self,market):
+        held=_held_market_connection.get()
+        valid=(isinstance(held,tuple) and len(held)==5 and held[0] is self
+               and held[1] is market and market is getattr(self.g,'market',None)
+               and held[3]==_market_guard_owner() and held[4][0] is True)
+        if valid:
+            try:valid=held[2].in_transaction is True
+            except (sqlite3.Error,AttributeError):valid=False
+        if not valid:
+            raise BankError('HISTORY_PUBLICATION_GUARD_REQUIRED','历史引文缺少原市场发布屏障。',503)
+        return held[2]
+
     @contextmanager
     def public_guard(self, snapshot):
         with ExitStack() as locks:
             market_snapshot=snapshot.get('market')
-            if market_snapshot:
-                market=getattr(self.g,'market',None)
-                if market is None:raise BankError('MARKET_NOT_CONFIGURED','市场证据提供端未配置。',503)
-                db=locks.enter_context(market.db());db.execute('BEGIN IMMEDIATE')
-            knowledge=snapshot.get('knowledge')
-            if knowledge:
-                db=locks.enter_context(self.g.knowledge_provider.db());db.execute('BEGIN IMMEDIATE')
-            self.assert_public_evidence(snapshot)
-            yield
+            token=None;lease=None
+            try:
+                if market_snapshot:
+                    market=getattr(self.g,'market',None)
+                    if market is None:raise BankError('MARKET_NOT_CONFIGURED','市场证据提供端未配置。',503)
+                    db=locks.enter_context(market.db());db.execute('BEGIN IMMEDIATE')
+                    lease=[True]
+                    token=_held_market_connection.set((self,market,db,_market_guard_owner(),lease))
+                knowledge=snapshot.get('knowledge')
+                if knowledge:
+                    db=locks.enter_context(self.g.knowledge_provider.db());db.execute('BEGIN IMMEDIATE')
+                self.assert_public_evidence(snapshot)
+                yield
+            finally:
+                if lease is not None:lease[0]=False
+                if token is not None:_held_market_connection.reset(token)
 
     def assert_public_evidence(self,snapshot):
         """只读出口复验；调用方已经持有bank→market→knowledge的发布锁。"""

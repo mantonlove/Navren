@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
 from contextlib import closing, contextmanager, ExitStack
 from copy import deepcopy
@@ -21,6 +22,7 @@ import secrets
 import shutil
 import socket
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import threading
@@ -29,6 +31,9 @@ import types
 import urllib.error
 import urllib.request
 from unittest.mock import patch
+if str(Path(__file__).resolve().parent) not in sys.path:sys.path.insert(0,str(Path(__file__).resolve().parent))
+from registered_entry_context import (build_template,template_factory,attach_server,browser_bootstrap,browser_consume,request_context)
+from registered_profile_templates import build_profile_template
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -39,6 +44,8 @@ SETUP = ROOT / 'evaluation/window_integration/formal_fixture_setup.json'
 SETUP_SHA = '6571a0704e816dcc0bb446a63f28f57578407a2e322a6c4f678671e62dc7da6f'
 TASK_STEPS = ROOT / 'evaluation/window_integration/formal_task_steps_supplement_v2.json'
 TASK_STEPS_SHA = '4b036d1f37333023f70629113ec5211dbebfd38b831bccb684444b5517f65007'
+PERMISSION_COMPATIBILITY = ROOT / 'evaluation/window_integration/formal_permission_compatibility.json'
+PERMISSION_COMPATIBILITY_SHA = 'b3c172fa3fa656b1ba354a977c92818b0be8d688b113b41e318e5402e031b36e'
 RUN_LABEL = 'original39_task_texts_with_explicit_task_steps_v2_supplement'
 OUTPUT = ROOT / 'outputs/window-progress/integration/formal-business-runner'
 SECRET_KEYS = {'csrf', 'verification_code', 'verification_token', 'verification_hash',
@@ -91,18 +98,108 @@ def paid_protocol():
     return _PAID_PROTOCOL
 
 
+def draft_payload_matches(actual, expected):
+    """Quote membership is unordered; every other original field stays exact."""
+    if not isinstance(actual, dict) or not isinstance(expected, dict):
+        return False
+    if set(actual) != set(expected):
+        return False
+    if expected.get('action') != 'book_services' or 'quote_ids' not in expected:
+        return canonical(actual) == canonical(expected)
+    left, right = actual['quote_ids'], expected['quote_ids']
+    if any(not isinstance(ids, list) or not 1 <= len(ids) <= 6
+           or any(not isinstance(value, str) or not value for value in ids)
+           or len(set(ids)) != len(ids) for ids in (left, right)):
+        return False
+    return (set(left) == set(right)
+            and canonical({k: v for k, v in actual.items() if k != 'quote_ids'})
+            == canonical({k: v for k, v in expected.items() if k != 'quote_ids'}))
+
+
 def load_contract():
     if sha(TASKS) != TASKS_SHA:
         raise Stop('fixture_drift', 'formal_tasks_sha_changed', batch_stop=True)
     value = json.loads(TASKS.read_text())
     if value['minimum_design']['expanded_attempts_per_round'] != 13:
         raise Stop('runner_error', 'unexpected_frozen_task_shape')
+    if sha(PERMISSION_COMPATIBILITY) != PERMISSION_COMPATIBILITY_SHA:
+        raise Stop('fixture_drift', 'formal_permission_compatibility_sha_changed', batch_stop=True)
+    compatibility = json.loads(PERMISSION_COMPATIBILITY.read_text())
+    if compatibility['original_dataset_sha256'] != TASKS_SHA:
+        raise Stop('fixture_drift', 'formal_permission_original_binding_changed', batch_stop=True)
+    for update in compatibility['updates']:
+        case = next(c for c in value['cases'] if c['id'] == update['case_id'])
+        step = next(s for s in case['steps'] if s['id'] == update['step_id'])
+        grading = step['grading_only']
+        if 'before_action' in update:
+            if step['action'] != update['before_action'] or grading['expected_error'] != update['before_expected_error']:
+                raise Stop('fixture_drift', 'formal_permission_action_before_mismatch', batch_stop=True)
+            step['action'] = update['after_action']
+            grading['expected_error'] = deepcopy(update['after_expected_error'])
+        elif 'before_verification_required' in update:
+            if grading['verification_required'] is not update['before_verification_required']:
+                raise Stop('fixture_drift', 'formal_permission_grade_before_mismatch', batch_stop=True)
+            grading['verification_required'] = update['after_verification_required']
+        elif 'before_semantic_criterion' in update:
+            index = grading['semantic_criteria'].index(update['before_semantic_criterion'])
+            grading['semantic_criteria'][index] = update['after_semantic_criterion']
+        else:
+            raise Stop('fixture_drift', 'formal_permission_unknown_update', batch_stop=True)
     return value
 
 
+
+def check_schema_delta(current_path, archive_path):
+    """只准入这两处已明确的枚举增量；其余AST必须与原archive全等。"""
+    old = ast.parse(archive_path.read_text())
+    new = ast.parse(current_path.read_text())
+    def specs(tree):
+        return next(node for node in tree.body if isinstance(node, ast.Assign)
+                    and any(isinstance(t, ast.Name) and t.id == 'SPECS' for t in node.targets))
+    old_node, new_node = specs(old), specs(new)
+    old_specs, new_specs = ast.literal_eval(old_node.value), ast.literal_eval(new_node.value)
+    changes = []
+    if len(old_specs) != len(new_specs):
+        raise ValueError('seed_schema_entity_count_changed')
+    for previous, current in zip(old_specs, new_specs):
+        if previous != current:
+            if (previous[0] not in ('cards', 'card_applications') or previous[:3] != current[:3]
+                    or current[3] != previous[3].replace('status(debit|credit)', 'status(debit|credit|virtual)')):
+                raise ValueError('unsupported_seed_schema_delta')
+            changes.append(previous[0])
+    if set(changes) != {'cards', 'card_applications'}:
+        raise ValueError('declared_schema_delta_not_exact')
+    new_node.value = deepcopy(old_node.value)
+    if ast.dump(new, include_attributes=False) != ast.dump(old, include_attributes=False):
+        raise ValueError('other_seed_schema_logic_changed')
+    return {'changed_entities': changes, 'other_AST_unchanged': True}
+
+@contextmanager
+def archived_generation(root, core):
+    """仅临时默认闭包账户初始化，复用封存populate及其真实来源指纹。"""
+    archive = root / core['generation_sources_archive']
+    for name, digest in core['generation_source_sha256'].items():
+        path = archive / name
+        if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise ValueError('archived_generation_source_changed:' + name)
+    name = '_navren_sealed_generation_' + secrets.token_hex(8)
+    package = types.ModuleType(name)
+    package.__path__ = [str(archive / 'simulated_bank')]
+    sys.modules[name] = package
+    try:
+        old = importlib.import_module(name + '.customer_seed')
+        current = importlib.import_module('simulated_bank.customer_archive')
+        with patch.object(current, 'populate', old.populate):
+            yield
+    finally:
+        for imported in list(sys.modules):
+            if imported == name or imported.startswith(name + '.'):
+                sys.modules.pop(imported, None)
+
 def frozen_inputs(contract):
     expected = {str(TASKS.relative_to(ROOT)): TASKS_SHA, str(SETUP.relative_to(ROOT)): SETUP_SHA,
-                str(TASK_STEPS.relative_to(ROOT)): TASK_STEPS_SHA}
+                str(TASK_STEPS.relative_to(ROOT)): TASK_STEPS_SHA,
+                str(PERMISSION_COMPATIBILITY.relative_to(ROOT)): PERMISSION_COMPATIBILITY_SHA}
     core = contract['fixture_contract']['new_closed_seed_v1']
     expected[core['core_path']] = core['core_sha256']
     archive = core['generation_sources_archive']
@@ -117,11 +214,15 @@ def frozen_inputs(contract):
         if target.is_symlink() or not target.is_file() or sha(target) != digest:
             raise Stop('fixture_drift', 'frozen_input_changed:' + name, batch_stop=True)
     # 正常服务构造后仍使用封存的补充 seed。当前业务服务允许修复；闭包原件不可变。
-    for name in ('simulated_bank/customer_seed.py', 'simulated_bank/customer_schema.py',
+    for name in ('simulated_bank/customer_seed.py',
                  'simulated_bank/customer_archive.py', 'simulated_bank/reference/fineract-client-examples.json'):
         if sha(ROOT / name) != core['generation_source_sha256'][name]:
             raise Stop('fixture_drift', 'active_seed_is_not_closed_seed:' + name, batch_stop=True)
+    schema_name = 'simulated_bank/customer_schema.py'
+    check_schema_delta(ROOT / schema_name, ROOT / archive / schema_name)
+    expected[schema_name] = sha(ROOT / schema_name)
     return expected
+
 
 
 def load_task_steps_supplement():
@@ -192,7 +293,12 @@ def source_manifest():
     paths += list((ROOT / 'skills').rglob('*.md'))
     paths += [Path(__file__), Path(__file__).with_name('test_formal_business_runner.py'),
               Path(__file__).with_name('public_probe_runner.py'),
-              Path(__file__).with_name('semantic_runner_adapter.py')]
+              Path(__file__).with_name('semantic_runner_adapter.py'),
+              Path(__file__).with_name('registered_entry_context.py'),
+              Path(__file__).with_name('registered_fixture_template.py'),
+              Path(__file__).with_name('registered_profile_templates.py'),
+              Path(__file__).with_name('paid_entry_admission.py'),
+              Path(__file__).with_name('paid_campaign.py'), ROOT / 'tests/test_sms_permissions.py']
     return {str(p.relative_to(ROOT)): sha(p) for p in sorted(paths) if p.is_file()}
 
 
@@ -235,6 +341,7 @@ class AttemptBudget:
     review_offset: int = 0
     lower_by_turn: dict = field(default_factory=dict)
     failure_prefixes: list = field(default_factory=list)
+    loaded_source_binding: dict | None = None
     accounting_lock: object = field(default_factory=threading.RLock, repr=False)
 
     def latch_paid(self, reason, *, unknown=False):
@@ -328,6 +435,18 @@ class AttemptBudget:
         self.transports = {'primary': primary, 'reviewer': reviewer}
         if self.billing_mode == 'paid':
             self.configured_models = paid_protocol().configured_model_contract(ROOT)
+            # Every admitted transport starts with an empty observed log. A
+            # valid facts-only turn may never call the reviewer; its zero calls
+            # must remain distinguishable from a removed or corrupt log later.
+            for stage, client in self.transports.items():
+                transport = client if stage == 'primary' else getattr(client, 'client', None)
+                value = getattr(transport, 'log_path', None)
+                if value is not None:
+                    path = Path(value)
+                    if path.is_symlink():
+                        raise Stop('runner_error', 'actual_transport_log_redirected', batch_stop=True)
+                    with path.open('x'):
+                        pass
 
     def capture_turn(self, runtime, turn_id):
         calls = runtime.get('model_calls', []) if isinstance(runtime, dict) else []
@@ -525,7 +644,8 @@ class AttemptBudget:
                 'actual_requests_sent': None if self.billing_mode != 'paid' or self.request_count_unknown else self.known_requests_sent_lower_bound,
                 'known_requests_sent_lower_bound': self.known_requests_sent_lower_bound if self.billing_mode == 'paid' else None,
                 'batch_stop': self.batch_stop, 'stop_reason': self.stop_reason,
-                'paid_turn_observations': self.observations, 'unaccounted_failure_prefixes': self.failure_prefixes, 'provider_cost': None}
+                'paid_turn_observations': self.observations, 'unaccounted_failure_prefixes': self.failure_prefixes,
+                'actual_loaded_agent_source': self.loaded_source_binding, 'provider_cost': None}
 
 
 def guarded_paid_transport(client, budget):
@@ -553,8 +673,30 @@ def guarded_paid_transport(client, budget):
 
 def budgeted_agent(primary, reviewer, budget):
     budget.configure_clients(primary, reviewer)
-    from agent_runtime.conversation import ConversationAgent
-    class SharedBudgetAgent(ConversationAgent):
+    # Parent evidence is read before this point. Never let its imports change
+    # the actual business implementation under a current-source manifest.
+    frozen_path = ROOT / 'outputs/window-progress/integration/baseline-mainflow-config/source-manifest-final.json'
+    frozen = json.loads(frozen_path.read_text()) if frozen_path.is_file() else None
+    if budget.billing_mode == 'paid' and frozen is None:
+        raise Stop('not_run', 'paid_runtime_source_manifest_missing', batch_stop=True)
+    loaded = {}
+    for name in ('agent_runtime.conversation', 'agent_runtime.complex_agent',
+                 'agent_runtime.bank_tools', 'agent_runtime.tool_routing',
+                 'agent_runtime.data_boundary', 'agent_runtime.native_client',
+                 'agent_runtime.model_adapters', 'agent_runtime.metric_claims',
+                 'agent_runtime.review_evidence', 'agent_runtime.provider_review_carrier',
+                 'agent_runtime.read_completion', 'agent_runtime.payment_completion', 'base_runtime.reply_presentation',
+                 'base_runtime.tool_scope'):
+        module = importlib.import_module(name)
+        relative = name.replace('.', '/') + '.py'
+        actual = Path(module.__file__).resolve()
+        if (actual != ROOT / relative or (frozen is not None and sha(actual) != frozen.get(relative))):
+            raise Stop('fixture_drift', 'actual_loaded_agent_source_mismatch:' + name, batch_stop=True)
+        loaded[name] = {'path': str(actual), 'sha256': sha(actual)}
+    budget.loaded_source_binding = {'source_root': str(ROOT), 'modules': loaded,
+        'checked_before_model_request': True, 'provider_calls_before_check': 0}
+    from agent_runtime.complex_agent import ComplexConversationAgent
+    class SharedBudgetAgent(ComplexConversationAgent):
         def process(self, gateway, workspace, text, **options):
             remaining = budget.remaining()
             self.max_rounds, self.max_tools = remaining['rounds'], remaining['tools']
@@ -585,9 +727,12 @@ def budgeted_agent(primary, reviewer, budget):
                 elif not counted:
                     budget.unknown_usage = True
                 raise
+    agent = SharedBudgetAgent(primary=primary, reviewer=reviewer,
+                              route_provider='off', tool_routing='progressive')
     if budget.billing_mode == 'paid':
-        primary, reviewer = (guarded_paid_transport(client, budget) for client in (primary, reviewer))
-    return SharedBudgetAgent(primary=primary, reviewer=reviewer)
+        agent.primary, agent.reviewer = (guarded_paid_transport(client, budget)
+                                        for client in (agent.primary, agent.reviewer))
+    return agent
 
 
 class Browser:
@@ -610,18 +755,23 @@ class Browser:
             return error.code, json.loads(error.read())
 
     def start(self, timeout=10):
+        browser_bootstrap(self.opener,self.base)
         status, result = self.call('/api/finance/session', 'POST', {}, timeout=timeout)
         if status != 200:
             raise Stop('fixture_error', 'http_session_creation_failed', details=result)
         self.csrf, self.workspace = result['csrf'], result['workspace_id']
+        browser_consume(self.opener,self.base,result)
         return result
 
     def select(self, variant):
+        status,current=self.call('/api/finance/session','POST',{})
+        if status!=200:raise Stop('fixture_error','registered_session_refresh_failed')
         status, result = self.call('/api/finance/demo/select', 'POST',
-                          {'user_id': variant, 'expected_workspace_id': self.workspace})
+                          {'user_id': variant, 'expected_workspace_id': self.workspace,'expected_privacy_revision':current['privacy_revision']})
         if status != 200:
             raise Stop('fixture_error', 'http_profile_selection_failed', details=result)
         self.csrf, self.workspace = result['csrf'], result['workspace_id']
+        browser_consume(self.opener,self.base,result)
 
 
 @contextmanager
@@ -785,7 +935,7 @@ class Fixture:
         from server import create_server, ProxyHandler
         from voice_gateway import VoiceGateway
         from local_knowledge.runtime import PreparedEvidence, RoundProvider
-        from agent_runtime.conversation import ConversationAgent
+        from agent_runtime.agent_factory import create_agent
         from agent_runtime.bank_tools import BankTools
         import fund_history
         owner = self
@@ -810,7 +960,13 @@ class Fixture:
                     record = {'packet': deepcopy(packet)}
                     owner.review_records.append(record)
                     result = reviewer.review(packet, *args, **kwargs)
-                    record['decision'] = deepcopy(result)
+                    decision = deepcopy(result)
+                    wire = decision.get('_agent_review_wire')
+                    if isinstance(wire, bytes):
+                        decision['_agent_review_wire'] = {'request_bytes': len(wire),
+                            'request_sha256': hashlib.sha256(wire).hexdigest(),
+                            'representation': 'wire_metadata_only'}
+                    record['decision'] = decision
                     return result
             actual_reviewer = ObservedReviewer()
         else:
@@ -823,9 +979,25 @@ class Fixture:
             model_id, billing_mode = 'formal-preflight-cloud-disabled', 'unpaid_fixture'
             def complete(self, *args, **kwargs):
                 raise Stop('runner_error', 'preflight_must_not_call_model')
-        agent = budgeted_agent(primary, actual_reviewer, self.budget) if primary else ConversationAgent(primary=NoCloud())
-        self.server = create_server(port=0, database=str(self.temp / 'bank.sqlite3'),
-                          voice=VoiceGateway(key='', allow_cloud_asr=False), conversation_agent=agent)
+        agent = budgeted_agent(primary, actual_reviewer, self.budget) if primary else create_agent(primary=NoCloud(), route_provider='off')
+        # 仅隔离 formal Fixture 显式注入现有本地短信替身；生产默认渠道保持未配置。
+        from base_runtime.service_assembly import AssembledGateway
+        spec = importlib.util.spec_from_file_location('_formal_local_sms', ROOT / 'tests/test_sms_permissions.py')
+        local_sms_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(local_sms_module)
+        self.local_sms = local_sms_module.LocalSms(lambda: self.g.bank.clock())
+        self.local_sms_code = local_sms_module.CODE
+        self.sms_clock_offset = 0.0
+        self.registered_template = (build_profile_template(ROOT,self.temp,self.variant,self.contract) if self.variant else
+            build_template(ROOT,self.temp,self.contract['fixture_contract']['new_closed_seed_v1']))
+        with template_factory(self.registered_template) as registered_factory:
+            def fixture_finance(database=None, **options):
+                return registered_factory(database, sms_provider=self.local_sms,
+                                        allow_test_sms_provider=True, **options)
+            self.server = create_server(port=0, database=str(self.temp / 'bank.sqlite3'),
+                              voice=VoiceGateway(key='', allow_cloud_asr=False), conversation_agent=agent,
+                              finance_factory=fixture_finance)
+        self.registered_host=attach_server(self.server,self.registered_template,self.variant or 'tycoon')
         self.handlers = HandlerLifecycle(self.server)  # 启动监听前登记admission和真实请求线程。
         self.server.evidence_runtime.close()
         provider = self.server.finance.knowledge_provider
@@ -839,22 +1011,8 @@ class Fixture:
         self.g = self.server.finance
         initial_clock = time.monotonic()
         epoch = self.contract['fixture_contract']['new_closed_seed_v1']['clock_epoch']
-        self.g.bank.clock = lambda: epoch + (time.monotonic() - initial_clock)
-        if self.variant:
-            source = self.contract['fixture_contract']['four_profiles_oracle_v1']
-            copied = self.temp / 'profile-source'
-            copied.mkdir()
-            for name, digest in source['source_file_sha256'].items():
-                target = copied / name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(ROOT / source['source_directory'] / name, target)
-                if sha(target) != digest:
-                    raise Stop('fixture_drift', 'profile_copy_sha_changed', batch_stop=True)
-            self.g.demo_accounts.source_dir = copied
-            result = self.g.demo_accounts.initialize_offline(allow_offline=True)
-            if result['initialized_count'] != 4:
-                raise Stop('fixture_error', 'four_profile_import_incomplete')
-        else:
+        self.g.bank.clock = lambda: epoch + (time.monotonic() - initial_clock) + self.sms_clock_offset
+        if not self.variant:
             core = self.contract['fixture_contract']['new_closed_seed_v1']
             data = json.loads((ROOT / core['core_path']).read_text())
             self.g.bank.fixture = data
@@ -869,10 +1027,15 @@ class Fixture:
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.browser = Browser('http://127.0.0.1:' + str(self.server.server_port))
-        self.browser.start()
+        if self.variant:
+            self.browser.start()
+        else:
+            with archived_generation(ROOT, self.contract['fixture_contract']['new_closed_seed_v1']):
+                self.browser.start()
         if self.variant:
             self.browser.select(self.variant)
         self.workspace = self.browser.workspace
+        self.stack.enter_context(request_context(self.g,self.workspace))
         self.initial = raw_snapshot(self.g.bank)
         self.initial_version = one(scoped(self.initial, 'workspaces', self.workspace), lambda r: True, 'workspace')['version']
         if not self.variant:
@@ -985,6 +1148,9 @@ class Fixture:
                 if table in ('metadata', 'audit'):
                     continue
                 target = self.initial.get(table, [])
+                # 原closure仍核同一参考generator；注册额外租户不混进本题。
+                if table=='workspaces' or any('workspace_id' in row or 'workspace' in row for row in rows):
+                    target=scoped(self.initial,table,self.workspace)
                 if normalize(rows, reference_workspace, table) != normalize(target, self.workspace, table):
                     raise Stop('fixture_error', 'closed_seed_raw_rows_mismatch:' + table,
                       details={'expected': normalize(rows, reference_workspace, table), 'actual': normalize(target, self.workspace, table)})
@@ -1357,7 +1523,7 @@ class HumanHarness:
             self.f.bound[name] = ids[0]
             expected = self.f.resolve(step['grading_only']['draft_payload'])
             actual = {k: operation[k] if k == 'action' else operation['payload'].get(k) for k in expected}
-            if canonical(actual) != canonical(expected) or operation['state'] != 'pending_confirmation':
+            if not draft_payload_matches(actual, expected) or operation['state'] != 'pending_confirmation':
                 raise Stop('necessary_condition_failure', 'draft_payload_or_state_mismatch', details={'expected': expected, 'actual': actual})
             if view['agent_review'] is None or view['agent_review']['status'] != 'approved':
                 raise Stop('necessary_condition_failure', 'formal_draft_review_binding_missing')
@@ -1396,17 +1562,33 @@ class HumanHarness:
             browser = Browser(f.browser.base)
             browser.start(timeout=min(10, f.budget.remaining_seconds()))
             other_before = raw_snapshot(f.g.bank)
-            f.harness_workspace_baselines[browser.workspace] = other_before
+            # 一个新owner原provider会创建4persona，全部纳入原不变性基线。
+            host=getattr(f.g,'_original97_registered_host',None)
+            with closing(f.g.bank.connect())as db:
+                other_owner=f.g.experience_provider.instances.owner_for_workspace(browser.workspace,db=db)['registered_user_id']
+                other_workspaces=[r[0]for r in db.execute('SELECT workspace_id FROM registered_user_instances WHERE registered_user_id=?',(other_owner,))]
+            for owner_workspace in other_workspaces:f.harness_workspace_baselines[owner_workspace]=other_before
             save(f.out / 'wrong-owner-session-baseline.json', other_before)
         body = {'confirmed': True, 'confirmation_digest': original['confirmation_digest']}
+        if action == 'confirm_latest_draft_without_explicit_confirmation':
+            body['confirmed'] = False
         omit = action in ('confirm_latest_draft_without_code', 'replay_same_confirmation_without_new_code')
         verified = False
-        if view['verification_required'] and not omit:
-            code_status, code = self.call(browser, '/api/finance/demo-code')
-            if code_status != 200:
-                raise Stop('runner_error', 'harness_code_unavailable')
-            body['verification_code'] = code['code']
-            verified = True
+        if view['verification_required'] and not omit and view['operation']['state'] == 'pending_confirmation':
+            if getattr(f.local_sms, 'source', None) != 'test_double':
+                raise Stop('runner_error', 'harness_requires_explicit_local_sms_fixture')
+            # 只推进可注入的模拟时钟满足既有60秒间隔；105秒真实墙钟预算保持。
+            with closing(f.g.bank.connect()) as db:
+                latest = db.execute('SELECT created_at FROM permission_sms_challenges WHERE workspace_id=? '
+                                    'ORDER BY created_at DESC LIMIT 1', (browser.workspace,)).fetchone()
+            if latest:
+                f.sms_clock_offset += max(0.0, 60.0 - (f.g.bank.clock() - latest[0]))
+            challenge_status, challenge = self.call(browser, '/api/finance/operations/' + operation_id + '/sms', 'POST', {})
+            if challenge_status == 200:
+                body['verification_code'] = f.local_sms_code
+                body['challenge_id'] = challenge['challenge_id']
+                verified = True
+            # 过期、撤销或错误归属继续由原confirm拒绝；绝不伪造challenge或授权。
         status, result = self.call(browser, '/api/finance/operations/' + operation_id + '/confirm', 'POST', body)
         body.clear()
         if action == 'confirm_using_other_fresh_workspace_session':
@@ -1565,6 +1747,7 @@ def run_attempt(out, contract, case, variant, primary, reviewer, manifest, input
     report = {'case_id': case['id'], 'variant': variant, 'status': 'not_run', 'human_semantic_verdict': 'pending',
               'semantic_pass': None, 'steps': [], 'source': 'controlled_synthetic_fixture', 'run_label': RUN_LABEL,
               'original_dataset_sha256': TASKS_SHA, 'task_steps_supplement_sha256': TASK_STEPS_SHA}
+    report['permission_compatibility_sha256'] = PERMISSION_COMPATIBILITY_SHA
     fixture = None
     try:
         fixture = Fixture(out, contract, variant, primary, reviewer, history_prelude)
@@ -1668,6 +1851,7 @@ def run_attempt(out, contract, case, variant, primary, reviewer, manifest, input
     return report
 
 
+
 class OfflineMandatePrimary:
     """开发协议探针；固定独立小任务，绝不从正式grading生成工具调用。"""
     model_id, billing_mode, output_token_limit = 'offline-native-protocol-fixture', 'unpaid_fixture', 4000
@@ -1678,13 +1862,15 @@ class OfflineMandatePrimary:
         index, self.index = self.index, self.index + 1
         outputs = [json.loads(m['content']) for m in messages if m['role'] == 'tool']
         if index == 0:
-            name, args = 'business_records', {'kind': 'subscriptions'}
+            name, args = 'load_skill', {'name': 'subscriptions'}
         elif index == 1:
+            name, args = 'business_records', {'kind': 'subscriptions'}
+        elif index == 2:
             mandates = outputs[-1]['data']['mandates']
             mandate = one(mandates, lambda r: r['merchant'] == '模拟视频会员' and r['status'] == 'active', 'smoke_mandate')
             name, args = 'prepare_operation', {'action': 'close_mandate', 'account_id': mandate['account_id'],
                           'mandate_id': mandate['id']}
-        elif index == 2:
+        elif index == 3:
             output = outputs[-1]
             name, args = 'answer_reviewed', {'text': '已准备代扣关闭草案，等待本人另行核对确认，尚未执行。',
                 'claims': [{'text': '已准备代扣关闭草案，等待本人另行核对确认，尚未执行。', 'evidence_ids': [output['evidence_id']]}],
@@ -1701,10 +1887,54 @@ class OfflineMandatePrimary:
 
 class OfflineReviewer:
     model_id, billing_mode = 'offline-glm-protocol-fixture', 'unpaid_fixture'
-    def review(self, packet, *args, **kwargs):
-        return {'verdict': 'approve', 'reason': '仅离线协议夹具，语义未裁决', 'issues': [],
-                '_model_usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}}
 
+    def __init__(self, log_path=None):
+        from agent_runtime.conversation import GLMConversationReviewer
+        from agent_runtime.model_adapters import OpenAICompatibleJsonClient, GLM_REVIEW_MODEL
+        self.model_id = GLM_REVIEW_MODEL
+        self._decision = threading.local()
+        self.request_metadata = []
+        local_url = 'https://offline-preflight.invalid/v1/chat/completions'
+        class LocalResponse:
+            status = 200
+            def __init__(self, value):
+                self.body = json.dumps(value, ensure_ascii=False).encode('utf-8')
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self, limit=-1):
+                return self.body if limit is None or limit < 0 else self.body[:limit]
+        def local_open(request, **kwargs):
+            if (request.full_url != local_url or request.get_method() != 'POST'
+                    or not isinstance(request.data, bytes)
+                    or json.loads(request.data)['model'] != GLM_REVIEW_MODEL
+                    or type(getattr(self._decision, 'value', None)) is not dict):
+                raise Stop('runner_error', 'offline_review_request_contract_invalid')
+            self.request_metadata.append({'method': 'POST', 'url': local_url,
+                'request_bytes': len(request.data), 'request_sha256': hashlib.sha256(request.data).hexdigest(),
+                'transport': 'in_process_fixture_no_network', 'billing_mode': 'unpaid_fixture'})
+            return LocalResponse({'model': GLM_REVIEW_MODEL, 'choices': [{'finish_reason': 'stop',
+                'message': {'role': 'assistant', 'content': json.dumps(self._decision.value, ensure_ascii=False)}}],
+                'usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}})
+        client = OpenAICompatibleJsonClient(provider='ai_ping', model_id=GLM_REVIEW_MODEL,
+            url=local_url, env_name='NAVREN_OFFLINE_FIXTURE_KEY', keychain_service='CC/NAVREN_OFFLINE_FIXTURE_KEY',
+            timeout=35, max_retries=0, urlopen=local_open, key_loader=lambda: 'offline-fixture-only', log_path=log_path)
+        self._wire_reviewer = GLMConversationReviewer(client=client)
+        self._wire_reviewer.billing_mode = 'unpaid_fixture'
+
+    def review(self, packet, *args, **kwargs):
+        fixed = {'verdict': 'approve', 'reason': '仅离线协议夹具，语义未裁决', 'issues': []}
+        self._decision.value = fixed
+        try:
+            result = self._wire_reviewer.review(packet, *args, **kwargs)
+        finally:
+            self._decision.value = None
+        if (any(result.get(k) != v for k, v in fixed.items())
+                or not isinstance(result.get('_agent_review_wire'), bytes) or not result['_agent_review_wire']
+                or result.get('_model_usage') != {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}):
+            raise Stop('runner_error', 'offline_review_decision_or_wire_or_usage_changed')
+        return result
 
 class OfflineHistoryPrimary:
     model_id, billing_mode, output_token_limit = 'offline-normal-history-protocol-fixture', 'unpaid_fixture', 4000
@@ -1796,7 +2026,152 @@ def offline_harness_probe(out, contract, history_prelude=False):
         return result
 
 
-def verify_handoff(path, expected_sha, manifest, inputs):
+def _verify_handoff_before_completed_phase(path,expected_sha,manifest,inputs):
+    # Legacy callers retain the original same-source contract byte-for-byte below.
+    if not path or not expected_sha:
+        return _verify_handoff_same_source(path,expected_sha,manifest,inputs)
+    candidate=Path(path).resolve()
+    if candidate.is_symlink()or not candidate.is_file()or sha(candidate)!=expected_sha:
+        return _verify_handoff_same_source(path,expected_sha,manifest,inputs)
+    handoff=json.loads(candidate.read_text())
+    gate=handoff.get('gates',{}).get('G3',{})
+    if gate.get('mode')!='mixed_origin_case_coverage':
+        return _verify_handoff_same_source(path,expected_sha,manifest,inputs)
+    if (handoff.get('attested_by')!='/root'or handoff.get('root_verified')is not True
+            or handoff.get('source_sha256')!=manifest or handoff.get('data_sha256')!=inputs
+            or handoff.get('schema')!=paid_protocol().REUSE_HANDOFF_SCHEMA):
+        raise Stop('not_run','exact_Root_mixed_original_G3_handoff_required')
+    paid_protocol().baseline_reuse_gate(candidate,expected_sha,manifest,inputs)
+    spec=importlib.util.spec_from_file_location('_formal_original_mixed_G3',ROOT/'tests/window_integration/regression_cloud_runner.py')
+    original=importlib.util.module_from_spec(spec);spec.loader.exec_module(original)
+    coverage={'path':gate.get('evidence_path'),'sha256':gate.get('evidence_sha256')}
+    checked=original.validate_g3_coverage(ROOT,coverage)
+    if (gate.get('passed')is not True or gate.get('test_count')!=22 or gate.get('skip_count')!=0
+            or gate.get('current_executed_case_count')!=checked['executed_count']
+            or gate.get('retained_case_count')!=checked['retained_count']
+            or gate.get('outer_exit_code')!=0 or gate.get('command')!=checked['current_cli']):
+        raise Stop('not_run','mixed_G3_real_current_native_and_original22_required')
+    g2=handoff.get('gates',{}).get('G2',{})
+    cfg=ROOT/'outputs/window-progress/integration/baseline-mainflow-config'
+    accepted_path=cfg/'G3-root-handoff.json';accepted=json.loads(accepted_path.read_text())
+    if (g2.get('mode')!='retained_complete'or g2.get('passed')is not True or g2.get('test_count')!=6
+            or g2.get('skip_count')!=0 or g2.get('command')!=[] or g2.get('outer_exit_code')is not None
+            or g2.get('current_executed_case_count')!=0 or g2.get('retained_case_count')!=6
+            or any(g2.get(key)!=accepted['g2_evidence'].get(key)for key in('public_case_coverage','finance_case_coverage'))
+            or g2.get('evidence_path')!=accepted['g2_evidence']['independent_judgment_path']
+            or g2.get('evidence_sha256')!=accepted['g2_evidence']['independent_judgment_sha256']):
+        raise Stop('not_run','all_six_G2_originals_must_be_retained_without_new_CLI')
+    arguments=types.SimpleNamespace(candidate=ROOT,source_manifest=cfg/'source-manifest-final.json',
+        data_manifest=cfg/'data-manifest.json',handoff=accepted_path,paid_preflight_manifest=cfg/'paid-manifest.json')
+    full=original.inspect_inputs(ROOT,arguments.source_manifest,arguments.data_manifest)
+    accepted_gate=original.public.cloud_gate(str(cfg/'G2-root-evidence-reuse-handoff.json'),
+        sha(cfg/'G2-root-evidence-reuse-handoff.json'),full['sources'],full['datasets'],full['contract'])
+    original.validate_g2(arguments,full,accepted_gate,{})
+    return handoff
+
+
+
+def verify_handoff(path,expected_sha,manifest,inputs):
+    if not path or not expected_sha:
+        return _verify_handoff_before_completed_phase(path,expected_sha,manifest,inputs)
+    target=Path(path)
+    if target.is_symlink()or not target.is_file()or sha(target)!=expected_sha:
+        return _verify_handoff_before_completed_phase(path,expected_sha,manifest,inputs)
+    handoff=json.loads(target.read_text())
+    if handoff.get('schema')!='navren.formal-completed-prior-phase-handoff/1':
+        return _verify_handoff_before_completed_phase(path,expected_sha,manifest,inputs)
+    def checked(reference):
+        actual=Path(reference['path'])
+        if actual.is_symlink()or not actual.is_file()or sha(actual)!=reference['sha256']:
+            raise Stop('fixture_drift','retained_phase_reference_changed',batch_stop=True)
+        return actual
+    if (handoff.get('attested_by')!='/root'or handoff.get('root_verified')is not True
+            or handoff.get('source_root')!=str(ROOT)or handoff.get('source_sha256')!=manifest
+            or handoff.get('data_sha256')!=inputs
+            or handoff.get('already_passed_paid_reruns_allowed')is not False
+            or handoff.get('cross_version_results_claimed_same_version')is not False):
+        raise Stop('not_run','exact_Root_completed_prior_phase_handoff_required')
+    current_full=json.loads(checked(handoff['current_source_manifest']).read_text())
+    parent_full=json.loads(checked(handoff['parent_source_manifest']).read_text())
+    decision=json.loads(checked(handoff['affected_source_decision']).read_text())
+    changed=sorted(n for n in set(current_full)|set(parent_full)if current_full.get(n)!=parent_full.get(n))
+    if (decision.get('attested_by')!='root'or decision.get('root_verified')is not True
+            or decision.get('current_source_manifest')!=handoff['current_source_manifest']
+            or decision.get('parent_source_manifest')!=handoff['parent_source_manifest']
+            or decision.get('changed_files')!=changed
+            or decision.get('retain_actual_28_PASS_without_rerun')is not True):
+        raise Stop('not_run','actual_exact_affected_source_review_required')
+    for reference in decision['actual_free_evidence']:checked(reference)
+    parent_runner=checked(handoff['parent_runner'])
+    if parent_full.get('tests/window_integration/formal_business_runner.py')!=sha(parent_runner):
+        raise Stop('fixture_drift','original_parent_runner_identity_changed',batch_stop=True)
+    old_manifest_file=checked(handoff['parent_formal_manifest'])
+    old_inputs_file=checked(handoff['parent_frozen_inputs'])
+    old_inputs=json.loads(old_inputs_file.read_text())
+    old_handoff=checked(handoff['parent_handoff'])
+    # Historical guard imports are isolated from this process's sys.path and
+    # module cache. Its exact source and original evidence remain validated.
+    program = ('import importlib.util,json,sys; from pathlib import Path; '
+        'runner,manifest,inputs,handoff,digest=sys.argv[1:]; '
+        'spec=importlib.util.spec_from_file_location("_isolated_prior_formal_guard",runner); '
+        'module=importlib.util.module_from_spec(spec); sys.modules[spec.name]=module; '
+        'spec.loader.exec_module(module); '
+        'module.verify_handoff(Path(handoff),digest,json.loads(Path(manifest).read_text()),'
+        'json.loads(Path(inputs).read_text()))')
+    completed=subprocess.run([sys.executable,'-B','-c',program,str(parent_runner),
+        str(old_manifest_file),str(old_inputs_file),str(old_handoff),handoff['parent_handoff']['sha256']],
+        cwd=ROOT,env={'PATH':os.defpath,'PYTHONDONTWRITEBYTECODE':'1','PYTHONNOUSERSITE':'1'},
+        capture_output=True,text=True,timeout=45,check=False)
+    if completed.returncode!=0:
+        raise Stop('not_run','isolated_original_prior_phase_guard_failed',
+            details={'native_exit_code':completed.returncode,
+                     'stderr_sha256':hashlib.sha256(completed.stderr.encode()).hexdigest()})
+    compatibility='evaluation/window_integration/formal_permission_compatibility.json'
+    if (inputs!=old_inputs and {n:d for n,d in inputs.items()if n!=compatibility}!=old_inputs
+            or inputs.get(compatibility)!=PERMISSION_COMPATIBILITY_SHA):
+        raise Stop('fixture_drift','only_explicit_screenshot_permission_fixture_supplement_allowed',batch_stop=True)
+    forecast=json.loads(checked(handoff['retained_forecast']).read_text())
+    if (forecast.get('attested_by')!='root'or forecast.get('root_verified')is not True
+            or forecast.get('source_root')!=str(ROOT)
+            or forecast.get('source_manifest')!=handoff['current_source_manifest']
+            or not 28 <= len(forecast.get('retained_cases',[])) <= 97):
+        raise Stop('not_run','all_28_exact_original_PASS_identities_must_be_preserved')
+    counts={};retained_ids=set()
+    for item in forecast['retained_cases']:
+        identity=item['identity'];passed=json.loads(checked(item['Root_PASS']).read_text())
+        cases=passed.get('cases')if isinstance(passed.get('cases'),list)else[passed]
+        matching=[r for r in cases if r.get('attempt_id')==identity['attempt_id']]
+        if (passed.get('attested_by')!='root'or passed.get('root_verified')is not True
+                or len(matching)!=1 or matching[0].get('semantic_verdict')!='pass'
+                or matching[0].get('paid_rerun_allowed')is not False
+                or any(matching[0].get(k)!=v for k,v in identity.items())
+                or matching[0].get('original_case_canonical_sha256')!=item['original_case_canonical_sha256']):
+            raise Stop('not_run','actual_original_Root_PASS_changed')
+        if identity['attempt_id'] in retained_ids:
+            raise Stop('not_run','duplicate_retained_original_identity')
+        retained_ids.add(identity['attempt_id'])
+        if identity['suite_id'] in ('formal-business-original39','semantic-original10-three-rounds'):
+            suite=identity['suite_id']
+            original_path=TASKS if suite=='formal-business-original39' else ROOT/'evaluation/navren_skill_semantic_cases.json'
+            originals=json.loads(original_path.read_text())['cases']
+            original=next((row for row in originals if row['id']==identity['case_id']),None)
+            original_sha=hashlib.sha256(canonical(original).encode()).hexdigest() if original else None
+            variant=identity['variant']
+            valid_variant=(variant in ('grain_farmer','retired_entrepreneur','tycoon','working_landlady')
+                if suite=='formal-business-original39' and identity['case_id']=='FB10' else variant is None)
+            expected_id='|'.join((suite,str(identity['round_index']),variant or '',identity['case_id']))
+            if (type(identity['round_index'])is not int or identity['round_index']not in (1,2,3)
+                    or not valid_variant or identity['attempt_id']!=expected_id
+                    or original_sha!=item['original_case_canonical_sha256']):
+                raise Stop('not_run','retained_original_task_or_round_changed')
+        counts[identity['suite_id']]=counts.get(identity['suite_id'],0)+1
+    if {k:v for k,v in counts.items() if k not in ('formal-business-original39','semantic-original10-three-rounds')}!={'integration-public-original-P10-P02':2,
+                'integration-finance-original-S01-S02-S03-S10':4,
+                'G3-original-public12-finance10':22}:
+        raise Stop('not_run','completed_prior_original_registry_partition_changed')
+    return handoff
+
+def _verify_handoff_same_source(path, expected_sha, manifest, inputs):
     # 根owner须明确传入其已核实交接文件的SHA；仅CLI --cloud 不会放行。
     if not path or not expected_sha:
         raise Stop('not_run', 'cloud_requires_explicit_root_verified_G1_G2_G3_handoff')
@@ -1808,7 +2183,10 @@ def verify_handoff(path, expected_sha, manifest, inputs):
         raise Stop('not_run', 'root_verification_attestation_missing')
     if handoff.get('source_sha256') != manifest or handoff.get('data_sha256') != inputs:
         raise Stop('fixture_drift', 'handoff_source_or_data_sha_mismatch', batch_stop=True)
-    for name in ('G1', 'G2', 'G3'):
+    reused = handoff.get('schema') == paid_protocol().REUSE_HANDOFF_SCHEMA
+    if reused:
+        paid_protocol().baseline_reuse_gate(path, expected_sha, manifest, inputs)
+    for name in (('G2', 'G3') if reused else ('G1', 'G2', 'G3')):
         gate = handoff.get('gates', {}).get(name, {})
         if (gate.get('passed') is not True or type(gate.get('outer_exit_code')) is not int
             or gate['outer_exit_code'] != 0 or type(gate.get('test_count')) is not int or gate['test_count'] <= 0
@@ -1875,7 +2253,7 @@ def preflight(out, contract, manifest, inputs, history_prelude=False):
     return result
 
 
-def execute_formal_schedule(out, expanded, budget_precheck, run_one, *, clock=time.monotonic):
+def execute_formal_schedule(out, expanded, budget_precheck, run_one, *, clock=time.monotonic, retained=None):
     """同一串行关卡控制三批；一题锁住batch后不得再构造或调用付费客户端。"""
     whole = clock()
     reports = []
@@ -1886,6 +2264,13 @@ def execute_formal_schedule(out, expanded, budget_precheck, run_one, *, clock=ti
             identity = case['id'] + ('-' + variant if variant else '')
             target = Path(out) / ('round-' + str(round_index)) / identity
             target.parent.mkdir(parents=True, exist_ok=True)
+            attempt_id='|'.join(('formal-business-original39',str(round_index),variant or '',case['id']))
+            if retained and attempt_id in retained:
+                reports.append({'round':round_index,'case_id':case['id'],'variant':variant,
+                    'status':'retained_original_pass','semantic_pass':True,'attempt_id':attempt_id,
+                    'Root_PASS':retained[attempt_id],'paid_rerun':False,
+                    'retained_on_original_source':True,'same_version_result_claimed':False})
+                continue
             required = 105 + budget_precheck['profile_fixture_guard_seconds' if variant else 'core_fixture_guard_seconds']
             if stop_batch or whole + 7200 - clock() < required or stage + 1800 - clock() < required:
                 reports.append({'round': round_index, 'case_id': case['id'], 'variant': variant, 'status': 'not_run',
@@ -1907,13 +2292,14 @@ def execute_formal_schedule(out, expanded, budget_precheck, run_one, *, clock=ti
     result = {'status': 'stopped_paid_batch' if stop_batch else 'needs_human_review', 'attempts': reports,
               'planned_denominator': 3 * len(expanded),
               'completed_necessary_condition_attempts': sum(r['status'] == 'needs_human_review' for r in reports),
+              'retained_original_passes': sum(r['status'] == 'retained_original_pass' for r in reports),
               'human_semantic_verdict': 'pending', 'scores': None, 'provider_cost': None,
               'elapsed_seconds': clock() - whole, 'batch_stopped': stop_batch}
     save(Path(out) / 'formal-result.json', result)
     return result
 
 
-def formal_rounds(out, contract, manifest, inputs, budget_precheck, history_prelude=False):
+def formal_rounds(out, contract, manifest, inputs, budget_precheck, history_prelude=False, campaign=None):
     if (budget_precheck.get('fixture_precondition_satisfied') is not True or
             budget_precheck.get('fits_observed_budget') is not True):
         raise Stop('not_run', 'budget_or_fixture_precondition_not_satisfied')
@@ -1926,22 +2312,43 @@ def formal_rounds(out, contract, manifest, inputs, budget_precheck, history_prel
     from scripts.run_skill_acceptance import TracePrimary, TraceReviewer as OriginalTraceReviewer, safe_data
     TraceReviewer = paid_protocol().compatible_trace_reviewer(OriginalTraceReviewer, safe_data)
     def run_one(target, case, variant, deadline):
-        primary = TracePrimary(target / 'primary-calls.jsonl')
-        reviewer = TraceReviewer(target / 'reviewer-calls.jsonl')
-        return run_attempt(target, contract, case, variant, primary, reviewer, manifest, inputs,
-                           deadline, history_prelude, budget_precheck)
-    return execute_formal_schedule(out, expand_cases(contract), budget_precheck, run_one)
+        from paid_campaign import execute
+        def actual(identity):
+            primary = TracePrimary(target / 'primary-calls.jsonl')
+            reviewer = TraceReviewer(target / 'reviewer-calls.jsonl')
+            return run_attempt(target, contract, case, variant, primary, reviewer, manifest, inputs,
+                               deadline, history_prelude, budget_precheck)
+        return execute(campaign, suite_id='formal-business-original39', case_id=case['id'],
+            round_index=int(target.parent.name.removeprefix('round-')), variant=variant, output=target, call=actual)
+    retained={}
+    if campaign is not None:
+        verified=campaign.p.baseline_retained_original_cases(campaign.root,campaign.manifest)
+        forecast=campaign.p.read(campaign.p.checked(campaign.root,campaign.manifest['original97_retained']))
+        retained={entry['identity']['attempt_id']:entry['Root_PASS']for entry in forecast['retained_cases']
+            if entry['identity']['suite_id']=='formal-business-original39'
+            and entry['identity']['attempt_id']in verified}
+    return execute_formal_schedule(out, expand_cases(contract), budget_precheck, run_one,retained=retained)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out-dir', type=Path, required=True)
     parser.add_argument('--cloud', action='store_true')
+    parser.add_argument('--paid-preflight-manifest', type=Path)
     parser.add_argument('--root-handoff', type=Path)
     parser.add_argument('--root-handoff-sha256')
     parser.add_argument('--budget-precheck', type=Path)
     parser.add_argument('--history-prelude', action='store_true', help='仅按冻结synthetic-history prelude启用新合成fixture正常历史')
     args = parser.parse_args(argv)
+    if args.cloud:
+        try:
+            from paid_entry_admission import admit_cli
+            args.paid_admission = admit_cli(args, root=ROOT, suite_id='formal-business-original39', entrypoint=Path(__file__).resolve())
+            from paid_campaign import load_campaign
+            args.paid_campaign = load_campaign(ROOT, args.paid_preflight_manifest)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print(json.dumps({'status':'paid_admission_blocked','reason':str(error),'provider_calls':0}))
+            return 2
     out = args.out_dir.resolve()
     if OUTPUT.resolve() not in out.parents:
         raise SystemExit('output_must_be_new_child_of_authorized_formal_business_runner_scope')
@@ -1963,8 +2370,8 @@ def main(argv=None):
             if handoff.get('budget_precheck_sha256') != sha(args.budget_precheck):
                 raise Stop('not_run', 'root_budget_precheck_sha_missing')
             with local_network_only(allow_cloud=True):
-                result = formal_rounds(out, contract, manifest, inputs, precheck, args.history_prelude)
-            exit_code = 0 if all(r['status'] == 'needs_human_review' for r in result['attempts']) else 1
+                result = formal_rounds(out, contract, manifest, inputs, precheck, args.history_prelude, args.paid_campaign)
+            exit_code = 0 if all(r['status'] in ('needs_human_review','retained_original_pass') for r in result['attempts']) else 1
         else:
             with local_network_only():
                 result = preflight(out, contract, manifest, inputs, args.history_prelude)

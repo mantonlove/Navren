@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import math
 import time
 import urllib.error
 import urllib.request
@@ -9,6 +11,7 @@ from datetime import datetime, timezone
 
 from .model_adapters import (AIPING_PRIMARY_MODEL, AIPING_URL, DEEPSEEK_MODEL, DEEPSEEK_URL, ModelAdapterError,
                              _key_from_sources, _log_call, _unique_object)
+from .request_budget import RequestBudgetError, estimate_request
 
 
 class DeepSeekToolClient:
@@ -39,7 +42,8 @@ class DeepSeekToolClient:
         # Closing needs a specific terminal function. Merely requiring some
         # tool call did not stop the provider returning another read function.
         final_name = 'answer_reviewed' if 'answer_reviewed' in names else 'answer_facts'
-        choice = {'type': 'function', 'function': {'name': final_name}} if final_only else 'auto'
+        choice = ({'type': 'function', 'function': {'name': final_name}} if final_only
+                  else 'required' if names else 'auto')
         return {'model': self.model_id, 'messages': messages, 'tools': tools,
                 'tool_choice': choice,
                 'temperature': 0, 'max_tokens': 4000,
@@ -53,18 +57,51 @@ class DeepSeekToolClient:
         """Full wire-body bytes used for local admission, not actual token usage."""
         return len(self.serialized_request(messages, tools))
 
+    def request_input_token_estimate(self, messages, tools):
+        return estimate_request(self.serialized_request(messages, tools))
+
     def complete(self, messages, tools, *, request_id, remaining_seconds,
-                 max_input_bytes=None):
+                 max_input_bytes=None, expected_request_sha256=None,
+                 max_input_token_estimate=None):
         started = time.monotonic()
         status, outcome, code, usage = None, 'failed', 'provider_error', {}
         request_sent = False
+        response_protocol = {}
         try:
+            if (type(remaining_seconds) not in (int, float)
+                    or type(self.timeout) not in (int, float)
+                    or not math.isfinite(remaining_seconds) or not math.isfinite(self.timeout)
+                    or min(remaining_seconds, self.timeout) <= 0):
+                code = 'request_deadline_exceeded'
+                raise ModelAdapterError(code, model_id=self.model_id, attempts=0)
+            deadline = started + min(self.timeout, remaining_seconds)
+            def remaining():
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    raise ModelAdapterError('request_deadline_exceeded',
+                        model_id=self.model_id, attempts=int(request_sent))
+                return left
             wire = self.serialized_request(messages, tools)
+            try:
+                admission = estimate_request(wire)
+            except (RequestBudgetError, OSError):
+                code = 'request_budget_estimator_unavailable'
+                raise ModelAdapterError(code, model_id=self.model_id, attempts=0) from None
+            if (expected_request_sha256 is not None
+                    and admission['request_sha256'] != expected_request_sha256):
+                code = 'request_budget_protocol_mismatch'
+                raise ModelAdapterError(code, model_id=self.model_id, attempts=0)
+            if max_input_token_estimate is not None and (
+                    type(max_input_token_estimate) is not int
+                    or max_input_token_estimate < admission['input_token_estimate']):
+                code = 'request_budget_exceeded'
+                raise ModelAdapterError(code, model_id=self.model_id, attempts=0)
             if max_input_bytes is not None and (
                     type(max_input_bytes) is not int or max_input_bytes < 0
                     or len(wire) > max_input_bytes):
                 code = 'request_budget_exceeded'
                 raise ModelAdapterError(code, model_id=self.model_id, attempts=0)
+            remaining()
             key = self.key_loader()
             if not key:
                 code = 'missing_api_key'
@@ -72,17 +109,42 @@ class DeepSeekToolClient:
             req = urllib.request.Request(self.endpoint, method='POST',
                 data=wire,
                 headers={'Content-Type': 'application/json', 'Authorization': 'Bearer '+key})
+            # Preparation and key loading consume the caller's existing
+            # allowance. urllib still applies a socket I/O timeout; this is
+            # not a claim that DNS/connect/body phases share a hard deadline.
+            request_timeout = remaining()
             request_sent = True
-            with self.urlopen(req, timeout=max(.1, min(self.timeout, remaining_seconds))) as resp:
+            with self.urlopen(req, timeout=request_timeout) as resp:
                 status = getattr(resp, 'status', 200)
+                remaining()
                 envelope = json.loads(resp.read(512_000), object_pairs_hook=_unique_object)
+            if self.provider == 'ai_ping':
+                supplied_provider = envelope.get('provider')
+                recognized = (type(supplied_provider) is str
+                    and supplied_provider in {'硅基流动', 'SiliconFlow', 'siliconflow'})
+                response_protocol['downstream_provider_status'] = ('recognized' if recognized
+                    else 'absent' if 'provider' not in envelope else 'unrecognized')
+                response_protocol['downstream_provider'] = '硅基流动' if recognized else None
             supplied_usage = envelope.get('usage', {})
             if isinstance(supplied_usage, dict):
                 usage = {k: v for k, v in supplied_usage.items()
                          if k in ('prompt_tokens', 'completion_tokens', 'total_tokens')
                          and type(v) is int and v >= 0}
+            # A late body can still provide auditable usage, but cannot become
+            # an admitted model answer. The original caller also checks its
+            # turn deadline before review and final publication.
+            remaining()
+            details = supplied_usage.get('completion_tokens_details') if isinstance(supplied_usage,dict) else None
+            reasoning_tokens = details.get('reasoning_tokens') if isinstance(details,dict) else None
+            response_protocol['reasoning_tokens'] = reasoning_tokens if type(reasoning_tokens) is int and reasoning_tokens>=0 else None
+            if usage.get('prompt_tokens', 0) > admission['input_token_estimate']:
+                code = 'budget_estimator_drift'
+                raise ValueError(code)
             choice = envelope['choices'][0]
-            if choice.get('finish_reason') == 'length':
+            finish_reason = choice.get('finish_reason')
+            response_protocol['finish_reason'] = (finish_reason if finish_reason in
+                ('stop','length','tool_calls','function_call','content_filter',None) else 'other')
+            if finish_reason == 'length':
                 code = 'response_truncated'
                 raise ValueError(code)
             msg = choice['message']
@@ -95,6 +157,7 @@ class DeepSeekToolClient:
             if not isinstance(calls, list) or len(calls) > 12:
                 raise ValueError('invalid_tool_calls')
             seen = set()
+            response_protocol['tool_arguments'] = []
             for call in calls:
                 if (not isinstance(call, dict) or call.get('type') != 'function'
                         or not isinstance(call.get('id'), str) or call['id'] in seen
@@ -103,6 +166,19 @@ class DeepSeekToolClient:
                         or not isinstance(call['function'].get('arguments'), str)):
                     raise ValueError('invalid_tool_call')
                 seen.add(call['id'])
+                raw_arguments = call['function']['arguments']
+                parse_kind = None
+                try:
+                    parsed_arguments = json.loads(raw_arguments,object_pairs_hook=_unique_object,
+                        parse_constant=lambda _:(_ for _ in()).throw(ValueError()))
+                    if not isinstance(parsed_arguments,dict):parse_kind = 'not_object'
+                except json.JSONDecodeError:
+                    parse_kind = 'invalid_json'
+                except (ValueError,TypeError):
+                    parse_kind = 'duplicate_key_or_nonfinite_json'
+                response_protocol['tool_arguments'].append({'index':len(response_protocol['tool_arguments']),
+                    'parse_error_kind':parse_kind,'length':len(raw_arguments),
+                    'sha256':hashlib.sha256(raw_arguments.encode('utf-8')).hexdigest()})
             # 只保留协议字段。reasoning_content 必须按供应商协议原样续传，绝不入审计。
             result = {k: v for k, v in msg.items()
                       if k in ('role', 'content', 'tool_calls', 'reasoning_content')}
@@ -124,13 +200,14 @@ class DeepSeekToolClient:
         except (urllib.error.URLError, OSError, TimeoutError):
             code = 'provider_unavailable'
         except (ValueError, KeyError, TypeError, IndexError, AttributeError):
-            code = code if code == 'response_truncated' else 'invalid_model_contract'
+            code = code if code in ('response_truncated', 'budget_estimator_drift') else 'invalid_model_contract'
         finally:
             _log_call({'timestamp': datetime.now(timezone.utc).isoformat(),
                        'request_id': request_id, 'provider': self.provider,
                        'model_id': self.model_id, 'stage': 'conversation.tools',
                        'outcome': outcome, 'duration_ms': round((time.monotonic()-started)*1000),
-                       'http_status': status, 'error_code': code, 'usage': usage}, self.log_path)
+                       'http_status': status, 'error_code': code, 'usage': usage,
+                       'response_protocol':response_protocol}, self.log_path)
         error = ModelAdapterError(code, model_id=self.model_id, attempts=1, http_status=status)
         # A rejected/truncated answer still consumed the supplier's reported
         # usage. Expose only counters, never the rejected response body.
@@ -143,10 +220,29 @@ class AIPingToolClient(DeepSeekToolClient):
     """OpenAI-compatible function calling through the shared AI Ping key."""
 
     model_id = AIPING_PRIMARY_MODEL
+    metric_selection_support = True
 
-    def __init__(self, *, urlopen=None, key_loader=None, timeout=35, log_path=None,
+    def request_payload(self, messages, tools):
+        payload = {**super().request_payload(messages,tools),'enable_thinking':False}
+        if self.model_id == AIPING_PRIMARY_MODEL:
+            # One AI Ping switch and one exact channel; no fallback or price
+            # uplift. Actual thinking/channel behavior still needs observation.
+            payload.pop('thinking')
+            payload['provider'] = {'only': ['硅基流动'], 'allow_fallbacks': False,
+                                   'effective_multiplier_range': [1, 1]}
+        if (isinstance(self, AIPingToolClient) and self.provider == 'ai_ping'
+                and self.endpoint == AIPING_URL and self.model_id == AIPING_PRIMARY_MODEL):
+            from .primary_tool_transport import pack_primary_payload
+            payload = pack_primary_payload(payload)
+        return payload
+
+    def __init__(self, *, urlopen=None, key_loader=None, timeout=105, log_path=None,
                  model_id=None):
         super().__init__(urlopen=urlopen, key_loader=key_loader, timeout=timeout,
             log_path=log_path, endpoint=AIPING_URL, env_name='AIPING_API_KEY',
             keychain_service='CC/AIPING_GLM_API_KEY', provider='ai_ping',
             model_id=model_id or self.model_id)
+        # Negotiation describes this standard transport's reference format,
+        # never a new evidence/permission claim. Unknown model overrides retain
+        # the complete literal packet until their consumer is supported.
+        self.supports_financial_metric_catalog = self.model_id == AIPING_PRIMARY_MODEL

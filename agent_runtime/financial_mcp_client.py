@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 import json
 import os
 from pathlib import Path
@@ -38,6 +38,7 @@ _DESCRIPTIONS = {
     "financial_list_cards": "查看当前主体银行卡及关联账户；不返回卡号。",
     "financial_get_account_overview": "读取一个已查询账户的账户、卡、授信、账单与合同概览。",
     "financial_list_transactions": "按账户和日期读取有界历史流水；最多200条，不可读取其他主体。",
+    "financial_list_transfers": "读取当前主体合成历史的完整转账统计及分页明细；本人账户调拨按事件计一次，分币种和方向汇总。默认8条，最多12条，不含现役新操作。",
     "financial_list_positions": "查看历史持仓成本与合成估值；不代表真实净值。",
     "financial_list_insurance": "查看保险合同历史摘要；保额不是资产或可用资金。",
     "financial_get_policy": "读取已查询保单的历史缴费、理赔及适用的合成规则摘要。",
@@ -68,6 +69,12 @@ _PARAMETERS = {
         "offset": {"type": "integer", "minimum": 0, "maximum": 100000},
     }),
     "financial_list_positions": _obj({"account_id": dict(_NULLABLE_ID)}),
+    "financial_list_transfers": _obj({
+        "account_id": dict(_NULLABLE_ID), "start_date": dict(_DATE_SCHEMA),
+        "end_date": dict(_DATE_SCHEMA),
+        "limit": {"type": "integer", "minimum": 1, "maximum": 12},
+        "offset": {"type": "integer", "minimum": 0, "maximum": 100000},
+    }),
     "financial_list_insurance": _obj({"status": {
         "type": ["string", "null"], "enum": ["active", "expired", "cancelled", "pending", None],
     }}),
@@ -109,6 +116,8 @@ _PROVIDER_INPUTS = {
     "financial_list_transactions": ({"account_id": {"string", "null"}, "start_date": {"string", "null"},
         "end_date": {"string", "null"}, "limit": {"integer"}, "offset": {"integer"}}, set()),
     "financial_list_positions": ({"account_id": {"string", "null"}}, set()),
+    "financial_list_transfers": ({"account_id": {"string", "null"}, "start_date": {"string", "null"},
+        "end_date": {"string", "null"}, "limit": {"integer"}, "offset": {"integer"}}, set()),
     "financial_list_insurance": ({"status": {"string", "null"}}, set()),
     "financial_get_policy": ({"policy_id": {"string"}}, {"policy_id"}),
     "financial_list_assets": ({}, set()),
@@ -214,7 +223,7 @@ def _validate_args(name, arguments):
             raise FinancialMCPError("INVALID_ARGUMENTS")
         if key == "status" and value not in ("active", "expired", "cancelled", "pending"):
             raise FinancialMCPError("INVALID_ARGUMENTS")
-        if key == "limit" and (type(value) is not int or not 1 <= value <= 200):
+        if key == "limit" and (type(value) is not int or not 1 <= value <= props[key]["maximum"]):
             raise FinancialMCPError("INVALID_ARGUMENTS")
         if key == "offset" and (type(value) is not int or not 0 <= value <= 100000):
             raise FinancialMCPError("INVALID_ARGUMENTS")
@@ -446,6 +455,8 @@ class FinancialMCPClient:
                 raise FinancialMCPError("INVALID_RESPONSE")
             return {**{key: data[key] for key in fields if key != "items"},
                     "items": self._rows(data["items"], "transactions")}
+        if name == "financial_list_transfers":
+            return self._transfer_data(data)
         if name == "financial_get_financial_summary":
             if set(data) != _SUMMARY_FIELDS:
                 raise FinancialMCPError("INVALID_RESPONSE")
@@ -475,6 +486,156 @@ class FinancialMCPClient:
                 "premium_funding": self._rows(data["premium_funding"], "premium_funding"),
                 "claims": self._rows(data["claims"], "claims"), "rule": self._row(data["rule"], "rules")}
         raise FinancialMCPError("TOOL_NOT_ALLOWED")
+
+    def _transfer_data(self, data):
+        fields = {"items", "transfer_count", "ledger_row_count", "totals_by_currency_and_direction",
+            "actual_coverage_start", "actual_coverage_end", "offset", "limit", "has_more", "query_complete",
+            "item_page_complete", "missing_fields", "coverage_partial", "runtime_ledger_included"}
+        item_fields = {"subject_id", "transfer_id", "transaction_ids", "booked_on", "occurred_at", "kind",
+            "currency", "amount_minor", "signed_minor", "direction", "source_account_id", "target_account_id",
+            "counterparty", "pair_status"}
+        summary_fields = {"currency", "direction", "transfer_count", "amount_minor"}
+        def reject():
+            raise FinancialMCPError("INVALID_RESPONSE")
+        def identifier(value, nullable=False):
+            if value is None and nullable:
+                return
+            if not isinstance(value, str) or not _IDENTIFIER.fullmatch(value):
+                reject()
+        def amount(value, signed=False):
+            if value is not None and (type(value) is not int or (not signed and value < 0)):
+                reject()
+        def currency(value, nullable=False):
+            if value is None and nullable:
+                return
+            if not isinstance(value, str) or not re.fullmatch(r"[A-Z]{3}", value):
+                reject()
+        if set(data) != fields:
+            reject()
+        for key in ("transfer_count", "ledger_row_count", "offset", "limit"):
+            if type(data[key]) is not int or data[key] < 0:
+                reject()
+        if not 1 <= data["limit"] <= 12 or data["offset"] > 100000:
+            reject()
+        for key in ("has_more", "query_complete", "item_page_complete", "coverage_partial", "runtime_ledger_included"):
+            if type(data[key]) is not bool:
+                reject()
+        if data["query_complete"] is not True or data["runtime_ledger_included"] is not False:
+            reject()
+        rows = data["items"]
+        if not isinstance(rows, list) or len(rows) != min(data["limit"], max(0, data["transfer_count"]-data["offset"])):
+            reject()
+        if data["has_more"] != (data["offset"]+len(rows) < data["transfer_count"]):
+            reject()
+        if data["item_page_complete"] != (data["offset"] == 0 and not data["has_more"]):
+            reject()
+        if data["ledger_row_count"] < data["transfer_count"]:
+            reject()
+        for key in ("actual_coverage_start", "actual_coverage_end"):
+            if data[key] is not None and not _valid_date(data[key]):
+                reject()
+        first, last = data["actual_coverage_start"], data["actual_coverage_end"]
+        if (first is None) != (last is None) or (first is not None and first > last):
+            reject()
+        if (data["transfer_count"] == 0) != (first is None):
+            reject()
+        missing = data["missing_fields"]
+        allowed_missing = item_fields-{"subject_id", "transfer_id", "transaction_ids", "booked_on", "occurred_at", "kind", "pair_status"} | {"transfer_pair", "transfer_group_id"}
+        if (not isinstance(missing, list) or any(not isinstance(v, str) or v not in allowed_missing for v in missing)
+                or len(missing) != len(set(missing))):
+            reject()
+        projected_rows = []
+        seen = set()
+        for row in rows:
+            if not isinstance(row, Mapping) or row.get("subject_id") != self.subject_id:
+                raise FinancialMCPError("SUBJECT_MISMATCH")
+            if set(row) != item_fields:
+                reject()
+            identifier(row["transfer_id"])
+            if row["transfer_id"] in seen:
+                reject()
+            seen.add(row["transfer_id"])
+            ids = row["transaction_ids"]
+            if not isinstance(ids, list) or not 1 <= len(ids) <= 200:
+                reject()
+            for ident in ids:
+                identifier(ident)
+            if len(set(ids)) != len(ids):
+                reject()
+            for key in ("source_account_id", "target_account_id"):
+                identifier(row[key], nullable=True)
+            if not _valid_date(row["booked_on"]):
+                reject()
+            if (not isinstance(row["occurred_at"], str) or len(row["occurred_at"]) > 64
+                    or not row["occurred_at"].startswith(row["booked_on"]+"T")):
+                reject()
+            try:
+                datetime.fromisoformat(row["occurred_at"])
+            except ValueError:
+                reject()
+            if row["kind"] not in ("internal_transfer", "transfer", "external_transfer"):
+                reject()
+            if row["direction"] not in ("internal", "incoming", "outgoing", None):
+                reject()
+            if row["pair_status"] not in ("paired", "unpaired", "single_entry", "inconsistent"):
+                reject()
+            currency(row["currency"], nullable=True)
+            amount(row["amount_minor"]); amount(row["signed_minor"], signed=True)
+            if row["currency"] is None and "currency" not in missing:
+                reject()
+            if row["amount_minor"] is None and "amount_minor" not in missing:
+                reject()
+            if row["pair_status"] == "paired":
+                value = row["amount_minor"]
+                if (row["kind"] != "internal_transfer" or value is None or value <= 0
+                        or row["currency"] is None or len(ids) != 2
+                        or row["source_account_id"] is None or row["target_account_id"] is None
+                        or row["source_account_id"] == row["target_account_id"]
+                        or row["direction"] is None):
+                    reject()
+                expected = {"internal": 0, "incoming": value, "outgoing": -value}[row["direction"]]
+                if row["signed_minor"] != expected:
+                    reject()
+            elif row["kind"] == "internal_transfer":
+                if row["pair_status"] not in ("unpaired", "inconsistent") or row["amount_minor"] is not None or row["signed_minor"] is not None:
+                    reject()
+            elif row["pair_status"] != "single_entry":
+                reject()
+            else:
+                if len(ids) != 1 or row["direction"] == "internal":
+                    reject()
+                value = row["amount_minor"]
+                if value is not None:
+                    if value <= 0 or row["direction"] not in ("incoming", "outgoing"):
+                        reject()
+                    if row["signed_minor"] != (value if row["direction"] == "incoming" else -value):
+                        reject()
+                elif row["signed_minor"] is not None:
+                    reject()
+            if row["counterparty"] is not None and (not isinstance(row["counterparty"], str) or len(row["counterparty"]) > 240):
+                reject()
+            projected_rows.append({k: v for k, v in row.items() if k != "subject_id"})
+        summaries = data["totals_by_currency_and_direction"]
+        if not isinstance(summaries, list) or len(summaries) > 96:
+            reject()
+        seen_buckets = set(); bucket_count = 0
+        for row in summaries:
+            if not isinstance(row, Mapping) or set(row) != summary_fields:
+                reject()
+            currency(row["currency"]); amount(row["amount_minor"])
+            if row["amount_minor"] is None and "amount_minor" not in missing:
+                reject()
+            if row["direction"] not in ("internal", "incoming", "outgoing"):
+                reject()
+            if type(row["transfer_count"]) is not int or row["transfer_count"] < 1:
+                reject()
+            bucket = (row["currency"], row["direction"])
+            if bucket in seen_buckets:
+                reject()
+            seen_buckets.add(bucket); bucket_count += row["transfer_count"]
+        if bucket_count > data["transfer_count"] or (not {"currency", "direction"}.intersection(missing) and bucket_count != data["transfer_count"]):
+            reject()
+        return {**dict(data), "items": projected_rows}
 
 
 def tool_specs():

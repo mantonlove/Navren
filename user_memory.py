@@ -116,13 +116,15 @@ class UserMemoryStore:
                 "personal_revision": revision,
                 "notice": "保存在独立加密个人资料库。默认关闭；未启用时不会读取。"}
 
-    def set_enabled(self, workspace, payload):
+    def set_enabled(self, workspace, payload, *, expected_privacy=None, commit_receipts=None):
         strict_fields(payload, {"enabled", "expected_revision"}, {"enabled"})
         enabled = payload["enabled"]
         if type(enabled) is not bool:
             raise BankError("INVALID_MEMORY_SETTING", "记忆开关必须为明确的开或关。")
         now = self.bank.clock()
-        with self.store.transaction(workspace, expected_revision=payload.get("expected_revision")) as db:
+        with self.store.transaction(workspace, expected_revision=payload.get("expected_revision"),
+                                    expected_privacy=expected_privacy, commit_receipts=commit_receipts,
+                                    event="memory_enabled" if enabled else "memory_disabled") as db:
             db.execute(
                 "INSERT INTO user_memory_settings(workspace_id,enabled,updated_at) VALUES(?,?,?) "
                 "ON CONFLICT(workspace_id) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at",
@@ -209,7 +211,7 @@ class UserMemoryStore:
         strict_fields(payload, {"value", "expires_on", "expected_revision"}, {"value"})
         value, now = self._value(payload["value"]), self.bank.clock()
         expires_on = self._expiry(payload["expires_on"], self._as_of(workspace)) if "expires_on" in payload else None
-        with self.store.transaction(workspace, expected_revision=payload.get("expected_revision")) as db:
+        with self.store.transaction(workspace, expected_revision=payload.get("expected_revision"), event="memory_corrected") as db:
             row = db.execute(
                 "SELECT category,source_ref FROM user_memories WHERE id=? AND workspace_id=?", (node_id, workspace),
             ).fetchone()
@@ -230,7 +232,7 @@ class UserMemoryStore:
 
     def delete(self, workspace, node_id, payload):
         strict_fields(payload, {"expected_revision"})
-        with self.store.transaction(workspace, expected_revision=payload.get("expected_revision")) as db:
+        with self.store.transaction(workspace, expected_revision=payload.get("expected_revision"), event="memory_deleted") as db:
             row = db.execute(
                 "SELECT category,source_ref FROM user_memories WHERE id=? AND workspace_id=?", (node_id, workspace),
             ).fetchone()
@@ -304,7 +306,7 @@ class UserMemoryStore:
                 or not isinstance(relation, str) or relation not in allowed or target_id == node_id):
             raise BankError("INVALID_MEMORY_RELATION", "记忆关联类型或目标无效。")
         relation_id, now = uuid.uuid4().hex, self.bank.clock()
-        with self.store.transaction(workspace, expected_revision=payload.get("expected_revision")) as db:
+        with self.store.transaction(workspace, expected_revision=payload.get("expected_revision"), event="memory_relation_created") as db:
             ids = {row[0] for row in db.execute(
                 "SELECT id FROM user_memories WHERE workspace_id=? AND id IN (?,?)",
                 (workspace, node_id, target_id),
@@ -323,7 +325,7 @@ class UserMemoryStore:
         return self.state(workspace)
 
     def delete_relation(self, workspace, relation_id, expected_revision=None):
-        with self.store.transaction(workspace, expected_revision=expected_revision) as db:
+        with self.store.transaction(workspace, expected_revision=expected_revision, event="memory_relation_deleted") as db:
             row = db.execute(
                 "SELECT source_node_id,target_node_id,relation FROM user_memory_relations "
                 "WHERE id=? AND workspace_id=?", (relation_id, workspace),

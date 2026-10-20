@@ -152,8 +152,8 @@ class FormalBusinessRunnerTests(unittest.TestCase):
         self.assertEqual(result['server_owned_history_turns'], 2)
         self.assertFalse(result['long_term_memory_enabled'])
         self.assertTrue(result['normal_http_history_persistence_verified'])
-        self.assertEqual(result['budget']['rounds'], 4)
-        self.assertEqual(result['budget']['provider_total_tokens'], 12)
+        self.assertEqual(result['budget']['rounds'], 5)
+        self.assertEqual(result['budget']['provider_total_tokens'], 14)
         self.assertIsNone(result['semantic_pass'])
 
     def test_frozen_negative_prepare_probe_never_supplies_model_draft(self):

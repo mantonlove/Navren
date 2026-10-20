@@ -1,4 +1,4 @@
-"""SQLite 原文权威库和 FTS5 词法检索。
+"""SQLite 原文权威库、FTS5 与本地向量混合检索。
 
 写入方法只供受信本地应用调用，不暴露给模型。候选、准入、发布是不同步骤；
 撤回和确认修订即时影响已有快照，历史引文仍可按明确时点查询。
@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
 from datetime import date, datetime, timezone
 import hashlib
 import json
@@ -160,24 +162,107 @@ CREATE TRIGGER IF NOT EXISTS sealed_member_insert BEFORE INSERT ON release_chunk
  WHEN (SELECT sealed FROM releases WHERE id=NEW.release_id)=1 BEGIN SELECT RAISE(ABORT,'sealed_release_member'); END;
 CREATE TRIGGER IF NOT EXISTS sealed_member_delete BEFORE DELETE ON release_chunks
  WHEN (SELECT sealed FROM releases WHERE id=OLD.release_id)=1 BEGIN SELECT RAISE(ABORT,'sealed_release_member'); END;
+CREATE TABLE IF NOT EXISTS market_lineage(
+ version_id TEXT PRIMARY KEY NOT NULL REFERENCES document_versions(id),binding TEXT NOT NULL CHECK(json_valid(binding)));
+CREATE TRIGGER IF NOT EXISTS immutable_market_lineage_update BEFORE UPDATE ON market_lineage
+ BEGIN SELECT RAISE(ABORT,'immutable_market_lineage'); END;
+CREATE TRIGGER IF NOT EXISTS immutable_market_lineage_delete BEFORE DELETE ON market_lineage
+ BEGIN SELECT RAISE(ABORT,'immutable_market_lineage'); END;
 PRAGMA user_version=1;
 '''
+
+
+def _market_operation(*, write=False):
+    def decorate(method):
+        @wraps(method)
+        def run(self,*args,**kwargs):
+            with self.market_read_snapshot(write=write):
+                return method(self,*args,**kwargs)
+        return run
+    return decorate
 
 
 class LocalKnowledgeProvider:
     provider_id = 'navren.sqlite.graphrag.v1'
 
-    def __init__(self, path=None, *, release_id=None):
+    def __init__(self, path=None, *, release_id=None, encoder=None, market_authority=None):
         self.path = Path(path or default_path())
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fixed_release = release_id
+        self.vector_encoder = encoder
+        self._market_authority = None
+        self._market_context = ContextVar('market-authority-'+uuid.uuid4().hex,default=None)
+        if market_authority is not None:self.bind_market_authority(market_authority)
         with self.db() as db:
             if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name IN ('workspaces','user_memories','agent_dialogues','personal_decisions')").fetchone():
                 raise KnowledgeError('personal_database_forbidden')
             db.executescript(SCHEMA)
             from .graph import SCHEMA as GRAPH_SCHEMA
             db.executescript(GRAPH_SCHEMA)
+            from .vectors import SCHEMA as VECTOR_SCHEMA
+            db.executescript(VECTOR_SCHEMA)
+            from .structure_index import SCHEMA as STRUCTURE_SCHEMA
+            db.executescript(STRUCTURE_SCHEMA)
         self.path.chmod(0o600)
+        from .vectors import schedule
+        with self.db() as db:
+            current = db.execute("SELECT release_id FROM current_release WHERE scope='public'").fetchone()
+        schedule(self, release_id or (current[0] if current else None))
+
+    def bind_market_authority(self,market_store):
+        """Trusted bootstrap only: never accept a path or authority from DB/model metadata."""
+        from .market_authority import MarketAuthority
+        authority=market_store if type(market_store) is MarketAuthority else MarketAuthority(market_store)
+        if self._market_authority is not None and self._market_authority.identity!=authority.identity:
+            raise KnowledgeError('market_authority_conflict')
+        self._market_authority=authority
+        return self
+
+    @contextmanager
+    def market_read_snapshot(self, *, write=False):
+        """One provider operation freezes upstream eligibility. Not a cross-DB read instant.
+
+        Admission uses an upstream IMMEDIATE lock held through KG commit, always
+        Market -> KG. Public reads use upstream BEGIN and permit concurrent WAL
+        writers; a later call rechecks. No missing binding is auto-discovered.
+        """
+        current=self._market_context.get()
+        if current is not None and (current[1] is None or current[1].reusable()):
+            if write and not current[0]:raise KnowledgeError('market_authority_write_scope_required')
+            yield current[1];return
+        authority=self._market_authority
+        if authority is None:
+            token=self._market_context.set((write,None))
+            try:yield None
+            finally:self._market_context.reset(token)
+            return
+        with authority.snapshot(write=write) as snapshot:
+            token=self._market_context.set((write,snapshot))
+            try:yield snapshot
+            finally:self._market_context.reset(token)
+
+    def _market_available(self,db,row):
+        # market-* is a reserved derived-source namespace. Old rows without a
+        # lineage cannot be upgraded by copying fields into their existing ID.
+        if not (row['source_id'].startswith('market-') or row['shape']=='market-official-full-text-v1'):return True
+        scope=self._market_context.get();snapshot=scope[1] if scope else None
+        if snapshot is None:return False
+        version=row['version_id'] if 'version_id' in row.keys() else row['id']
+        lineage=db.execute('SELECT binding FROM market_lineage WHERE version_id=?',(version,)).fetchone()
+        if lineage is None:return False
+        try:
+            binding=json.loads(lineage['binding'])
+            document=db.execute('SELECT document_key FROM documents WHERE id=?',(row['document_id'],)).fetchone()
+            return bool(snapshot.valid(binding) and row['source_id']=='market-'+binding['source_id']
+                        and row['parsed_sha256']==binding['parsed_sha256']
+                        and row['source_url']==snapshot.capture(binding['article_id']).article['url']
+                        and document and document[0]=='market-'+sha(packed(binding))[:40])
+        except (KnowledgeError,ValueError,KeyError,TypeError):return False
+
+    def _market_member_available(self,db,version):
+        row=db.execute('''SELECT v.*,d.source_id,d.source_url FROM document_versions v
+            JOIN documents d ON d.id=v.document_id WHERE v.id=?''',(version,)).fetchone()
+        return bool(row and self._market_available(db,row))
 
     @contextmanager
     def db(self):
@@ -299,14 +384,29 @@ class LocalKnowledgeProvider:
         with self.db() as db:
             db.execute('INSERT INTO channels VALUES(?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name',(channel_id,name))
 
+    @_market_operation(write=True)
     def stage_document(self, *, source_id, source_url, title, text, published_on=None,
                        retrieved_on=None, effective_from=None, effective_to=None,
                        product_id=None, share_class_id=None, channel_id=None, facets=None,
                        conditions=None, data_on=None, parser_id=PARSER, shape='plain-text-v1',
                        visibility='public', data_origin='real', read_scope='full_text',
-                       complete=True, raw_bytes=None, spans=None,document_key='document'):
+                       complete=True, raw_bytes=None, spans=None,document_key='document',_market_capture=None):
         """新增候选，不准入、不发布；spans 必须逐字对应完整解析文本。"""
         source = self.validate_source_url(source_id,source_url)
+        market_binding=None
+        if source_id.startswith('market-') or shape=='market-official-full-text-v1':
+            from .market_authority import MarketCapture
+            scope=self._market_context.get();snapshot=scope[1] if scope else None
+            if type(_market_capture) is not MarketCapture or snapshot is None or not snapshot.valid(_market_capture.binding):
+                raise KnowledgeError('source_permission_missing')
+            original=snapshot.capture(_market_capture.binding['article_id'])
+            a=original.article;market_binding=original.binding
+            if (original!=_market_capture or source_id!='market-'+a['source_id']
+                    or source_url!=a['url'] or title!=a['title'] or text!=a['evidence_text']
+                    or published_on!=a['published_at'][:10] or facets!=['general']
+                    or parser_id!=PARSER or shape!='market-official-full-text-v1'
+                    or document_key!='market-'+sha(packed(market_binding))[:40]):
+                raise KnowledgeError('source_permission_missing')
         if visibility != 'public' or data_origin != 'real':
             raise KnowledgeError('private_or_simulated_evidence')
         if read_scope != 'full_text' or not complete:
@@ -354,6 +454,9 @@ class LocalKnowledgeProvider:
             version_id = 'v'+content_hash[:40]
             existing = db.execute('SELECT id FROM document_versions WHERE id=?',(version_id,)).fetchone()
             if existing:
+                if market_binding is not None:
+                    previous=db.execute('SELECT binding FROM market_lineage WHERE version_id=?',(version_id,)).fetchone()
+                    if not previous or previous[0]!=packed(market_binding):raise KnowledgeError('source_permission_missing')
                 db.execute('INSERT OR IGNORE INTO checks VALUES(?,?)',(version_id,retrieved_on))
                 return version_id
             number = db.execute('SELECT coalesce(max(version_no),0)+1 FROM document_versions WHERE document_id=?',(document_id,)).fetchone()[0]
@@ -361,6 +464,8 @@ class LocalKnowledgeProvider:
             db.execute('INSERT INTO document_versions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                        (version_id,document_id,number,sha(raw),title,text,sha(text),parser_id,shape,parse_id,published_on,
                         retrieved_on,effective_from,effective_to,'candidate',None,None,now()))
+            if market_binding is not None:
+                db.execute('INSERT INTO market_lineage VALUES(?,?)',(version_id,packed(market_binding)))
             start_id = db.execute('SELECT coalesce(max(row_id),0) FROM chunks').fetchone()[0]
             for i,row in enumerate(rows):
                 chunk_id = 'c'+sha(version_id+packed(row))[:40]
@@ -440,6 +545,7 @@ class LocalKnowledgeProvider:
             output.append(row)
         return output
 
+    @_market_operation(write=True)
     def approve_version(self,version_id, *, verification_basis, supersedes=True):
         """本地受信准入：不会因域名、检索得分或模型推荐自动批准候选。"""
         if not isinstance(verification_basis,str) or not verification_basis.strip():
@@ -447,9 +553,10 @@ class LocalKnowledgeProvider:
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
             row=db.execute('''SELECT v.*,s.enabled,s.read_allowed,s.outbound_allowed,s.paused,s.parser_id expected_parser,s.shape expected_shape,
-                      s.freshness,s.permission_basis FROM document_versions v JOIN documents d ON d.id=v.document_id
+                      s.freshness,s.permission_basis,d.source_id,d.source_url FROM document_versions v JOIN documents d ON d.id=v.document_id
                       JOIN sources s ON s.id=d.source_id WHERE v.id=?''',(version_id,)).fetchone()
             if row is None:raise KnowledgeError('version_missing')
+            if not self._market_available(db,row):raise KnowledgeError('source_permission_missing')
             if row['status'] not in ('candidate','verified'):raise KnowledgeError('withdrawn_evidence')
             if not row['enabled'] or not row['read_allowed'] or not row['outbound_allowed']:
                 raise KnowledgeError('source_permission_missing')
@@ -525,6 +632,7 @@ class LocalKnowledgeProvider:
                     and text[chunk['start_char']:chunk['end_char']]==chunk['excerpt']
                     and sha(chunk['excerpt'])==chunk['excerpt_sha256'])
 
+    @_market_operation(write=True)
     def publish(self, *, version_ids=None, activate=True, temporary=False,preserve_current=False):
         """增量快照：复用不可变片段，清单改变才生成新发布。"""
         if temporary and activate:raise KnowledgeError('temporary_cannot_promote')
@@ -538,6 +646,7 @@ class LocalKnowledgeProvider:
             if ids is not None:
                 ids=list(dict.fromkeys(ids))
                 if not ids:raise KnowledgeError('empty_release')
+                if any(not self._market_member_available(db,vid) for vid in ids):raise KnowledgeError('source_permission_missing')
                 actual={r[0] for r in db.execute('SELECT id FROM document_versions WHERE status=\'verified\' AND id IN ('+','.join('?' for _ in ids)+')',ids)}
                 if actual!=set(ids):raise KnowledgeError('unverified_release_member')
                 if preserve_current:
@@ -551,11 +660,21 @@ class LocalKnowledgeProvider:
                         eligible={r[0] for r in db.execute('''SELECT DISTINCT v.id FROM release_chunks rc
                             JOIN chunks c ON c.id=rc.chunk_id JOIN document_versions v ON v.id=c.version_id
                             JOIN documents d ON d.id=v.document_id JOIN sources s ON s.id=d.source_id
-                            WHERE rc.release_id=? AND '''+where,(current[0],))}
-                        ids=sorted(eligible|set(ids))
+                            WHERE rc.release_id=? AND (v.revoked_from IS NULL OR v.revoked_from>?) AND '''+where,
+                            (current[0],today()))}
+                        eligible={vid for vid in eligible if self._market_member_available(db,vid)}
+                        # 自动当前发布不累积已被确认替代的历史版本；已封存的旧快照
+                        # 与其图/原文/向量成员不改，历史请求应固定到原发布代次。
+                        # 未来才生效的替代仍保留旧版，避免提前移除现在有效的条款。
+                        incoming={r[0] for r in db.execute('''SELECT id FROM document_versions
+                            WHERE id IN ('''+','.join('?' for _ in ids)+''')
+                            AND (revoked_from IS NULL OR revoked_from>?)''',(*ids,today()))}
+                        if not incoming:return current[0]
+                        ids=sorted(eligible|incoming)
                 where+=' AND v.id IN ('+','.join('?' for _ in ids)+')';args.extend(ids)
-            rows=db.execute('''SELECT c.*,v.parsed_text,v.parsed_sha256,v.raw_sha256,v.effective_from,v.published_on FROM chunks c JOIN document_versions v ON v.id=c.version_id
+            rows=db.execute('''SELECT c.*,v.document_id,v.shape,v.parsed_text,v.parsed_sha256,v.raw_sha256,v.effective_from,v.published_on,d.source_id,d.source_url FROM chunks c JOIN document_versions v ON v.id=c.version_id
                   JOIN documents d ON d.id=v.document_id JOIN sources s ON s.id=d.source_id WHERE '''+where+' ORDER BY c.id',args).fetchall()
+            rows=[row for row in rows if self._market_available(db,row)]
             if not rows:raise KnowledgeError('empty_release')
             if len(rows)>MAX_CHUNKS:raise KnowledgeError('release_size_limit')
             if ids is not None and {r['version_id'] for r in rows}!=set(ids):raise KnowledgeError('unavailable_release_member')
@@ -576,12 +695,29 @@ class LocalKnowledgeProvider:
                 raise KnowledgeError('release_manifest_mismatch')
             if activate:
                 db.execute("INSERT INTO current_release VALUES('public',?) ON CONFLICT(scope) DO UPDATE SET release_id=excluded.release_id",(release_id,))
+        from .vectors import schedule
+        schedule(self, release_id)
         return release_id
 
     def for_release(self,release_id):
         with self.db() as db:
             if not db.execute('SELECT 1 FROM releases WHERE id=?',(release_id,)).fetchone():raise KnowledgeError('release_missing')
-        return LocalKnowledgeProvider(self.path,release_id=release_id)
+        return LocalKnowledgeProvider(self.path,release_id=release_id,encoder=self.vector_encoder,market_authority=self._market_authority)
+
+    def build_vector_index(self,release_id=None):
+        from .vectors import VectorIndex
+        if release_id is None:
+            with self.db() as db:
+                current=db.execute("SELECT release_id FROM current_release WHERE scope='public'").fetchone()
+            release_id=self.fixed_release or (current[0] if current else None)
+        if release_id is None:raise KnowledgeError('release_missing')
+        ident(release_id)
+        result=VectorIndex(self,self.vector_encoder).build(release_id)
+        if os.environ.get('NAVREN_STRUCTURE_ENABLED','0')=='1':
+            from .structure_index import StructureIndex,reason
+            try:result['structure_index']=StructureIndex(self,self.vector_encoder).build(release_id)
+            except Exception as error:result['structure_index']={'ready':False,'reason':reason(error)}
+        return result
 
     def status(self):
         with self.db() as db:
@@ -592,11 +728,15 @@ class LocalKnowledgeProvider:
             graph_edges=db.execute('''SELECT count(*) FROM graph_relations gr JOIN graph_provenance gp ON gp.relation_id=gr.id
                  JOIN release_chunks rc ON rc.chunk_id=gr.citation_id WHERE rc.release_id=? AND gr.status='verified' ''',(release,)).fetchone()[0] if ready else 0
             graph_entities=db.execute('SELECT count(*) FROM graph_entities').fetchone()[0]
+            from .vectors import VectorIndex
+            vector_status=VectorIndex(self,self.vector_encoder).status(db,release) if ready else {'ready':False,'reason':'release_missing'}
         return {'schema_version':1,'ready':ready,'provider_id':self.provider_id,'public_release_id':release,
-                'retrieval_method':'local_fts5_candidates_typed_evidence_graph','published_chunk_count':count,
+                'retrieval_method':('local_fts5_vector_rrf_typed_evidence_graph' if vector_status['ready'] else
+                                    'local_fts5_candidates_typed_evidence_graph'),'published_chunk_count':count,
                 'private_retrieval_available':False,'graph_ready':bool(ready and graph_edges),
                 'graph_schema':'typed-public-evidence/1','graph_entity_count':graph_entities,
-                'published_evidenced_relation_count':graph_edges,'neural_embeddings_available':False,
+                'published_evidenced_relation_count':graph_edges,'neural_embeddings_available':vector_status['ready'],
+                'vector_index':vector_status,
                 'llm_extraction_available':False,'maximum_graph_depth':4,'maximum_release_chunks':MAX_CHUNKS}
 
     def withdraw(self,version_id):
@@ -618,6 +758,7 @@ class LocalKnowledgeProvider:
             db.execute('UPDATE conflicts SET active=0 WHERE id=?',(conflict_id,))
 
     def _available(self,db,row,as_of,checked=None):
+        if not self._market_available(db,row):return [],'source_permission_missing'
         if row['status']!='verified' or row['visibility']!='public' or row['data_origin']!='real':return [],'evidence_unavailable'
         if not row['enabled'] or not row['read_allowed'] or not row['outbound_allowed']:return [],'source_permission_missing'
         if not any(row['source_url']==endpoint or (endpoint.endswith('/') and row['source_url'].startswith(endpoint))
@@ -653,7 +794,7 @@ class LocalKnowledgeProvider:
             if not citation_ids:return []
             where+=' AND rc.chunk_id IN ('+','.join('?' for _ in citation_ids)+')'
             args.extend(citation_ids)
-        return db.execute('''SELECT c.*,v.document_id,v.parse_id,v.title,v.published_on,v.retrieved_on,v.effective_from,v.effective_to,
+        return db.execute('''SELECT c.*,v.document_id,v.parse_id,v.title,v.parser_id,v.shape,d.source_id,v.published_on,v.retrieved_on,v.effective_from,v.effective_to,
                v.status,v.revoked_from,v.parsed_sha256,v.raw_sha256,s.publisher,s.enabled,s.read_allowed,s.outbound_allowed,
                s.freshness,s.paused,s.endpoints,d.source_url,d.visibility,d.data_origin,p.verified,
                sc.product_id share_product,ch.id bound_channel
@@ -679,6 +820,7 @@ class LocalKnowledgeProvider:
         prefix='tmp-' if release['temporary'] else 'pub-'
         return manifest==release['manifest_sha256'] and release_id==prefix+manifest[:40]
 
+    @_market_operation()
     def search_public(self,request,release_id):
         ident(release_id)
         as_of=day(request['as_of']);limit=request['limit']
@@ -691,6 +833,7 @@ class LocalKnowledgeProvider:
         terms=tokens(request['query'])[:80]
         gaps=[];matches=[];covered=set()
         with self.db() as db:
+            db.execute('BEGIN')
             if not db.execute('SELECT 1 FROM releases WHERE id=?',(release_id,)).fetchone():raise KnowledgeError('release_missing')
             for k,table in (('product_id','products'),('share_class_id','share_classes'),('channel_id','channels')):
                 if request.get(k) and not db.execute('SELECT 1 FROM '+table+' WHERE id=?',(request[k],)).fetchone():
@@ -701,7 +844,15 @@ class LocalKnowledgeProvider:
                 # FTS 引擎只返回候选，权威数据和时点准入仍在下方逐项回查。
                 scores={r['rowid']:r['score'] for r in db.execute('SELECT rowid,bm25(chunks_fts,3.0,1.0) score FROM chunks_fts WHERE chunks_fts MATCH ?',(expression,))}
             rows=self._rows(db,release_id)
-            checked={}
+            from .retrieval_ranking import identity_issue
+            issue=identity_issue(request['query'],rows,request)
+            if issue:
+                return {'schema_version':1,'release_id':release_id,'citation_ids':[],
+                        'coverage_gaps':[{'code':issue},{'code':'no_verified_evidence'}],
+                        'retrieval':{'mode':'fts5','vector_reason':'vector_empty_eligible','vector_used':False,
+                                     'vector_candidate_count':0,'lexical_candidate_count':0,
+                                     'structured_intent':[],'field_candidate_count':0,'ranking_method':issue}}
+            checked={};eligible={};eligible_rows=[];lexical={};fallback=[]
             for row in rows:
                 if any(row[k]!=request[k] for k in requested):continue
                 available,reason=self._available(db,row,as_of,checked)
@@ -712,34 +863,178 @@ class LocalKnowledgeProvider:
                 from .graph import paths
                 if paths(db,row,as_of,request=request,facets=list(relevant)) is None:
                     gaps.append({'code':'not_enough_evidence'});continue
-                if row['row_id'] not in scores:
-                    # 对象明确的维度查询可按登记维度补召回；不对泛化问题返回无关所有文档。
-                    if not request.get('product_id') or not facets:continue
-                    score=1.0
-                else:score=scores[row['row_id']]
-                matches.append((score,row['id'],relevant))
-            matches.sort(key=lambda r:(r[0],r[1]))
-            # 先覆盖独立维度，再用分数补足，避免一项费用占满全部结果。
+                eligible[row['id']]=relevant
+                eligible_rows.append(row)
+                if row['row_id'] in scores:lexical[row['id']]=scores[row['row_id']]
+                elif request.get('product_id') and facets:fallback.append(row['id'])
+            from .vectors import VectorIndex,fuse
+            from .retrieval_ranking import structural_intents,lexical_weights,RANKING_POLICY
+            intent=structural_intents(request['query'],eligible_rows,request)
+            from .public_aliases import query_projection,concept_coverage,POLICY as ALIAS_POLICY
+            projection=query_projection(request['query']) if not intent['objects'] else None
+            # Derived field labels never rewrite sealed chunks or bypass eligibility.
+            for cid in intent['preferred']:lexical.setdefault(cid,0.0)
+            semantic_query=intent['residual'].strip() if intent['objects'] and intent['residual'].strip() else request['query']
+            semantic_ids={r['id'] for r in eligible_rows if r['product_id'] in intent['objects']} if intent['objects'] else set(eligible)
+            from .retrieval_encoder import cross_language_query
+            cross_language=not intent['objects'] and cross_language_query(semantic_query,eligible_rows)
+            coverage=concept_coverage(semantic_query)
+            # Dense existing public terminology keeps its retrieval views; the
+            # alignment branch adds original-language recall for sparse coverage.
+            alignment_required=cross_language and (not projection or coverage<0.5)
+            from .query_features import translated_feature
+            from .retrieval_encoder import is_bundle,selection
+            from .embeddings import VectorError
+            dual_selected=is_bundle(self.vector_encoder)
+            if self.vector_encoder is None:
+                try:dual_selected=selection()=='dual'
+                except VectorError:dual_selected=False
+            feature_applicable=(cross_language and bool(re.search(r'[\u3400-\u9fff]',semantic_query))
+                                and self.vector_encoder is not False
+                                and os.environ.get('NAVREN_VECTOR_ENABLED','1')!='0'
+                                and dual_selected)
+            translation,translation_meta=translated_feature(semantic_query,applicable=feature_applicable)
+            extra_lexical={}
+            for name,extra_query in (('public_concepts',projection),('translated',translation)):
+                if not extra_query:continue
+                extra_terms=tokens(extra_query)[:80]
+                if not extra_terms:continue
+                expression=' OR '.join('"'+t.replace('"','""')+'"' for t in extra_terms)
+                extra_scores={r['rowid']:r['score'] for r in db.execute('SELECT rowid,bm25(chunks_fts,3.0,1.0) score FROM chunks_fts WHERE chunks_fts MATCH ?',(expression,))}
+                extra_lexical[name]={row['id']:extra_scores[row['row_id']] for row in eligible_rows if row['row_id'] in extra_scores}
+            projected_lexical=extra_lexical.get('public_concepts',{})
+            structure={'ready':False,'used':False,'reason':'structure_disabled','parent_groups':[]}
+            if os.environ.get('NAVREN_STRUCTURE_ENABLED','0')=='1' and not intent['objects']:
+                from .structure_index import StructureIndex
+                structure=StructureIndex(self,self.vector_encoder).search(db,release_id,semantic_query,
+                    semantic_ids,projected_query=projection,translated_query=translation,
+                    cross_language=alignment_required)
+            segment_structures=[]
+            from .query_segments import POLICY as SEGMENT_POLICY
+            segment_meta={'policy':SEGMENT_POLICY,'used':False,'count':1,
+                          'reason':'structure_unavailable'}
+            if structure['used']:
+                from .query_group_retrieval import additional_query_structures
+                structure,segment_structures,segment_meta=additional_query_structures(
+                    self,db,release_id,semantic_query,semantic_ids,eligible_rows,structure)
+            semantic=VectorIndex(self,self.vector_encoder).search(db,release_id,semantic_query,semantic_ids,
+                                  projected_query=projection,cross_language=alignment_required,
+                                  translated_query=translation)
+            weights=lexical_weights(request['query'],eligible_rows,intent)
+            lexical_views=None;view_weights=None
+            if extra_lexical:
+                lexical_views={'original':lexical,**extra_lexical}
+                view_weights={'original':weights}
+                for name,extra_query in (('public_concepts',projection),('translated',translation)):
+                    if name in extra_lexical:view_weights[name]=lexical_weights(extra_query,eligible_rows,intent)
+            ranking=fuse(lexical,semantic['scores'],weights,semantic.get('views'),lexical_views,view_weights) if semantic['scores'] or extra_lexical else lexical.copy()
+            canonical_ranking=ranking.copy()
+            # 对象明确的维度补召回仍保留，但排在真实召回后。
+            for cid in fallback:ranking.setdefault(cid,1.0)
+            from .retrieval_ranking import adjacent_context
+            # 已验收的列举上下文仍从原召回的种子扩展；句段不能关闭该协议。
+            initial_ids=sorted(canonical_ranking,key=lambda cid:(cid not in intent['preferred'],canonical_ranking[cid],cid))
+            context_ids=adjacent_context(request['query'],initial_ids,eligible_rows) if not intent['objects'] else []
+            for cid in context_ids:ranking.setdefault(cid,0.0)
+            matches=[(score,cid,eligible[cid]) for cid,score in ranking.items() if cid in eligible]
+            retrieval={'mode':'hybrid' if semantic['mode']=='vector' else 'fts5',
+                       'vector_reason':semantic['reason'],'vector_candidate_count':len(semantic['scores']),
+                       'vector_used':bool(semantic['scores']),
+                       'lexical_candidate_count':len(set(lexical).union(*(set(view) for view in extra_lexical.values()))),
+                       'structured_intent':intent['fields'],'field_candidate_count':len(intent['preferred']),
+                       'query_alias_policy':ALIAS_POLICY,'query_projection_used':bool(projection),
+                       'semantic_view_count':sum(bool(v) for v in semantic.get('views',{}).values()),
+                       'vector_branches':semantic.get('branches',[]),
+                       'query_view_failures':semantic.get('view_failures',{}),
+                       'cross_language_route':alignment_required,
+                       'public_concept_coverage':round(coverage,6),
+                       'query_translation':translation_meta,
+                       'query_segments':segment_meta,
+                       'structure_index':{k:v for k,v in structure.items()
+                                          if k not in ('parent_groups','evidence_groups')},
+                       'context_candidate_count':max(0,len(context_ids)-1),
+                       'ranking_policy':RANKING_POLICY,
+                       'ranking_method':'coverage_weighted_rrf' if semantic['scores'] or extra_lexical else 'bm25_with_field_intent'}
+            object_ids={r['id'] for r in eligible_rows if r['product_id'] in intent['objects']}
+            matches.sort(key=lambda r:(bool(object_ids) and r[1] not in object_ids,r[1] not in intent['preferred'],
+                                      context_ids.index(r[1]) if r[1] in context_ids else len(context_ids),r[0],r[1]))
+            from .public_institutions import order_public_institution_coverage, POLICY as INSTITUTION_POLICY
+            if intent['objects']:
+                retrieval['institution_coverage']={'policy':INSTITUTION_POLICY,'used':False,
+                                                   'reason':'structured_product_intent'}
+            else:
+                matches,institution_coverage=order_public_institution_coverage(request['query'],matches,eligible_rows)
+                retrieval['institution_coverage']=institution_coverage
             selected=[]
-            for facet in facets:
-                candidate=next((m for m in matches if facet in m[2] and m[1] not in selected),None)
-                if candidate and len(selected)<limit:selected.append(candidate[1]);covered.update(candidate[2])
-            for match in matches:
-                if len(selected)>=limit:break
-                if match[1] not in selected:selected.append(match[1]);covered.update(match[2])
+            if structure['used']:
+                from .evidence_group_selection import (plan_evidence_groups,fuse_group_candidates,
+                                                       ORIGINAL_GEOMETRY_POLICY)
+                institution=retrieval['institution_coverage']
+                seed_count=len(institution.get('participating_institution_ids',[])) if institution['used'] else 0
+                seed_ids=[match[1] for match in matches[:seed_count]]
+                context_groups=[]
+                if context_ids:
+                    seed_ids=list(dict.fromkeys([*seed_ids,*context_ids]))[:8]
+                    rows_by_id={row['id']:row for row in eligible_rows}
+                    context_rows=[rows_by_id[cid] for cid in context_ids]
+                    context_groups=[{'group_id':'ctx-'+sha(packed(context_ids)),
+                        'kind':'required_context','core':True,'complete':True,
+                        'citation_ids':context_ids,'version_id':context_rows[0]['version_id'],
+                        'start_char':min(row['start_char'] for row in context_rows),
+                        'end_char':max(row['end_char'] for row in context_rows),
+                        'score':canonical_ranking.get(context_ids[0],0.0)}]
+                ranking_ids=[];seed_group_ids=[];preferred_group_ids=[]
+                if os.environ.get('NAVREN_RERANK_ENABLED','0')=='1':
+                    from .query_group_retrieval import rank_query_groups
+                    groups=fuse_group_candidates(matches,structure.get('evidence_groups',[]),
+                        eligible_ids=set(eligible),canonical_rows=eligible_rows,context_groups=context_groups)
+                    ranking_ids,seed_group_ids,rerank_meta=rank_query_groups(
+                        db,semantic_query,groups,eligible_rows,segment_structures,translated_query=translation)
+                    retrieval['reranking']=rerank_meta
+                    preferred_group_ids=rerank_meta.get('preferred_evidence_group_ids',
+                                                       rerank_meta.get('preferred_original_group_ids',[]))
+                    if rerank_meta['segment_missing_core_count']:
+                        gaps.append({'code':'context_incomplete'})
+                selected,context_budget=plan_evidence_groups(matches,structure.get('evidence_groups',[]),
+                    eligible_ids=set(eligible),limit=limit,facets=facets,seed_ids=seed_ids,
+                    canonical_rows=eligible_rows,context_groups=context_groups,
+                    ranking_ids=ranking_ids,seed_group_ids=seed_group_ids,
+                    preferred_group_ids=preferred_group_ids)
+                retrieval['structure_index']['rank_fusion']='canonical_evidence_group_exact_geometry_rrf/2'
+                retrieval['structure_index']['original_geometry_policy']=ORIGINAL_GEOMETRY_POLICY
+                retrieval['structure_index']['context_budget']=context_budget
+                if (context_budget['incomplete_accepted_groups']
+                        or context_budget['uncovered_seed_ids']
+                        or context_budget.get('uncovered_seed_group_ids')):
+                    gaps.append({'code':'context_incomplete'})
+                for cid in selected:covered.update(eligible[cid])
+            else:
+                # 先覆盖独立维度，再用分数补足。
+                for facet in facets:
+                    candidate=next((m for m in matches if facet in m[2] and m[1] not in selected),None)
+                    if candidate and len(selected)<limit:selected.append(candidate[1]);covered.update(candidate[2])
+                for match in matches:
+                    if len(selected)>=limit:break
+                    if match[1] not in selected:selected.append(match[1]);covered.update(match[2])
+            from .field_semantics import assess_semantic_coverage
+            semantic_coverage=assess_semantic_coverage(request['query'],eligible_rows,intent['objects'],selected_ids=selected)
+            retrieval['semantic_coverage']=semantic_coverage
+            gaps.extend(semantic_coverage['coverage_gaps'])
         gaps.extend({'code':'facet_uncovered','facet':f} for f in facets if f not in covered)
         if not selected:gaps.append({'code':'no_verified_evidence'})
         if 'sale_status' in facets:gaps.append({'code':'sale_status_unknown','facet':'sale_status'})
         unique=[];seen=set()
         for gap in gaps:
-            key=(gap['code'],gap.get('facet'))
+            key=(gap['code'],gap.get('facet'),gap.get('product_id'),gap.get('role'),gap.get('field'))
             if key not in seen:unique.append(gap);seen.add(key)
-        return {'schema_version':1,'release_id':release_id,'citation_ids':selected,'coverage_gaps':unique[:32]}
+        return {'schema_version':1,'release_id':release_id,'citation_ids':selected,'coverage_gaps':unique[:32],
+                'retrieval':retrieval}
 
     def resolve_public_evidence(self,citation_id,release_id,as_of):
         ident(citation_id);ident(release_id);day(as_of)
         return self.resolve_public_evidence_batch([citation_id],release_id,as_of)[citation_id]
 
+    @_market_operation()
     def resolve_public_evidence_batch(self,citation_ids,release_id,as_of):
         """Resolve up to 64 references at one as-of in a single read snapshot.
 
@@ -807,10 +1102,12 @@ class LocalKnowledgeProvider:
         from .importers import import_webank_disclosure
         return import_webank_disclosure(self,body,**options)
 
+    @_market_operation()
     def graph_trace(self,citation_id,release_id,as_of, *, request=None):
         """本地审计接口；消费合同不额外夹带可泄漏字段。"""
         from .graph import paths
         with self.db() as db:
+            db.execute('BEGIN')
             row=next((r for r in self._rows(db,release_id) if r['id']==citation_id),None)
             if row is None:return {'paths':[],'coverage_gaps':[{'code':'evidence_unavailable'}]}
             facets,reason=self._available(db,row,as_of)
@@ -819,6 +1116,7 @@ class LocalKnowledgeProvider:
             return {'citation_id':citation_id,'release_id':release_id,'paths':traces or [],
                     'coverage_gaps':[] if traces else [{'code':'not_enough_evidence','reason':'graph_path_missing'}]}
 
+    @_market_operation()
     def graph_search(self,request,release_id):
         result=self.search_public(request,release_id)
         return {**result,'graph_traces':[self.graph_trace(cid,release_id,request['as_of'],request=request) for cid in result['citation_ids']]}
@@ -831,24 +1129,92 @@ class LocalKnowledgeProvider:
         with self.db() as db:
             db.execute("UPDATE graph_relations SET status='withdrawn' WHERE id=?",(relation_id,))
 
+    @_market_operation()
     def related_products(self,product_id,release_id,as_of, **options):
         from .graph import related_products
         return related_products(self,product_id,release_id,as_of,**options)
 
+    @_market_operation()
+    def public_identity_catalog(self, *, release_id=None, as_of=None, limit=64):
+        """Trusted, fixed-release identity discovery only; no terms/fee authority.
+
+        The legacy public_catalog remains unchanged. Labels and parent/share
+        links come only from usable reviewed graph edges on general originals.
+        A code label is never expanded into an inferred A/C share name.
+        """
+        if type(limit) is not int or not 1 <= limit <= 64:
+            raise KnowledgeError('invalid_limit')
+        as_of = day(as_of or today())
+        records, seen = [], set()
+        with self.db() as db:
+            db.execute('BEGIN')
+            if release_id is None:
+                current = db.execute("SELECT release_id FROM current_release WHERE scope='public'").fetchone()
+                release_id = self.fixed_release or (current[0] if current else None)
+            if release_id is None:
+                return {'schema': 'navren.public-identity-catalog/1', 'release_id': None,
+                        'as_of': as_of, 'entities': []}
+            ident(release_id)
+            if self.fixed_release is not None and release_id != self.fixed_release:
+                raise KnowledgeError('release_mismatch')
+            if not self._release_manifest_valid(db, release_id):
+                raise KnowledgeError('release_manifest_mismatch')
+            from .graph import paths, _usable_edge, entity_id
+            checked = {}
+            rows = sorted(self._rows(db, release_id), key=lambda r: (
+                r['product_id'] or '', r['share_class_id'] or '', r['id']))
+            for row in rows:
+                facets, _ = self._available(db, row, as_of, checked)
+                if 'general' not in facets or paths(db, row, as_of, facets=facets) is None:
+                    continue
+                edges = [dict(e) for e in db.execute(
+                    'SELECT * FROM graph_relations WHERE citation_id=? AND version_id=?',
+                    (row['id'], row['version_id'])) if _usable_edge(db, e, as_of)]
+                for field, kind in (('product_id', 'product'),
+                                    ('share_class_id', 'share_class'), ('channel_id', 'channel')):
+                    public_ref = row[field]
+                    if not public_ref or (kind, public_ref) in seen:
+                        continue
+                    gid = entity_id(kind, public_ref)
+                    if not any(e['subject_id'] == gid or e['object_id'] == gid for e in edges):
+                        continue
+                    parent = row['product_id'] if kind == 'share_class' else None
+                    if kind == 'share_class' and not any(
+                            e['predicate'] == 'has_share_class'
+                            and e['subject_id'] == entity_id('product', parent)
+                            and e['object_id'] == gid for e in edges):
+                        continue
+                    named = db.execute("SELECT label FROM graph_entities WHERE id=? AND scope='public'",
+                                       (gid,)).fetchone()
+                    if not named or not isinstance(named['label'], str):
+                        continue
+                    records.append({'label': named['label'], 'kind': kind,
+                                    'public_ref': public_ref, 'parent_product_ref': parent,
+                                    'citation_id': row['id']})
+                    seen.add((kind, public_ref))
+                    if len(records) == limit:
+                        return {'schema': 'navren.public-identity-catalog/1', 'release_id': release_id,
+                                'as_of': as_of, 'entities': records}
+        return {'schema': 'navren.public-identity-catalog/1', 'release_id': release_id,
+                'as_of': as_of, 'entities': records}
+
+    @_market_operation()
     def public_catalog(self, *, limit=5000):
         """稳定公共身份允许名单；条款过期不把历史公开对象变成私有对象。"""
         if type(limit) is not int or not 1<=limit<=5000:raise KnowledgeError('invalid_limit')
         terms=[];identifiers=[];seen=set()
         with self.db() as db:
+            db.execute('BEGIN')
             checked={}
-            rows=db.execute('''SELECT DISTINCT c.*,v.document_id,v.parse_id,v.title,v.published_on,v.retrieved_on,
+            rows=db.execute('''SELECT DISTINCT c.*,v.document_id,v.parse_id,v.shape,v.title,v.published_on,v.retrieved_on,
                 v.effective_from,v.effective_to,v.status,v.revoked_from,v.parsed_sha256,v.raw_sha256,
-                s.enabled,s.read_allowed,s.outbound_allowed,s.endpoints,d.source_url,d.visibility,d.data_origin,p.verified
+                s.enabled,s.read_allowed,s.outbound_allowed,s.endpoints,d.source_id,d.source_url,d.visibility,d.data_origin,p.verified
                 FROM releases r JOIN release_chunks rc ON rc.release_id=r.id JOIN chunks c ON c.id=rc.chunk_id
                 JOIN document_versions v ON v.id=c.version_id JOIN documents d ON d.id=v.document_id
                 JOIN sources s ON s.id=d.source_id LEFT JOIN products p ON p.id=c.product_id
                 WHERE r.sealed=1 AND r.temporary=0 ORDER BY v.created_at DESC,c.id''')
             for row in rows:
+                if not self._market_available(db,row):continue
                 if (row['status']!='verified' or row['visibility']!='public' or row['data_origin']!='real'
                         or not row['enabled'] or not row['read_allowed'] or not row['outbound_allowed']):continue
                 if row['product_id'] and not row['verified']:continue

@@ -1,0 +1,48 @@
+{
+  "schema": "navren.product-insurance.transaction-fault-protocol/1",
+  "case_id": "PI-X06",
+  "status": "PENDING_SAME_VERSION_OWNER_FREEZE_AND_OPERATION_MAPPING",
+  "source_seam": {
+    "path": "research_workspace.py",
+    "method": "ResearchWorkspace.transaction",
+    "private_commit_marker": "after_private_commit",
+    "bank_commit_boundary": "exit of simulated_bank.service.SimulatedBank.transaction",
+    "stores": ["private workspace SQLite", "bank SQLite"]
+  },
+  "fixture": {
+    "identity": "fresh registered test identity only",
+    "databases": "separate temporary private and bank SQLite databases under the acceptance temp root",
+    "task": "one confirmed synthetic task with calendar and message reminders enabled",
+    "attachments": "synthetic bytes with SHA-256 read-back only",
+    "operation": "only a pre-existing simulated operation and its receipt; no real transaction or real delivery"
+  },
+  "faults": [
+    {
+      "id": "PI-X06-COMMIT-EXCEPTION",
+      "injection": "raise once after private SQLite commit and before bank SQLite commit",
+      "restart": "construct a fresh ResearchWorkspace over the same temporary stores and perform a read",
+      "assertions": [
+        "Before recovery, exactly one private task and one pending outbox event exist; bank reminder rows and bank recovery receipt are absent because the bank transaction rolled back.",
+        "Recovery applies the pending event under its original stable event id and event hash, then marks the outbox done only after the bank transaction commits.",
+        "After recovery, the task retains the same id and revision; exactly one linked calendar row, message row and bank recovery receipt exist.",
+        "Repeated workspace/task reads preserve the same identities and leave all row counts at one.",
+        "The operation id and original operation receipt are read back exactly; no new operation is submitted. If its outcome cannot be established, the task remains unknown/blocked and asks for reconciliation."
+      ]
+    },
+    {
+      "id": "PI-X06-PROCESS-INTERRUPTION",
+      "injection": "terminate a child process immediately after after_private_commit and before bank transaction exit; do not run Python cleanup handlers",
+      "restart": "start a fresh child/handler process with the same temporary database files and test identity, then perform a read",
+      "assertions": [
+        "SQLite recovery preserves the committed private record and pending outbox while discarding the uncommitted bank transaction.",
+        "The same recovery and exact-once row-count assertions from PI-X06-COMMIT-EXCEPTION pass after process restart.",
+        "No real SMS, email, external calendar write, paid model, production service, or production account is used."
+      ]
+    }
+  ],
+  "operation_receipt_subassertion": {
+    "status": "PENDING_OPERATION_LINK_ROUTE_AND_OWNER_ADAPTER",
+    "rule": "Use the existing simulated operation idempotency key and immutable operation receipt. Query/read back unknown outcomes; never retry under a new operation id or claim success without receipt."
+  },
+  "acceptance_rule": "This is a subassertion of PI-X06, not a 25th case. Do not mark PI-X06 passed until both injected faults, fresh-process recovery, attachment byte/hash read-back, reminder exact-once counts, and operation receipt read-back pass on one frozen implementation version."
+}

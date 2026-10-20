@@ -1,0 +1,196 @@
+{
+  "schema": "navren.product-insurance.acceptance-api-map/1",
+  "source_contract": {
+    "path": "outputs/product-insurance-implementation-20261018/base/api-contract.json",
+    "sha256": "73b1ed6609908df91bd4c7c8b7755ddec21417c9bd2117bc5e62cfc638f8006f",
+    "contract": "navren.research-workspace/1",
+    "status": "FROZEN_V1_IMPLEMENTING"
+  },
+  "purpose": "PI-ACCEPT normalized test map. It mirrors the frozen base contract and does not define a second business API.",
+  "identity_headers": {
+    "private_requests": [
+      "Cookie",
+      "X-Navren-Workspace",
+      "X-Navren-Privacy-Revision"
+    ],
+    "private_writes_add": [
+      "X-QZ-CSRF"
+    ],
+    "owner_override_in_json": false
+  },
+  "routes": {
+    "public.catalog": {
+      "method": "GET",
+      "path": "/api/finance/research/catalog",
+      "read_only": true,
+      "query": [
+        "q",
+        "kind",
+        "customer_group",
+        "limit",
+        "offset",
+        "capability"
+      ]
+    },
+    "public.entity_detail": {
+      "method": "GET",
+      "path": "/api/finance/research/entities/{entity_id}",
+      "read_only": true,
+      "response_binding": [
+        "entity_id",
+        "evidence_version",
+        "provider_revision"
+      ]
+    },
+    "public.entity_documents": {
+      "method": "GET",
+      "path": "/api/finance/research/entities/{entity_id}/documents",
+      "read_only": true,
+      "response_binding": [
+        "document_id",
+        "sha256",
+        "source_version",
+        "locator",
+        "url"
+      ]
+    },
+    "private.workspace.read": {
+      "method": "GET",
+      "path": "/api/finance/research/workspace",
+      "private": true,
+      "read_only": true
+    },
+    "private.policies.read": {
+      "method": "GET",
+      "path": "/api/finance/research/policies",
+      "private": true,
+      "read_only": true
+    },
+    "private.tasks.read": {
+      "method": "GET",
+      "path": "/api/finance/research/tasks",
+      "private": true,
+      "read_only": true
+    },
+    "private.record.read": {
+      "method": "GET",
+      "path": "/api/finance/research/records/{id}",
+      "private": true,
+      "read_only": true
+    },
+    "private.record.versions": {
+      "method": "GET",
+      "path": "/api/finance/research/records/{id}/versions",
+      "private": true,
+      "read_only": true
+    },
+    "private.operation.readback": {
+      "method": "GET",
+      "path": "/api/finance/research/operations/{operation_id}",
+      "private": true,
+      "read_only": true,
+      "unknown_result_rule": "query_original_operation_never_resubmit"
+    },
+    "private.workspace.write": {
+      "method": "POST",
+      "path": "/api/finance/research/workspace",
+      "private": true,
+      "mutates": true,
+      "requires_expected_revision": true,
+      "confirmed_field": true
+    },
+    "private.compare.write": {
+      "method": "POST",
+      "path": "/api/finance/research/compare",
+      "private": true,
+      "mutates": true,
+      "requires_expected_revision": true,
+      "requires_evidence_versions_map": true,
+      "confirmed_field": true
+    },
+    "private.policies.write": {
+      "method": "POST",
+      "path": "/api/finance/research/policies",
+      "private": true,
+      "mutates": true,
+      "requires_expected_revision": true,
+      "confirmed_field": true
+    },
+    "private.tasks.write": {
+      "method": "POST",
+      "path": "/api/finance/research/tasks",
+      "private": true,
+      "mutates": true,
+      "requires_expected_revision": true,
+      "confirmed_field": true
+    },
+    "private.record.delete": {
+      "method": "POST",
+      "path": "/api/finance/research/records/{id}/delete",
+      "private": true,
+      "mutates": true,
+      "requires_expected_revision": true,
+      "soft_delete_only": true
+    },
+    "private.prepare": {
+      "method": "POST",
+      "path": "/api/finance/research/prepare",
+      "private": true,
+      "financial_side_effect_possible": true,
+      "default_harness_enabled": false,
+      "requires_original_operation_gates": true
+    },
+    "private.operation.link": {
+      "method": "POST",
+      "path": "/api/finance/research/records/{id}/operations",
+      "private": true,
+      "mutates": true,
+      "links_existing_operation_only": true
+    },
+    "private.attachment.upload": {
+      "method": "POST",
+      "path": "/api/finance/research/attachments",
+      "private": true,
+      "binary": true,
+      "mutates": true,
+      "max_bytes": 10485760,
+      "allowed_mime_types": [
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/webp"
+      ],
+      "requires_query_free_path": true
+    },
+    "private.attachment.read": {
+      "method": "GET",
+      "path": "/api/finance/research/attachments/{id}",
+      "private": true,
+      "binary": true,
+      "read_only": true,
+      "must_return_original_bytes": true
+    }
+  },
+  "version_and_cas": {
+    "workspace_revision_scope": "global per private workspace; separate persona revisions",
+    "successful_mutation": "increments once",
+    "stale_or_forged_revision": "409",
+    "source_changed": "409 RESEARCH_EVIDENCE_CHANGED",
+    "immutable_record_versions": true
+  },
+  "evidence_mapping": {
+    "level_1": "public entity_id -> exact evidence_version returned by detail; pass that map into compare",
+    "level_2": "every verified numeric/math fact -> source_id + source_version + locator that resolves through the same entity evidence bundle/document list",
+    "positive_compare_requires": "at least one relevant verified source-backed fact for each required non-optional field; all-missing results cannot be labelled complete",
+    "unknown_or_missing": "preserve missing/conflict/stale/restricted state with reason; never synthesize channel fee or policy clause"
+  },
+  "write_safety": {
+    "default_enabled": false,
+    "requires_isolated_instance_manifest": true,
+    "requires_test_identity_and_test_token": true,
+    "production_cookie_or_browser_state_forbidden": true,
+    "60291_restart_forbidden": true,
+    "prepare_requires_separate_operation_gate": true
+  },
+  "status_boundary": "FROZEN_V1_IMPLEMENTING is interface freeze only; no implementation or runtime acceptance implied."
+}

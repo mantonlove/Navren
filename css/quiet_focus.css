@@ -1,0 +1,29 @@
+/* 全站焦点规范：输入只轻微改变边框，键盘操作使用细中性色提示。 */
+:root {
+  --focus-edge: color-mix(in srgb, var(--ink, #202b3a) 27%, var(--border, #d5e1ef));
+}
+body :is(input, select, textarea, [contenteditable="true"]):focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: var(--focus-edge) !important;
+}
+body :is(button, a, summary, [tabindex]):focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+body :is(button, a, summary, [tabindex]):focus-visible {
+  outline: 1px solid var(--focus-edge) !important;
+  outline-offset: 2px !important;
+  box-shadow: none !important;
+}
+/* 页面切换会将焦点移到页标题以便辅助技术读取；标题不可操作，不显示矩形焦点框。 */
+body .header-location[data-view-heading]:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+body :is(.nv-control-trigger, .navren-month-trigger, .cd-choice-button, .ah-payer-trigger):focus {
+  border-color: var(--focus-edge) !important;
+}
+body :is(input, select, textarea)[aria-invalid="true"]:focus {
+  border-color: var(--danger, #b84741) !important;
+}

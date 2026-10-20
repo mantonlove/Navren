@@ -38,6 +38,9 @@ class PageContexts:
 
     def resolve(self,w,ref):
         if ref is None:return None
+        if self._history_requested(ref):
+            reference, local_binding = self._resolve_history(w, ref)
+            return reference
         strict_fields(ref,['kind','id','source_scope','version','label','parameters'],['kind','id'])
         kind=ref['kind'];rid=ref['id'];source=ref.get('source_scope','simulation');expected=ref.get('version')
         if not isinstance(rid,str) or not 1<=len(rid)<=128:raise BankError('OBJECT_REFERENCE_INVALID','对象标识无效。')
@@ -110,19 +113,45 @@ class PageContexts:
             else:raise BankError('OBJECT_REFERENCE_INVALID','尚不支持此类对象引用，请移除引用后提问。')
         if obj is None:raise BankError('OBJECT_NOT_FOUND','引用对象不存在、已删除或不属于当前账户。',404)
         if expected is not None and (actual is None or str(expected)!=str(actual)):raise BankError('OBJECT_VERSION_CONFLICT','引用对象版本已变化或无法核对，请重新查阅后提问。',409)
+        # 公共资料的标题来自本轮核对的对象，不能把浏览器提交的标签当作原文。
+        label=(obj.get('headline') or obj.get('title_cn') or obj.get('title')
+               if kind in ('event','article','weekly') else None)
         return {'kind':kind,'id':rid,'source_scope':source,'version':actual,'parameters':deepcopy(parameters),
-                'label':str(ref.get('label',rid))[:100],'execution_authority':False}
+                'label':str(label or ref.get('label',rid))[:100],'execution_authority':False}
 
     def create(self,w,token,p):
         strict_fields(p,['question','reference','return_view','draft_only'],['question','return_view'])
         draft_only=p.get('draft_only',False)
         if type(draft_only) is not bool:raise BankError('PAGE_CONTEXT_INVALID','提问草稿状态无效。')
         question=p['question']
-        if not isinstance(question,str) or not (0 if draft_only else 1)<=len(question.strip())<=6000:raise BankError('INVALID_TEXT','问题需要1至6000字。')
-        if draft_only and not question.strip() and not p.get('reference'):raise BankError('PAGE_CONTEXT_INVALID','请先选择要关联的对象。')
-        result={'id':uuid.uuid4().hex,'question':question.strip(),'draft_only':draft_only,'reference':self.resolve(w,p.get('reference')),
+        if not isinstance(question,str) or len(question.strip())>6000:raise BankError('INVALID_TEXT','问题不能超过6000字。')
+        history_binding=None
+        if self._history_requested(p.get('reference')):
+            initial_revision=self.revision(w)
+            reference,history_binding=self._resolve_history(w,p['reference'])
+            if initial_revision!=self.revision(w):
+                raise BankError('PAGE_CONTEXT_REVOKED','资料授权已变化，请重新选择历史版本。',409)
+        else:
+            reference=self.resolve(w,p.get('reference'))
+        if not question.strip() and reference is None:raise BankError('PAGE_CONTEXT_INVALID','请先输入问题或选择要关联的资料。')
+        request_mode=('reference_question' if question.strip() else 'reference_overview') if reference else 'question'
+        result={'id':uuid.uuid4().hex,'question':question.strip(),'draft_only':draft_only,'reference':reference,'request_mode':request_mode,
                 'return_view':self.safe_view(p['return_view']),'workspace_id':w,'privacy_revision':self.revision(w)}
         result.update(expires_at=time.time()+1200,claimed=False,used=False,token=hashlib.sha256(token.encode()).hexdigest())
+        if history_binding is not None:
+            if result['privacy_revision']!=initial_revision:
+                raise BankError('PAGE_CONTEXT_REVOKED','资料授权已变化，请重新选择历史版本。',409)
+            expected_view={'page':'recommend','view':'weekly' if reference['kind']=='weekly' else 'reading',
+                'object_kind':reference['kind'],'object_id':reference['id'],'object_version':reference['version'],
+                'time_view':'historical_audit'}
+            if any(k in result['return_view'] and result['return_view'][k]!=v for k,v in expected_view.items()):
+                raise BankError('HISTORY_SELECTION_INVALID','返回视图与所选历史版本不一致。',400)
+            if reference['kind']=='weekly' and result['return_view'].get('period',reference['id'])!=reference['id']:
+                raise BankError('HISTORY_SELECTION_INVALID','返回周报期号与所选历史版本不一致。',400)
+            result['return_view'].update(expected_view)
+            result['return_view']['source_scope']='public_market'
+            if reference['kind']=='weekly':result['return_view']['period']=reference['id']
+            result['_history_binding']=deepcopy(history_binding)
         with self.lock:
             self.entries={k:v for k,v in self.entries.items() if v['expires_at']>time.time()}
             if sum(v['workspace_id']==w for v in self.entries.values())>=32:raise BankError('PAGE_CONTEXT_LIMIT','待处理提问过多，请先完成已有提问。',429)
@@ -138,8 +167,15 @@ class PageContexts:
 
     def claim(self,w,token,cid):
         with self.lock:
-            item=self._entry(w,token,cid);fresh=not item['claimed'];item['claimed']=True
-            return {k:deepcopy(v) for k,v in item.items() if k not in ('token','expires_at')}|{'open_once':fresh and not item['used'],'send_once':fresh and not item['used'] and not item['draft_only']}
+            item=self._entry(w,token,cid)
+            if item.get('_history_binding') is not None:
+                api=self._history_api();market=getattr(self.g,'market',None)
+                if market is None:raise BankError('MARKET_HISTORY_UNAVAILABLE','历史资料暂不可用。',503)
+                with market.db() as history_db:
+                    history_db.execute('BEGIN')
+                    api.assert_local_binding(market,item['_history_binding'],db=history_db)
+            fresh=not item['claimed'];item['claimed']=True
+            return {k:deepcopy(v) for k,v in item.items() if k not in ('token','expires_at','_history_binding')}|{'open_once':fresh and not item['used'],'send_once':fresh and not item['used'] and not item['draft_only']}
 
     def consume(self,w,token,cid,text):
         with self.lock:
@@ -147,7 +183,58 @@ class PageContexts:
             if item['draft_only']:raise BankError('PAGE_CONTEXT_DRAFT','这是聊天草稿，请在对话页确认问题后发送。',409)
             if item['used']:raise BankError('PAGE_CONTEXT_CONSUMED','此提问已经发送，请查询已有答复；不会自动重复提交。',409)
             if text.strip()!=item['question']:raise BankError('PAGE_CONTEXT_MISMATCH','问题已修改，请移除旧引用后重新发送。',409)
+            if item.get('_history_binding') is not None:
+                api=self._history_api()
+                market=getattr(self.g,'market',None)
+                if market is None:raise BankError('MARKET_HISTORY_UNAVAILABLE','历史资料暂不可用。',503)
+                with market.db() as history_db:
+                    history_db.execute('BEGIN IMMEDIATE')
+                    api.assert_local_binding(market,item['_history_binding'],db=history_db)
+                    reference=deepcopy(item['reference'])
+                    reference['request_mode']=item['request_mode']
+                    issued=api.issue_host_context(reference,item['_history_binding'],owner=self,workspace=w,
+                        session_hash=item['token'],expires_at=item['expires_at'])
+                item['used']=True
+                return issued
             raw={k:v for k,v in item['reference'].items() if k!='execution_authority'} if item['reference'] else None
             ref=self.resolve(w,raw) if raw else None
+            if ref is not None:ref['request_mode']=item['request_mode']
             item['used']=True
             return ref
+
+    @staticmethod
+    def _history_requested(ref):
+        # 普通引用不加载历史消费模块；仅显式历史参数进入独立合同。
+        return isinstance(ref,dict) and (isinstance(ref.get('parameters'),dict)
+            and 'reading_mode' in ref['parameters'] or 'reading_mode' in ref)
+
+    @staticmethod
+    def _history_api():
+        try:
+            from agent_runtime import history_binding
+            for name in ('MODE','checked_request','read_exact','make_local_binding',
+                         'assert_local_binding','issue_host_context'):
+                if not hasattr(history_binding,name):raise ImportError('history interface incomplete')
+            return history_binding
+        except ImportError as error:
+            raise BankError('MARKET_HISTORY_UNAVAILABLE','历史查阅接口尚未完整接线，请稍后重试。',503) from error
+
+    def _resolve_history(self,w,ref):
+        strict_fields(ref,['kind','id','source_scope','version','label','parameters'],['kind','id','version','parameters'])
+        if ref.get('source_scope')!='market' or ref.get('parameters')!={'reading_mode':'historical_audit'}:
+            raise BankError('HISTORY_SELECTION_INVALID','历史引用需要明确公开来源与历史复核模式。',400)
+        api=self._history_api()
+        MODE,checked_request,read_exact,make_local_binding=(api.MODE,api.checked_request,api.read_exact,api.make_local_binding)
+        requested=checked_request({'kind':ref['kind'],'id':ref['id'],'version':ref['version'],'reading_mode':MODE})
+        market=getattr(self.g,'market',None)
+        if market is None:raise BankError('MARKET_HISTORY_UNAVAILABLE','历史资料暂不可用。',503)
+        with market.db() as history_db:
+            history_db.execute('BEGIN')
+            packet=read_exact(market,requested,db=history_db)
+            binding=make_local_binding(market,packet,db=history_db)
+        body=packet['data'].get('article') if requested['kind']=='article' else packet['data'].get('report')
+        if not isinstance(body,dict):raise BankError('HISTORY_SELECTION_INVALID','历史版本正文无法核对。',409)
+        label=body.get('headline') or body.get('title_cn') or body.get('title') or requested['id']
+        return {'kind':requested['kind'],'id':requested['id'],'source_scope':'market','version':requested['version'],
+                'parameters':{'reading_mode':MODE},'label':str(label)[:100],'execution_authority':False,
+                'reading_mode':MODE,'historical_only':True,'current_evidence_eligible':False},binding

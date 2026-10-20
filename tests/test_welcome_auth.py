@@ -237,7 +237,7 @@ class WelcomeAuthTests(unittest.TestCase):
         self.upstream.continue_stream = threading.Event()
         self.upstream.stream_finished = threading.Event()
         self.service = create_welcome_server(0, self.root / 'auth.sqlite3', root=self.root,
-            upstream_port=self.upstream.server_port, clock=lambda: self.now[0])
+            upstream_port=self.upstream.server_port, clock=lambda: self.now[0], allow_unverified_registration=True,allow_legacy_experience=True)
         self.threads = []
         for instance in (self.upstream, self.service):
             thread = threading.Thread(target=instance.serve_forever, daemon=True)
@@ -430,7 +430,7 @@ class WelcomeAuthTests(unittest.TestCase):
 
     def test_old_auth_database_adds_experience_fields_without_changing_existing_account(self):
         database = self.root / 'legacy-auth.sqlite3'
-        old_auth = WelcomeAuth(database, clock=lambda: self.now[0])
+        old_auth = WelcomeAuth(database, clock=lambda: self.now[0], allow_unverified_registration=True)
         token, session = old_auth.register('legacy-user', 'test-passphrase-42', None)
         with closing(sqlite3.connect(database)) as db:
             original = db.execute('SELECT id,username,salt,password_hash,created_at FROM welcome_users').fetchone()

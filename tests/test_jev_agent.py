@@ -1,6 +1,7 @@
 import io
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -20,7 +21,7 @@ class Judge:
         self.selection, self.confidence, self.error = selection, confidence, error
         self.states = []
 
-    def evaluate(self, state, questions):
+    def evaluate(self, state, questions, *, deadline=None):
         self.states.append(state)
         if self.error:
             raise self.error
@@ -57,12 +58,13 @@ class NeverReviewer:
 
 
 class JevTest(unittest.TestCase):
-    def test_live_jev_route_is_blocked_when_it_would_leave_aiping(self):
-        with self.assertRaisesRegex(ValueError, 'jev_provider_not_available_via_aiping'):
+    def test_active_mode_requires_and_accepts_official_typesafe_jev_client(self):
+        with self.assertRaisesRegex(ValueError, 'jev_provider_required'):
             JevConversationAgent(jev_mode='active')
 
-        with self.assertRaisesRegex(ValueError, 'jev_provider_not_available_via_aiping'):
-            JevConversationAgent(jev_mode='active', judge=JevClient())
+        agent = JevConversationAgent(jev_mode='active', judge=JevClient())
+        self.assertEqual(agent.judge.url, 'https://api.typesafe.ai/v1/systemone')
+        self.assertEqual(agent.judge.model_id, 'jev-1.13.0')
 
     def test_transport_protocol_and_secret_not_in_receipt(self):
         captured = []
@@ -132,6 +134,9 @@ class JevTest(unittest.TestCase):
         client = SkillPrimedClient(primary, judge, mode='active', debit=debit.append)
         messages = [{'role': 'system', 'content': 'trusted'}, {'role': 'user',
                     'content': json.dumps({'current_request': '已匿名化问题', 'server_context': {'private': 'excluded'}})}]
+        self.assertEqual(client.request_input_bound(messages, []), primary.request_input_bound(messages, []))
+        self.assertEqual(judge.states, [])
+        client.prepare_turn(messages, deadline=time.monotonic()+10)
         bound = client.request_input_bound(messages, [])
         client.complete(messages, [], request_id='x', remaining_seconds=10)
         client.request_input_bound(messages, [])
@@ -180,6 +185,7 @@ class JevTest(unittest.TestCase):
         client = SkillPrimedClient(primary, judge, mode='active', debit=lambda x: None)
         messages = [{'role': 'system', 'content': 'trusted'}, {'role': 'user',
                     'content': json.dumps({'current_request': '问题'})}]
+        client.prepare_turn(messages, deadline=time.monotonic()+10)
         self.assertEqual(client.serialized_request(messages, []), primary.serialized_request(messages, []))
         self.assertFalse(client.selection['applied'])
 

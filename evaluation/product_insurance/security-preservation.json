@@ -1,0 +1,170 @@
+{
+  "schema": "navren.product-insurance.security-preservation/1",
+  "purpose": "Immutable reference projection of the original mandatory contract; the 24 new cases add coverage and waive or pass none of its original controls.",
+  "source": {
+    "path": "outputs/security-requirements-20261008/acceptance-contract.json",
+    "sha256": "b7b1d1e4b60cf155a2ddb107706cb573af92bca155ef87df0fd7fe207f52ef7e"
+  },
+  "mandatory": true,
+  "source_status": "REQUIRED_NOT_ACCEPTED",
+  "all_requirements_complete": false,
+  "count": 14,
+  "requirements": [
+    {
+      "id": "G01",
+      "name": "绿色自动查询",
+      "required": "余额、交易、账单分析及理财收益纯查询，确定意图后直接读取，无二次许可。",
+      "acceptance": "真实入口逐项完成、无确认卡、无金融写入；权限不足准确拒绝。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [
+        "PI-P01",
+        "PI-P07",
+        "PI-X01"
+      ],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "Y01",
+      "name": "黄色小额转账",
+      "required": "同一用户业务日内已执行累计加本次转账 ≤100000 分，展示对象、金额、费用并取得明确本人确认。",
+      "acceptance": "100000 与100001分、同日多笔、跨账户、并发、日切、重放；执行事务重算，旧黄卡越线拒绝并重新准备红卡。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [
+        "PI-X03"
+      ],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "Y02",
+      "name": "黄色订阅取消",
+      "required": "订阅查询为绿；订阅取消为黄，展示对象和生效后果并明确确认。",
+      "acceptance": "真实对象、确认前不取消、一次确认只执行一次、变更对象后旧卡失效。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [
+        "PI-X03"
+      ],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "Y03",
+      "name": "黄色虚拟卡申请",
+      "required": "虚拟卡申请黄级，展示用途、额度、费用、有效期及申请状态后明确确认。",
+      "acceptance": "先实现真实虚拟卡类型合同；普通卡不能冒充，结果按申请回执呈现。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "R01",
+      "name": "红色大额转账",
+      "required": "日累计加本次 >100000 分，明确确认并通过独立、操作绑定的多因素认证。",
+      "acceptance": "跨账户累计和并发原子校验；无真实有效 MFA 证明拒绝执行。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [
+        "PI-X03"
+      ],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "R02",
+      "name": "红色密码修改",
+      "required": "密码修改必须强验证，不经聊天接受秘密或自行执行。",
+      "acceptance": "实现受限专用流程并验证旧授权失效、错主体/过期/重放拒绝；未接能力保持拒绝，不能判完成。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "R03",
+      "name": "红色卡挂失",
+      "required": "卡挂失必须强验证并绑定目标卡。",
+      "acceptance": "真实认证证明及明确确认、正确卡绑定、审计和执行回执。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "R04",
+      "name": "红色卡解挂",
+      "required": "卡解挂必须强验证并绑定目标卡。",
+      "acceptance": "先补受限解挂能力再完整验收；拒绝未知动作只能证明安全拒绝，不能算能力完成。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "R05",
+      "name": "红色理财申购",
+      "required": "理财申购即使小额也必须强验证；适当性和资格由受信后端重验。",
+      "acceptance": "产品、期限、余额、适当性、来源版本与真实 MFA 全部满足才可执行。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [
+        "PI-X02",
+        "PI-X07"
+      ],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "S01",
+      "name": "防止编造",
+      "required": "账户信息来源绑定；交易成功/失败/待结算/未知必须与同一操作真实回执一致。",
+      "acceptance": "无数据不得补造；准备不是执行，超时先恢复原操作状态，不重复转账；全文和语音按真实终态呈现。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [
+        "PI-X03",
+        "PI-X08"
+      ],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "S02",
+      "name": "注入防御",
+      "required": "用户特殊 Prompt、资料、备注、网页和生成代码均不能绕过后端权限或提升工具能力。",
+      "acceptance": "通过实际受限入口验证伪授权、越权工具、跨用户、旧证据和参数篡改，金融状态不变；原业务题/gold不改。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [
+        "PI-I06",
+        "PI-X04",
+        "PI-X05",
+        "PI-X08"
+      ],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "S03",
+      "name": "操作审计",
+      "required": "关键操作完整记录结构化决策依据、证据、授权、验证与执行链。",
+      "acceptance": "关联 request/op ID、主体/对象、策略版本/风险、证据 SHA、允许/拒绝原因、确认回执、认证引用、前后状态/终态；不得写隐藏推理、密钥、口令、验证码。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [
+        "PI-X03",
+        "PI-X06",
+        "PI-X07"
+      ],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "S04",
+      "name": "异常熔断与安全锁",
+      "required": "连续认证失败或可疑越权行为触发持久、跨轮金融写入锁；运行故障另行限次熔断。",
+      "acceptance": "格式错误也计认证失败；篡改/跨主体/重放记录并锁写入；新轮次不得解除，受控解锁有审计。保留授权安全查询及原回执恢复。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [
+        "PI-X03",
+        "PI-X08"
+      ],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    },
+    {
+      "id": "S05",
+      "name": "生成代码沙箱",
+      "required": "生成代码仅在受限、可监控、逻辑隔离环境运行，不持金融执行权限。",
+      "acceptance": "真实生成的受支持代码由独立 worker 执行；文件/私库/密钥/网络/进程/未登记 imports 被拒；无限循环、内存/编译/输出超限终止；跨会话隔离、取消清理、结构化回执、金额来源核验。",
+      "status": "NOT_ACCEPTED",
+      "related_domain_cases": [
+        "PI-X08"
+      ],
+      "pi_acceptance_credit": "NONE_UNLESS_ORIGINAL_SECURITY_ACCEPTANCE_RUNS_AND_PASSES"
+    }
+  ]
+}

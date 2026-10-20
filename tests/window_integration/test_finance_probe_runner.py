@@ -42,6 +42,7 @@ class FinanceProbeRunnerTests(unittest.TestCase):
         review = {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}
         turn_id = 'synthetic-unit-turn-not-an-actual-model-request'
         models = {stage:identity['model_id'] for stage,identity in runner.public.MODEL_IDENTITIES.items()}
+        providers = {stage:identity['provider'] for stage,identity in runner.public.MODEL_IDENTITIES.items()}
         calls = [{'stage': stage, 'usage': counters, 'usage_complete': True, 'billing_mode': 'paid',
                   'model_id': models[stage], 'request_sent': True, 'attempts': 1,
                   'outcome': 'completed', 'error_code': None}
@@ -70,9 +71,9 @@ class FinanceProbeRunnerTests(unittest.TestCase):
         execution = {'status': 'exited', 'exit_code': 0, 'duration_seconds': 2,
                      'scope': 'synthetic unit receipt; no process was started'}
         logs = [{'stage': 'conversation.tools', 'request_id': turn_id, 'model_id': models['primary'],
-                 'provider':'deepseek','outcome': 'completed', 'error_code': '', 'usage': usage},
+                 'provider':providers['primary'],'outcome': 'completed', 'error_code': '', 'usage': usage},
                 {'stage': 'reviewer.conversation', 'request_id': turn_id, 'model_id': models['reviewer'],
-                 'provider':'ai_ping','outcome': 'completed', 'error_code': '', 'attempts': 1, 'finish_reason': 'stop'}]
+                 'provider':providers['reviewer'],'outcome': 'completed', 'error_code': '', 'attempts': 1, 'finish_reason': 'stop'}]
         return execution, report, logs, ident, prompt, sources, {}, self.base
 
     def paid_failure(self, mutation):
@@ -393,7 +394,7 @@ class FinanceProbeRunnerTests(unittest.TestCase):
             elif mutation=='wrong_returned_model':row['response_metadata']['primary'][0]['model']='GLM-5.3-Flash'
             elif mutation=='missing_response_id':row['response_metadata']['reviewer'][0].pop('id')
             elif mutation=='extra_response':row['response_metadata']['primary'].append(deepcopy(row['response_metadata']['primary'][0]))
-            elif mutation=='wrong_provider':data[2][0]['provider']='ai_ping'
+            elif mutation=='wrong_provider':data[2][0]['provider']='unconfigured-provider'
             else:row['response_metadata']['reviewer'][0]['model']='GLM-5.3-Flash-unconfigured-alias'
             actual=runner.validate_child(*data)
             with self.subTest(mutation=mutation):

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PI-ACCEPT isolated UI adapter",
+  "type": "object",
+  "required": ["schema", "api_contract_path", "api_contract_sha256", "base_url_env", "flows"],
+  "properties": {
+    "schema": {"const": "navren.pi.ui-adapter/1"},
+    "api_contract_path": {"type": "string"},
+    "api_contract_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "base_url_env": {"type": "string"},
+    "browser": {"enum": ["chromium", "firefox", "webkit"]},
+    "channel": {"type": "string", "description": "Optional installed browser channel, such as chrome; no browser download is performed."},
+    "headless": {"type": "boolean"},
+    "flows": {"type": "array", "minItems": 1}
+  },
+  "semantic_steps": ["goto", "click by role/name", "fill by accessible label", "select by accessible label", "press", "expect_text", "expect_absent_text", "expect_value", "expect_url", "screenshot"],
+  "safety": {
+    "origin": "loopback only",
+    "external_requests": "blocked and recorded as failure",
+    "storage_state": "only a hash-bound test state inside the isolated temporary root; real account/browser state forbidden",
+    "private_writes": "require isolated test manifest and explicit write gates"
+  }
+}

@@ -2,6 +2,17 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script data-navren-theme-bootstrap>
+(() => {
+  try {
+    const theme=localStorage.getItem('navren:paint-theme:v1');
+    if(theme!=='light'&&theme!=='dark')return;
+    const root=document.documentElement;
+    root.dataset.theme=theme;root.style.colorScheme=theme;
+    root.style.backgroundColor=theme==='dark'?'#0d1725':'#edf3fa';
+  } catch(_) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -10,10 +21,15 @@
 <link rel="icon" type="image/png" href="assets/brand/navren-icon.png">
 <link rel="stylesheet" href="css/style.css?v=ui-20261003-3">
 <link rel="stylesheet" href="css/bank.css?v=ui-20261003-3">
-<link rel="stylesheet" href="css/design.css?ui=0833fdeb0038">
-<link rel="stylesheet" href="css/discover_workspace.css">
-<link rel="stylesheet" href="css/market_history.css">
+<link rel="stylesheet" href="css/design.css?ui=849ed9447642">
+<link rel="stylesheet" href="css/discover_workspace.css?dq=f6cf3c0a525b">
+<link rel="stylesheet" href="css/discover_insurance.css?ui=2630b0cd69bb">
+<link rel="stylesheet" href="css/market_history.css?ui=af5eaffb2b24">
 <link rel="stylesheet" href="css/account_switcher.css">
+  <link rel="stylesheet" href="css/navigation_gestures.css?ui=dc4db77b8cb5">
+<link rel="stylesheet" href="css/form_controls.css?dq=546db5bc506d">
+  <link rel="stylesheet" href="css/research_workspace.css?pi=28d05e84ad95">
+  <link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
 </head>
 <body data-page="recommend">
 <a class="skip-link" href="#mainContent">跳到主要内容</a>
@@ -37,6 +53,22 @@
     <div class="page-scroll">
     <div class="rec-page discover-page">
       <div id="discoverHome">
+        <section class="mine-section" aria-labelledby="researchPreviewHeading">
+          <div class="discover-section-head">
+            <div class="discover-research-heading">
+              <h2 id="researchPreviewHeading">产品研究</h2>
+              <details class="discover-research-help">
+                <summary aria-label="产品资料与收益说明">?</summary>
+                <p>目录与业绩来自各自的公开来源，收益和净值日期分别以披露为准。完整资料见产品详情，历史表现不代表未来收益。</p>
+              </details>
+            </div>
+          </div>
+          <div id="productPreview" class="discover-preview-grid" aria-live="polite"><p>正在读取产品资料…</p></div>
+        </section>
+        <section class="mine-section" aria-labelledby="insurancePreviewHeading">
+          <div class="discover-section-head"><div class="discover-research-heading"><h2 id="insurancePreviewHeading">保险</h2><span id="insuranceHelpHost"></span></div></div>
+          <div id="insurancePreview" aria-live="polite"></div>
+        </section>
         <section class="mine-section market-hot-section" aria-labelledby="marketHotHeading">
           <div id="marketHotHeading" class="market-hot-heading"></div>
           <div id="marketHot"></div>
@@ -44,14 +76,6 @@
         <section class="mine-section" aria-labelledby="weeklyCoverHeading">
           <h2 class="discover-section-title" id="weeklyCoverHeading">市场周报</h2>
           <div class="market-weekly-root" id="weeklyReport"></div>
-        </section>
-        <section class="mine-section" aria-labelledby="researchPreviewHeading">
-          <div class="discover-section-head"><h2 id="researchPreviewHeading">产品研究</h2></div>
-          <div id="productPreview" class="discover-preview-grid" aria-live="polite"><p>正在读取产品资料…</p></div>
-        </section>
-        <section class="mine-section" aria-labelledby="recentPlanHeading">
-          <div class="discover-section-head"><h2 id="recentPlanHeading">最近备选方案</h2><a href="recommend.html?view=plans" data-discover-view="plans">历史方案 ›</a></div>
-          <div id="planPreview"></div>
         </section>
       </div>
       <section id="discoverSubview" class="discover-subview" hidden aria-live="polite"></section>
@@ -62,18 +86,24 @@
 
 <script src="js/storage.js?v=ui-20261003-3"></script>
 <script src="js/market_deck.js"></script>
-<script src="js/market_ui.js"></script>
-<script src="js/i18n.js"></script>
-<script src="js/market_history.js"></script>
-<script src="js/design.js?ui=a7ba89e189e9"></script>
+<script src="js/market_ui.js?dq=4c0e20fa39d4"></script>
+<script src="js/i18n.js?dq=0b281361e575"></script>
+<script src="js/market_history.js?dq=4f0d5bd5428c"></script>
+<script src="js/design.js?ui=da98490f38d1"></script>
 <script src="js/help.js"></script>
 <script src="js/profile_engine.js?v=7"></script>
 <script src="js/bank_client.js?v=bank2"></script>
 <script src="js/account_switcher.js"></script>
-<script src="js/view_context.js"></script>
+<script src="js/view_context.js?ui=c1ce6cb7a82f"></script>
 <script src="js/bank_ui.js?v=ui-20261003-3"></script>
 <script src="js/recommend.js?v=ui-20261003-3"></script>
-<script src="js/discover_workspace.js"></script>
+<script src="js/insurance_needs.js?ui=93161ce4f75e"></script>
+<script src="js/insurance_preferences.js?ui=6d8e3f53eba8"></script>
+<script src="js/discover_insurance.js?dq=056b94d95e13"></script>
+<script src="js/research_workspace.js?pi=78f3348ca629"></script>
+<script src="js/discover_workspace.js?ui=b400369fc3c8"></script>
 <script src="js/lifecycle.js"></script>
+  <script src="js/navigation_gestures.js?ui=acce6603cf27"></script>
+<script src="js/form_controls.js?dq=b4539a70b618"></script>
 </body>
 </html>

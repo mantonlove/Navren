@@ -100,6 +100,12 @@ class DemoAccountService:
 
     def _record(self, workspace, *, include_pending=False):
         with closing(self.bank.connect()) as db:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='registered_demo_sources'").fetchone():
+                private = db.execute('''SELECT s.*,i.registered_user_id FROM registered_demo_sources s
+                    JOIN registered_user_instances i ON i.workspace_id=s.workspace_id
+                    WHERE s.workspace_id=? AND i.status='ready' ''', (workspace,)).fetchone()
+                if private is not None:
+                    return dict(private)
             row = (db.execute('SELECT * FROM ' + REGISTRY + ' WHERE workspace_id=?', (workspace,)).fetchone()
                    if self._has_registry(db) else None)
         if row is None or (not include_pending and row['status'] != 'ready'):
@@ -107,6 +113,18 @@ class DemoAccountService:
         return dict(row)
 
     def catalog(self):
+        provider = getattr(self.gateway, 'experience_provider', None)
+        request = self.gateway.demo_sessions._request.get() if provider is not None else None
+        if request is not None:
+            owner = provider.owner_for_workspace(request[1])
+            value = provider.catalog(owner)
+            return {**value,'initialized_count':sum(a['status']=='ready' for a in value['accounts']),
+                    'source':SOURCE,'is_real_bank_data':False}
+        if provider is not None:
+            # 内部无当前认证上下文时只报告模板规模，不列旧公共或他人实例。
+            return {'environment':'simulation','source':SOURCE,'accounts':[],
+                    'initialized_count':0,'template_count':len(USER_IDS),
+                    'import_version':IMPORT_VERSION,'is_real_bank_data':False}
         with closing(self.bank.connect()) as db:
             rows = db.execute('SELECT * FROM ' + REGISTRY + " WHERE status='ready'").fetchall() if self._has_registry(db) else []
         indexed = {r['user_id']: r for r in rows}
@@ -115,6 +133,12 @@ class DemoAccountService:
                      'source': SOURCE, 'source_version': indexed[uid]['source_version'],
                      'coverage_start': START_DATE, 'coverage_end': END_DATE}
                     for uid in USER_IDS if uid in indexed]
+        for account in accounts:
+            history = self.active_history(account['workspace_id'])
+            if history:
+                account.update(source_version=history.dataset_version,
+                               coverage_start=history.metadata['start_date'],
+                               coverage_end=history.metadata['end_date'])
         return {'environment': 'simulation', 'source': SOURCE, 'accounts': accounts,
                 'initialized_count': len(accounts), 'import_version': IMPORT_VERSION,
                 'is_real_bank_data': False}
@@ -128,7 +152,11 @@ class DemoAccountService:
         """只从已登记的服务端工作区取主体，不消费客户端subject_id。"""
         record = self._record(workspace)
         uid = record['user_id']
-        if uid not in USER_IDS or record['workspace_id'] != workspace or self.stable_workspace(uid) != workspace:
+        expected = self.stable_workspace(uid)
+        if record.get('registered_user_id'):
+            from registered_instances import InstanceRegistry
+            expected = InstanceRegistry.workspace_id(record['registered_user_id'],uid)
+        if uid not in USER_IDS or record['workspace_id'] != workspace or expected != workspace:
             raise BankError('FINANCIAL_SUBJECT_MISMATCH', '工作区与财务主体映射不一致。', 409)
         return uid
 
@@ -274,8 +302,10 @@ class DemoAccountService:
         db.execute('INSERT INTO ' + table + '(' + ','.join(row) + ') VALUES(' + ','.join('?' for _ in row) + ')', tuple(row.values()))
         return row['id']
 
-    def _seed_workspace(self, db, uid, bundle, history_path, history_hash):
-        workspace = self.stable_workspace(uid)
+    def _seed_workspace(self, db, uid, bundle, history_path, history_hash, *, workspace=None, registry_table=REGISTRY):
+        if registry_table not in (REGISTRY,'registered_demo_sources'):
+            raise ValueError('unsupported_template_registry')
+        workspace = workspace or self.stable_workspace(uid)
         current, config = bundle['currents'][uid], bundle['profile_map'][uid]
         mapping = self._cash_mapping(workspace, current)
         main = mapping[uid + '::cash:daily']
@@ -340,7 +370,8 @@ class DemoAccountService:
         for item in current['assets']:
             if item['account_class'] != 'investment':
                 continue
-            product_id = 'DEMO-' + uid + '-' + item['code'].split(':', 1)[1]
+            product_id = ('DEMO-' + uid + '-' + item['code'].split(':', 1)[1] if registry_table == REGISTRY
+                          else 'INSTANCE-' + workspace + '-' + item['code'].split(':', 1)[1])
             product = {'id': product_id, 'name': item['name'], 'source': SOURCE, 'workspace_id': workspace,
                        'source_user_id': uid, 'source_asset_id': item['account_id'],
                        'historical_synthetic_position': True, 'execution_enabled': False,
@@ -359,7 +390,7 @@ class DemoAccountService:
         db.execute('INSERT INTO workspace_datasets VALUES(?,?,?,?,?)',
                    (workspace, IMPORT_VERSION, bundle['version'], self.bank.seed_hash, self.bank.clock()))
         stored = {**current, 'source_metadata': bundle['metadata'], 'source_audit': bundle['audit']}
-        db.execute('INSERT INTO ' + REGISTRY + ' VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        db.execute('INSERT INTO ' + registry_table + ' VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
                    (uid, workspace, current['display_name'], END_DATE, bundle['version'], encoded(bundle['hashes']),
                     str(history_path), history_hash, encoded(stored), encoded(mapping), 'pending',
                     self.bank.clock(), IMPORT_VERSION))
@@ -417,6 +448,7 @@ class DemoAccountService:
 
     def _history_connection(self, record):
         path = Path(record['history_path'])
+        if not path.is_absolute():path=self.bank.database.parent/path
         if not path.is_file():
             raise BankError('DEMO_HISTORY_MISSING', '导入历史副本丢失，不能用其他来源代替。', 503)
         stat = path.stat()
@@ -487,12 +519,33 @@ class DemoAccountService:
                           'holding_principal_minor': sum(a['amount_minor'] for a in holdings),
                           'liabilities_minor': sum(a['outstanding_minor'] for a in loans),
                           'valuation_scope': '运行本金账本；不包含历史估值涨跌与非金融资产'}
-        return {**snapshot, 'environment': 'simulation', 'workspace_id': workspace, 'source': SOURCE,
-                'source_version': record['source_version'], 'import_version': IMPORT_VERSION,
+        history = self.active_history(workspace)
+        history_fields = ({'start_date': history.metadata['start_date'],
+                           'end_date': history.metadata['end_date']} if history else {})
+        return {**snapshot, **history_fields, 'environment': 'simulation', 'workspace_id': workspace, 'source': SOURCE,
+                'source_version': history.dataset_version if history else record['source_version'], 'import_version': IMPORT_VERSION,
                 'as_of': record['as_of'], 'source_snapshot': snapshot, 'bank_state': bank_state,
                 'forecasts': snapshot['recurring_obligations'], 'is_real_bank_data': False,
-                'quantity_status': 'unknown', 'notice': '历史估值为合成来源期末事实；运行本金状态单独列示。',
+                'quantity_status': 'unknown', 'notice': '历史估值按期末记录展示；运行本金状态单独列示。',
                 'independent_financial_data': self.independent_reading_status()}
+
+    def active_history(self, workspace):
+        """仅明确采用的三年库接入原查账链路，绑定失配时停止读取。"""
+        provider=getattr(self.gateway,'experience_provider',None)
+        record=self._record(workspace) if provider else None
+        service=(provider.materializer.service_for(workspace) if provider and record.get('registered_user_id')
+                 else getattr(self.gateway, 'financial_data', None))
+        if service is None or service.metadata.get('history_profile') != 'realistic_three_year':
+            return None
+        subject = self.subject_for(workspace)
+        with closing(self.bank.connect()) as db:
+            binding = db.execute('SELECT subject_id,dataset_version,source_path FROM connected_asset_migrations '
+                                 'WHERE workspace_id=?', (workspace,)).fetchone()
+        if (binding is None or binding['subject_id'] != subject
+                or binding['dataset_version'] != service.dataset_version
+                or Path(binding['source_path']).resolve() != service.database_path):
+            raise BankError('CONNECTED_HISTORY_UNAVAILABLE', '账户历史绑定与当前读取版本不一致。', 503)
+        return service
 
     def independent_reading_status(self):
         service = getattr(self.gateway, 'financial_data', None)

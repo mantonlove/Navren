@@ -246,6 +246,7 @@ PREFLIGHT_TOOLS = ('load_skill', 'account_summary', 'personal_graph', 'knowledge
 class ProcessPreflightPrimary:
     """只证明当前HTTP/工具/边界/保存链能执行，不模拟模型金融分析质量。"""
     model_id = 'offline-scripted-process-preflight'
+    billing_mode = 'unpaid_fixture'
     def __init__(self, log_path=None):
         self.calls, self.tool_outputs, self.seen, self.response_metadata = [], [], set(), []
         self.rounds = 0
@@ -265,27 +266,53 @@ class ProcessPreflightPrimary:
                        ('knowledge_status', {})]
         elif self.rounds == 2:
             account_output = next(record['output'] for record in self.tool_outputs if record['call_id'] == 'preflight-1-account_summary')
-            main = next(account['id'] for account in account_output['data']['accounts'] if account['id'].endswith('-main'))
+            accounts = account_output['data']['accounts']
+            main = next(account['id'] for account in accounts if account['id'].endswith('-main'))
             planned = [('budget', {'account_id': main}), ('cashflow', {'days': 60})]
+            planned.extend(('budget', {'account_id': account['id']})
+                           for account in accounts if account['id'] != main)
         elif self.rounds == 3:
-            planned = [('answer_reviewed', {'text': '离线集成预检完成，仅核对程序链路。',
-                        'claims': [], 'draft_ids': [], 'followups': []})]
+            from agent_runtime.metric_claims import REF_FIELDS
+            claims, amount_claims, clauses = [], [], []
+            budgets = [record['output'] for record in self.tool_outputs
+                       if record['call_id'].startswith('preflight-2-budget')]
+            for output in budgets:
+                record = next(row for row in output['metrics']
+                              if row['metric']['metric_name'] == 'arrangeable_now')
+                metric = record['metric']
+                if metric['currency'] != 'CNY': raise ValueError('process_preflight_unsupported_currency')
+                value = metric['value_minor']
+                text = f'当前账户可安排金额为{value//100}.{value%100:02d}元。'
+                clauses.append(text)
+                claims.append({'text': text, 'evidence_ids': [output['evidence_id']]})
+                amount_claims.append({**{key: metric[key] for key in REF_FIELDS},
+                                      'claim_kind': record['kind'], 'text': text})
+            planned = [('answer_reviewed', {
+                'text': ''.join(clauses)+'这是离线程序链路预检，未执行金融操作。',
+                'claims': claims, 'amount_claims': amount_claims,
+                'draft_ids': [], 'followups': [],
+            })]
         else:
             raise ValueError('process_preflight_unexpected_round')
         calls = []
-        for name, arguments in planned:
+        for index, (name, arguments) in enumerate(planned):
             call_id = f'preflight-{self.rounds}-{name}'
+            if name == 'budget': call_id += '-'+str(index)
             self.calls.append({'id': call_id, 'name': name, 'arguments': deepcopy(arguments)})
             calls.append({'id': call_id, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(arguments, ensure_ascii=False)}})
-        return {'role': 'assistant', 'content': None, 'tool_calls': calls}, {'total_tokens': 0}
+        return {'role': 'assistant', 'content': None, 'tool_calls': calls}, {
+            'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
 
 
 class ProcessPreflightReviewer:
     model_id = 'offline-scripted-reviewer-preflight'
+    billing_mode = 'unpaid_fixture'
     def __init__(self, log_path=None):
         self.records, self.response_metadata = [], []
-    def review(self, packet, *args):
-        result = {'verdict': 'approve', 'reason': '仅用于离线链路预检，不裁决金融语义。', 'issues': []}
+    def review(self, packet, *args, **kwargs):
+        result = {'verdict': 'approve', 'reason': '仅用于离线链路预检，不裁决金融语义。',
+                  'issues': [], '_model_usage': {
+                      'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}}
         self.records.append({'packet': deepcopy(safe_data(packet)), 'decision': result})
         return result
 
@@ -387,6 +414,13 @@ def replace_variables(value, variables):
     return value
 
 
+def references_variable(value, name):
+    if isinstance(value, str): return value == '$'+name
+    if isinstance(value, list): return any(references_variable(item, name) for item in value)
+    if isinstance(value, dict): return any(references_variable(item, name) for item in value.values())
+    return False
+
+
 def select_path(value, path, selector):
     for part in path.split('.'):
         if isinstance(value, list):
@@ -405,8 +439,15 @@ def oracle(g, w, case):
     accounts = tools.invoke('account_summary', {})['data']['accounts']
     main = next(x['id'] for x in accounts if x['id'].endswith('-main'))
     budget = tools.invoke('budget', {'account_id': main})['data']
-    credit = next(x['evidence_id'] for x in budget['commitments'] if x['kind'] == 'credit_card')
-    variables = {'main_account_id': main, 'credit_commitment_id': credit, 'workspace_id': w}
+    variables = {'main_account_id': main, 'workspace_id': w}
+    # 只有原事实确实引用信用卡承诺时才要求它存在；普通现金查询不依赖卡片数量。
+    if any(references_variable(fact.get(field, {}), 'credit_commitment_id')
+           for fact in case['expected']['facts'] if 'tool' in fact
+           for field in ('arguments', 'select')):
+        credits = [row for row in budget['commitments']
+                   if row['kind'] == 'credit_card' and row['account_id'] == main]
+        if len(credits) != 1: raise ValueError('ambiguous_or_missing_credit_commitment')
+        variables['credit_commitment_id'] = credits[0]['evidence_id']
     checked = []
     for fact in case['expected']['facts']:
         if 'tool' not in fact: continue

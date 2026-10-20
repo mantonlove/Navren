@@ -272,7 +272,7 @@ class WelcomeProfileSessionTests(unittest.TestCase):
         welcome = self.root / 'outputs/welcome-scene/index.html'
         welcome.parent.mkdir(parents=True); welcome.write_text('<!doctype html><title>隔离欢迎入口</title>')
         self.service = create_welcome_server(0, self.root / 'welcome.sqlite3', root=self.root,
-            upstream_port=self.base_port)
+            upstream_port=self.base_port, allow_unverified_registration=True,allow_legacy_experience=True)
         self.assertNotIn(self.service.server_port, {18767, 18768})
         self.thread = threading.Thread(target=self.service.serve_forever, daemon=True)
         self.thread.start()

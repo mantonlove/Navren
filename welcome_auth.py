@@ -7,6 +7,7 @@ from http.cookies import SimpleCookie
 import hashlib
 import hmac
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -16,7 +17,12 @@ import sqlite3
 import threading
 import time
 import unicodedata
+import uuid
 from urllib.parse import unquote, urlsplit
+
+from sms_auth import SmsChallenges
+from sms_aliyun import SmsFailure
+from simulated_bank import BankError
 
 
 ROOT = Path(__file__).resolve().parent
@@ -27,7 +33,21 @@ MAX_BODY = 1024 * 1024
 MAX_HTML = 2 * 1024 * 1024
 MAX_CSV_BODY = 1_572_864
 CSV_PREVIEW_PATHS = {'/api/finance/statements/preview', '/api/finance/calendar/import/preview'}
-APP_PAGES = {'chat.html', 'recommend.html', 'account.html', 'mine.html', 'copilot.html'}
+# MEDIA-20261016冻结协议：仅此无query的POST原件入口扩大传输上限；MIME分限/真类型由基座核验。
+CHAT_MEDIA_UPLOAD_PATH = '/api/finance/chat-media'
+MAX_CHAT_MEDIA_BODY = 25 * 1024 * 1024
+CHAT_MEDIA_UPLOAD_HEADERS = frozenset({'x-navren-expected-workspace','x-navren-privacy-revision',
+    'x-navren-archive-epoch','x-navren-upload-key'})
+CHAT_MEDIA_BIND_PATH = '/api/finance/chat-media/bind'
+CHAT_MEDIA_BIND_HEADERS = CHAT_MEDIA_UPLOAD_HEADERS - {'x-navren-upload-key'}
+ACCOUNT_STATE_WRITE_PATH = '/api/finance/account-state'
+ACCOUNT_STATE_WRITE_HEADERS = frozenset({'x-navren-workspace','x-navren-privacy-revision'})
+RESEARCH_UPLOAD_PATH = '/api/finance/research/attachments'
+MAX_RESEARCH_UPLOAD_BODY = 10 * 1024 * 1024
+RESEARCH_UPLOAD_HEADERS = frozenset({'x-navren-expected-revision','x-navren-upload-key',
+    'x-navren-confirmed','x-navren-health-consent'})
+RESEARCH_PRIVATE_WRITE = re.compile(r'/api/finance/research/(?:workspace|compare|calculate|policies|tasks|prepare|records/[A-Za-z0-9_.:-]{1,160}/(?:delete|operations)|attachments/[A-Za-z0-9_.:-]{1,160}/delete)')
+APP_PAGES = {'chat.html', 'recommend.html', 'account.html', 'mine.html', 'copilot.html', 'messages.html'}
 AUTH_PREFIX = '/api/welcome/auth/'
 EXPERIENCE_ACCOUNTS = {
     'tycoon': 'A市首富',
@@ -85,8 +105,9 @@ class _UnbufferedHTTPResponse(client.HTTPResponse):
 
 
 class WelcomeAuth:
-    """密码只存加盐哈希，会话令牌只存摘要；业务 Cookie 按本地用户隔离。"""
-    def __init__(self, database=None, clock=time.time):
+    """密码只存加盐哈希；注册模式业务Cookie按当前认证会话隔离。"""
+    def __init__(self, database=None, clock=time.time, *, sms_transport=None, allow_test_sms=False,
+                 allow_unverified_registration=False, allow_legacy_experience=False):
         self.database = Path(database or Path.home() / 'Library/Application Support/Navren/welcome-auth.sqlite3')
         self.database.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if self.database.is_symlink():
@@ -95,6 +116,9 @@ class WelcomeAuth:
         os.close(fd)
         os.chmod(self.database, 0o600)
         self.clock = clock
+        # 旧注册仅供显式启用的隔离夹具；正式入口的认证要求不随短信渠道健康而降级。
+        self.allow_unverified_registration = allow_unverified_registration is True
+        self.allow_legacy_experience = allow_legacy_experience is True
         self._locks = {}
         self._locks_guard = threading.Lock()
         self._hash_slots = threading.BoundedSemaphore(4)
@@ -111,15 +135,31 @@ class WelcomeAuth:
                 CREATE TABLE IF NOT EXISTS welcome_upstream_cookies(
                   user_id INTEGER NOT NULL REFERENCES welcome_users(id), name TEXT NOT NULL,
                   value TEXT NOT NULL, PRIMARY KEY(user_id,name));
+                CREATE TABLE IF NOT EXISTS welcome_session_upstream_cookies(
+                  token_hash TEXT NOT NULL REFERENCES welcome_sessions(token_hash) ON DELETE CASCADE,
+                  name TEXT NOT NULL,value TEXT NOT NULL,PRIMARY KEY(token_hash,name));
+                CREATE TABLE IF NOT EXISTS welcome_session_business_state(
+                  token_hash TEXT PRIMARY KEY REFERENCES welcome_sessions(token_hash) ON DELETE CASCADE,
+                  revoked INTEGER NOT NULL CHECK(revoked IN (0,1)));
                 CREATE TABLE IF NOT EXISTS welcome_login_failures(
                   username TEXT PRIMARY KEY, count INTEGER NOT NULL, until_at REAL NOT NULL);
             ''')
+            db.execute('BEGIN IMMEDIATE')
             # 旧用户名账户保持本地密码身份；体验身份不可走密码登录。
             columns = {row['name'] for row in db.execute('PRAGMA table_info(welcome_users)')}
             if 'identity_kind' not in columns:
                 db.execute("ALTER TABLE welcome_users ADD COLUMN identity_kind TEXT NOT NULL DEFAULT 'local'")
             if 'experience_account' not in columns:
                 db.execute('ALTER TABLE welcome_users ADD COLUMN experience_account TEXT')
+            if 'registered_user_id' not in columns:
+                db.execute("ALTER TABLE welcome_users ADD COLUMN registered_user_id TEXT "
+                    "CHECK(registered_user_id IS NULL OR (length(registered_user_id)=32 AND registered_user_id NOT GLOB '*[^0-9a-f]*'))")
+            for row in db.execute("SELECT id FROM welcome_users WHERE identity_kind='local' AND registered_user_id IS NULL").fetchall():
+                db.execute('UPDATE welcome_users SET registered_user_id=? WHERE id=? AND registered_user_id IS NULL',
+                           (uuid.uuid4().hex,row['id']))
+            db.execute('CREATE UNIQUE INDEX IF NOT EXISTS welcome_registered_owner '
+                       'ON welcome_users(registered_user_id) WHERE registered_user_id IS NOT NULL')
+        self.sms = SmsChallenges(self, sms_transport, allow_test=allow_test_sms)
 
     @contextmanager
     def connect(self):
@@ -161,56 +201,105 @@ class WelcomeAuth:
         if not isinstance(token, str) or not 32 <= len(token) <= 128:
             return None
         with self.connect() as db:
-            row = db.execute('''SELECT s.*,u.username,u.identity_kind,u.experience_account FROM welcome_sessions s
+            row = db.execute('''SELECT s.*,u.username,u.identity_kind,u.experience_account,u.registered_user_id FROM welcome_sessions s
                 LEFT JOIN welcome_users u ON u.id=s.user_id
                 WHERE token_hash=? AND expires_at>?''', (_digest(token), self.clock())).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        result = dict(row)
+        binding = self.sms.binding_for_user(result['user_id']) if result['user_id'] is not None else None
+        result['sms_configured'] = self.sms.configured
+        result['sms_registration_required'] = not self.allow_unverified_registration
+        result['legacy_experience_allowed'] = self.allow_legacy_experience
+        result['phone_verified'] = binding is not None
+        result['masked_phone'] = binding['phone'][:3] + '****' + binding['phone'][-4:] if binding else None
+        return result
 
-    def new_session(self, user_id=None, old_token=None):
+    def _new_session_in(self, db, user_id, old_token):
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         ttl = SESSION_TTL if user_id is not None else ANONYMOUS_TTL
+        db.execute('DELETE FROM welcome_sessions WHERE expires_at<=?', (self.clock(),))
+        if old_token:
+            if not db.execute('SELECT 1 FROM welcome_sessions WHERE token_hash=?', (_digest(old_token),)).fetchone():
+                raise AuthError('登录页面已过期，请刷新后再试。', 401, 'WELCOME_SESSION_REVOKED')
+            db.execute('DELETE FROM welcome_sessions WHERE token_hash=?', (_digest(old_token),))
+        db.execute('INSERT INTO welcome_sessions VALUES(?,?,?,?)',
+                   (_digest(token), user_id, csrf, self.clock() + ttl))
+        return token
+
+    def new_session(self, user_id=None, old_token=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            db.execute('DELETE FROM welcome_sessions WHERE expires_at<=?', (self.clock(),))
-            if old_token:
-                if not db.execute('SELECT 1 FROM welcome_sessions WHERE token_hash=?', (_digest(old_token),)).fetchone():
-                    raise AuthError('登录页面已过期，请刷新后再试。', 401, 'WELCOME_SESSION_REVOKED')
-                db.execute('DELETE FROM welcome_sessions WHERE token_hash=?', (_digest(old_token),))
-            db.execute('INSERT INTO welcome_sessions VALUES(?,?,?,?)',
-                       (_digest(token), user_id, csrf, self.clock() + ttl))
+            token = self._new_session_in(db, user_id, old_token)
         return token, self.session(token)
 
     @staticmethod
     def public_session(session, current_identity=None, business_status='not_connected'):
-        result = {'authenticated': bool(session and session['user_id'] is not None),
-                  'session_contract': 'welcome-business-v1'}
+        legacy = bool(session and session.get('legacy_experience_allowed'))
+        result = {'authenticated': bool(session and session['user_id'] is not None and
+                  (session.get('identity_kind')=='local' or legacy)),
+                  'session_contract': 'welcome-business-v1',
+                  'sms': {'configured': bool(session and session.get('sms_configured')),
+                          'registration_required': bool(session and session.get('sms_registration_required')),
+                          'phone_verified': bool(session and session.get('phone_verified')),
+                          'masked_phone': session.get('masked_phone') if session else None}}
         if session:
             result['csrf'] = session['csrf']
             result['auth_subject'] = 'welcome-' + session['token_hash']
         if result['authenticated']:
-            result.update(user={'username': session['username']}, redirect='/chat.html',
+            result.update(user={'username': 'Navren用户', 'display_name': 'Navren用户'},
+                          registered_user_id=session['registered_user_id'],
+                          redirect='/chat.html' if current_identity or legacy else
+                            '/?view=experience' if session.get('phone_verified') else '/?view=bind',
+                          experience_selection_required=not bool(current_identity),
+                          selection_required=not bool(current_identity),
+                          account_id=current_identity.get('account_id') if current_identity else None,
+                          workspace_id=current_identity.get('workspace_id') if current_identity else None,
                           mode='local', entry_experience_account=None,
                           experience_account=None, current_business_identity=current_identity,
                           business_identity_status=business_status)
             account = current_identity.get('account_id') if current_identity else None
             if account in EXPERIENCE_ACCOUNTS:
                 result['experience_account'] = {'user_id': account, 'display_name': EXPERIENCE_ACCOUNTS[account]}
-            if session.get('identity_kind') == 'experience':
-                entry = session['experience_account']
+            if legacy and session.get('identity_kind') == 'local':
+                result['user']['username']=session['username']
+            if legacy and session.get('identity_kind') == 'experience':
                 result.update(mode='experience', entry_experience_account={
-                    'user_id': entry, 'display_name': EXPERIENCE_ACCOUNTS[entry]})
+                    'user_id':session['experience_account'],
+                    'display_name':EXPERIENCE_ACCOUNTS[session['experience_account']]})
                 result['user']['username'] = EXPERIENCE_ACCOUNTS.get(account, '测试体验')
         return result
 
+    @staticmethod
+    def auth_subject(session):
+        return 'welcome-' + session['token_hash']
+
+    def business_lock_key(self, session):
+        return session['user_id'] if self.allow_legacy_experience and session['user_id'] is not None else session['token_hash']
+
+    def registered_owner(self, token):
+        """仅内部调用：从当前认证会话解析稳定主体，不接受前端自报owner。"""
+        session = self.session(token)
+        if not session or session['user_id'] is None or session.get('identity_kind') != 'local':
+            raise AuthError('请先使用手机号注册并登录。',401,'REGISTRATION_REQUIRED')
+        if not session.get('phone_verified'):
+            raise AuthError('请先完成手机号验证。',403,'PHONE_VERIFICATION_REQUIRED')
+        owner = session.get('registered_user_id')
+        if not isinstance(owner,str) or re.fullmatch(r'[0-9a-f]{32}',owner) is None:
+            raise AuthError('账户归属尚未就绪，请稍后再试。',503,'REGISTERED_OWNER_UNAVAILABLE')
+        return owner
+
     def register(self, username, password, old_token):
+        if not self.allow_unverified_registration:
+            raise AuthError('创建账户需要验证手机号。', 403, 'SMS_REQUIRED')
         username, password = self.validate_credentials(username, password)
         salt = secrets.token_bytes(16)
         with self._hash_slots:
             password_hash = _password_hash(password, salt)
         try:
             with self.connect() as db:
-                row = db.execute('INSERT INTO welcome_users(username,salt,password_hash,created_at) VALUES(?,?,?,?)',
-                                 (username, salt, password_hash, self.clock()))
+                row = db.execute('INSERT INTO welcome_users(username,salt,password_hash,created_at,registered_user_id) VALUES(?,?,?,?,?)',
+                                 (username, salt, password_hash, self.clock(),uuid.uuid4().hex))
                 user_id = row.lastrowid
         except sqlite3.IntegrityError:
             raise AuthError('这个用户名已被使用，请登录或换一个用户名。', 409) from None
@@ -239,6 +328,117 @@ class WelcomeAuth:
             db.execute('DELETE FROM welcome_login_failures WHERE username=?', (username,))
         return self.new_session(row['id'], old_token)
 
+    @staticmethod
+    def _sms_context(session, purpose):
+        return {'flow': purpose, 'user_id': session['user_id'], 'version': 1}
+
+    def _sms_session(self, token, *, bind=False):
+        session = self.session(token)
+        if not session or (bind and (session['user_id'] is None or session['identity_kind'] != 'local')):
+            raise AuthError('请先使用原密码登录，再验证手机号。', 401)
+        if not bind and session['user_id'] is not None:
+            raise AuthError('请先退出当前账户，再进行注册或短信登录。', 409)
+        return session
+
+    def _verify_current_password(self, session, password):
+        with self.connect() as db:
+            row = db.execute("SELECT * FROM welcome_users WHERE id=? AND identity_kind='local'",
+                             (session['user_id'],)).fetchone()
+        if not row:
+            raise AuthError('请先登录普通账户。', 401)
+        # 复用原登录频控和密码验证；不在二次确认中签发新会话。
+        username, password = self.validate_credentials(row['username'], password)
+        now = self.clock()
+        with self.connect() as db:
+            failure = db.execute('SELECT * FROM welcome_login_failures WHERE username=?', (username,)).fetchone()
+            if failure and failure['count'] >= 8 and failure['until_at'] > now:
+                raise AuthError('尝试次数较多，请一分钟后再试。', 429)
+        with self._hash_slots:
+            correct = hmac.compare_digest(_password_hash(password, row['salt']), row['password_hash'])
+        if not correct:
+            with self.connect() as db:
+                db.execute('''INSERT INTO welcome_login_failures VALUES(?,1,?)
+                    ON CONFLICT(username) DO UPDATE SET
+                    count=CASE WHEN until_at<=? THEN 1 ELSE count+1 END,until_at=?''',
+                    (username, now+60, now, now+60))
+            raise AuthError('原密码不正确。', 401)
+
+    def send_sms(self, token, purpose, phone, *, password=None, client_ip='127.0.0.1'):
+        phone = self.validate_phone(phone)
+        if purpose not in ('register', 'login', 'bind'):
+            raise AuthError('短信用途无效。')
+        session = self._sms_session(token, bind=purpose == 'bind')
+        if purpose == 'bind':
+            self._verify_current_password(session, password)
+            binding = self.sms.binding_for_user(session['user_id'])
+            if binding:
+                raise AuthError('当前账户已验证手机号；更换手机号尚未开放。', 409)
+        return self.sms.send(self.sms.principal(session), purpose, phone, self._sms_context(session, purpose),
+                             client_ip=client_ip)
+
+    def sms_register(self, phone, password, challenge, code, old_token, *, password_confirmation=None):
+        phone = self.validate_phone(phone)
+        _, password = self.validate_credentials(phone, password)
+        if not isinstance(password_confirmation,str):
+            raise AuthError('请再次输入密码。',400,'PASSWORD_CONFIRMATION_REQUIRED')
+        try:
+            matches = hmac.compare_digest(password.encode('utf-8'),password_confirmation.encode('utf-8'))
+        except UnicodeError:
+            matches = False
+        if not matches:
+            raise AuthError('两次输入的密码不一致。',400,'PASSWORD_CONFIRMATION_MISMATCH')
+        session = self._sms_session(old_token)
+        proof = self.sms.verify(challenge, self.sms.principal(session), 'register', phone, code,
+                                self._sms_context(session, 'register'))
+        salt = secrets.token_bytes(16)
+        with self._hash_slots:
+            password_hash = _password_hash(password, salt)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self.assert_current(old_token, None, db=db)
+            if db.execute('SELECT 1 FROM welcome_users WHERE username=?', (phone,)).fetchone():
+                raise AuthError('这个手机号已有账户，请先使用原密码登录，再验证手机号。', 409)
+            self.sms.consume(db, proof)
+            row = db.execute('INSERT INTO welcome_users(username,salt,password_hash,created_at,registered_user_id) VALUES(?,?,?,?,?)',
+                             (phone, salt, password_hash, self.clock(),uuid.uuid4().hex))
+            self.sms.bind_phone(db, row.lastrowid, proof)
+            token = self._new_session_in(db, row.lastrowid, old_token)
+        return token, self.session(token)
+
+    def sms_login(self, phone, challenge, code, old_token):
+        phone = self.validate_phone(phone)
+        session = self._sms_session(old_token)
+        proof = self.sms.verify(challenge, self.sms.principal(session), 'login', phone, code,
+                                self._sms_context(session, 'login'))
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self.assert_current(old_token, None, db=db)
+            binding = db.execute('SELECT * FROM sms_phone_bindings WHERE phone=?', (phone,)).fetchone()
+            if not binding:
+                raise AuthError('此手机号尚未注册或验证，请先创建账户；已有账户请使用原密码登录。', 409)
+            self.sms.consume(db, proof)
+            token = self._new_session_in(db, binding['user_id'], old_token)
+        return token, self.session(token)
+
+    def sms_bind(self, phone, password, challenge, code, old_token, *, before_rotate=None):
+        phone = self.validate_phone(phone)
+        session = self._sms_session(old_token, bind=True)
+        self._verify_current_password(session, password)
+        proof = self.sms.verify(challenge, self.sms.principal(session), 'bind', phone, code,
+                                self._sms_context(session, 'bind'))
+        if before_rotate is not None:
+            before_rotate()
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self.assert_current(old_token, session['user_id'], db=db)
+            self.sms.consume(db, proof)
+            self.sms.bind_phone(db, session['user_id'], proof)
+            token = self._new_session_in(db, session['user_id'], old_token)
+            if self.allow_legacy_experience:
+                db.execute('DELETE FROM welcome_sessions WHERE user_id=? AND token_hash!=?',
+                           (session['user_id'], _digest(token)))
+        return token, self.session(token)
+
     def logout(self, token, expected_user_id=...):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -247,7 +447,7 @@ class WelcomeAuth:
             identity = db.execute('''SELECT u.id,u.identity_kind FROM welcome_sessions s
                 JOIN welcome_users u ON u.id=s.user_id WHERE s.token_hash=?''', (_digest(token),)).fetchone()
             db.execute('DELETE FROM welcome_sessions WHERE token_hash=?', (_digest(token),))
-            if identity:
+            if identity and self.allow_legacy_experience:
                 # 同一欢迎主体的会话共用业务 jar，退出须撤销全部相关会话。
                 db.execute('DELETE FROM welcome_upstream_cookies WHERE user_id=?', (identity['id'],))
                 db.execute('DELETE FROM welcome_sessions WHERE user_id=?', (identity['id'],))
@@ -255,39 +455,54 @@ class WelcomeAuth:
                     db.execute('DELETE FROM welcome_users WHERE id=?', (identity['id'],))
 
     def experience_session(self, account, bank_cookie, old_token):
-        """业务选择已验证后原子建立一次体验身份，不赋予任何普通账户权限。"""
-        token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+        """仅显式旧隔离模式可建立公共体验身份；正式注册入口不使用此路径。"""
+        if not self.allow_legacy_experience:
+            raise AuthError('请先使用手机号注册并登录。',401,'REGISTRATION_REQUIRED')
+        if account not in EXPERIENCE_ACCOUNTS:
+            raise AuthError('请选择列表中的测试账户。')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            previous = db.execute('SELECT user_id FROM welcome_sessions WHERE token_hash=? AND expires_at>?',
-                                  (_digest(old_token), self.clock())).fetchone() if old_token else None
-            if not previous or previous['user_id'] is not None:
-                raise AuthError('登录页面已过期，请刷新后再试。', 401, 'WELCOME_SESSION_REVOKED')
+            previous = self.assert_current(old_token,None,db=db)
             row = db.execute('''INSERT INTO welcome_users
                 (username,salt,password_hash,created_at,identity_kind,experience_account)
                 VALUES(?,?,?,?, 'experience',?)''',
-                ('~experience-' + secrets.token_urlsafe(24), secrets.token_bytes(16),
-                 secrets.token_hex(64), self.clock(), account))
+                ('~experience-'+secrets.token_urlsafe(24),secrets.token_bytes(16),secrets.token_hex(64),self.clock(),account))
             user_id = row.lastrowid
-            db.execute('INSERT INTO welcome_upstream_cookies VALUES(?,?,?)',
-                       (user_id, 'qz_bank_user', bank_cookie))
-            if old_token:
-                db.execute('DELETE FROM welcome_sessions WHERE token_hash=?', (_digest(old_token),))
-            db.execute('INSERT INTO welcome_sessions VALUES(?,?,?,?)',
-                       (_digest(token), user_id, csrf, self.clock() + SESSION_TTL))
-        return token, self.session(token)
+            db.execute('INSERT INTO welcome_upstream_cookies VALUES(?,?,?)',(user_id,'qz_bank_user',bank_cookie))
+            token = self._new_session_in(db,user_id,old_token)
+        return token,self.session(token)
+
+    def retire_legacy_experience(self, token):
+        """撤销旧匿名体验会话，保留旧身份记录及业务历史，不认领任何旧工作区。"""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('''SELECT s.user_id FROM welcome_sessions s JOIN welcome_users u ON u.id=s.user_id
+                WHERE s.token_hash=? AND u.identity_kind='experience' ''',(_digest(token),)).fetchone()
+            if not row:
+                return
+            db.execute('DELETE FROM welcome_sessions WHERE user_id=?',(row['user_id'],))
+            db.execute('DELETE FROM welcome_upstream_cookies WHERE user_id=?',(row['user_id'],))
 
     def user_lock(self, user_id):
         with self._locks_guard:
-            return self._locks.setdefault(user_id, threading.Lock())
+            return self._locks.setdefault(user_id, threading.RLock())
 
-    def upstream_cookie(self, user_id):
+    def upstream_cookie(self, user_id, *, session_token=None):
         with self.connect() as db:
-            return self._db_cookie(db, user_id)
+            return self._db_cookie(db,user_id,session_token)
 
-    @staticmethod
-    def _db_cookie(db, user_id):
-        rows = db.execute('SELECT name,value FROM welcome_upstream_cookies WHERE user_id=? ORDER BY name', (user_id,)).fetchall()
+    def _db_cookie(self, db, user_id, session_token=None):
+        if self.allow_legacy_experience:
+            rows = db.execute('SELECT name,value FROM welcome_upstream_cookies WHERE user_id=? ORDER BY name',(user_id,)).fetchall()
+        else:
+            if not session_token:
+                raise AuthError('业务凭证需要当前登录会话。',401,'WELCOME_SESSION_REQUIRED')
+            current = db.execute('SELECT 1 FROM welcome_sessions WHERE token_hash=? AND user_id=? AND expires_at>?',
+                                 (_digest(session_token),user_id,self.clock())).fetchone()
+            if not current:
+                raise AuthError('Navren 登录已失效。',401,'WELCOME_SESSION_REVOKED')
+            rows = db.execute('SELECT name,value FROM welcome_session_upstream_cookies WHERE token_hash=? ORDER BY name',
+                              (_digest(session_token),)).fetchall()
         cookie = SimpleCookie()
         for row in rows:
             cookie[row['name']] = row['value']
@@ -301,11 +516,26 @@ class WelcomeAuth:
                          (_digest(token), self.clock())).fetchone()
         if not row or row['user_id'] != user_id:
             raise AuthError('Navren 登录已失效。', 401, 'WELCOME_SESSION_REVOKED')
-        if expected_cookie is not None and self._db_cookie(db, user_id) != expected_cookie:
+        if expected_cookie is not None and (self._db_cookie(db,user_id,token) != expected_cookie or self.business_revoked(token,db=db)):
             raise AuthError('当前业务账户已变化，请重新读取。', 409, 'WELCOME_BUSINESS_CHANGED')
         return dict(row)
 
+    def business_revoked(self, token, *, db=None):
+        if db is None:
+            with self.connect() as connection:
+                return self.business_revoked(token,db=connection)
+        row = db.execute('SELECT revoked FROM welcome_session_business_state WHERE token_hash=?',(_digest(token),)).fetchone()
+        return bool(row and row['revoked'])
+
+    def mark_business_revoked(self, token, user_id):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self.assert_current(token,user_id,db=db)
+            db.execute('INSERT OR REPLACE INTO welcome_session_business_state VALUES(?,1)',(_digest(token),))
+
     def update_upstream_cookies(self, user_id, values, *, session_token=None, expected_cookie=None):
+        if not self.allow_legacy_experience and session_token is None:
+            raise AuthError('业务凭证需要当前登录会话。',401,'WELCOME_SESSION_REQUIRED')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             if session_token is not None:
@@ -321,11 +551,186 @@ class WelcomeAuth:
                     if name != 'qz_bank_user' or morsel['domain'] not in ('', '127.0.0.1', 'localhost'):
                         continue
                     if not morsel.value or morsel['max-age'] == '0':
-                        db.execute('DELETE FROM welcome_upstream_cookies WHERE user_id=? AND name=?', (user_id, name))
+                        table,key,identifier = ('welcome_upstream_cookies','user_id',user_id) if self.allow_legacy_experience else (
+                            'welcome_session_upstream_cookies','token_hash',_digest(session_token))
+                        db.execute(f'DELETE FROM {table} WHERE {key}=? AND name=?',(identifier,name))
                     else:
-                        db.execute('INSERT OR REPLACE INTO welcome_upstream_cookies VALUES(?,?,?)',
-                                   (user_id, name, morsel.value))
-            return self._db_cookie(db, user_id)
+                        if not re.fullmatch('[A-Za-z0-9_-]{20,200}',morsel.value) and not self.allow_legacy_experience:
+                            raise AuthError('业务凭证格式无法核对。',502,'PRIVATE_EXPERIENCE_INVALID')
+                        table,identifier = ('welcome_upstream_cookies',user_id) if self.allow_legacy_experience else (
+                            'welcome_session_upstream_cookies',_digest(session_token))
+                        db.execute(f'INSERT OR REPLACE INTO {table} VALUES(?,?,?)',(identifier,name,morsel.value))
+            return self._db_cookie(db,user_id,session_token)
+
+
+class RegisteredExperienceAdapter:
+    """同进程边界：仅从当前已验证welcome会话解析owner，永不公开业务Cookie。"""
+    def __init__(self, auth, provider):
+        self.auth, self.provider = auth, provider
+        if provider is not None:
+            bank_clock = getattr(getattr(provider,'bank',None),'clock',auth.clock)
+            if bank_clock is not auth.clock:
+                raise ValueError('welcome_and_experience_clock_must_match')
+            for method in ('catalog','resume','select_registered','revoke_subject','owner_for_workspace'):
+                if not callable(getattr(provider,method,None)):
+                    raise TypeError('trusted_experience_provider_required')
+
+    def _call(self, method, *args, **kwargs):
+        if self.provider is None:
+            raise AuthError('个人体验空间尚未接通，请稍后再试。',503,'PRIVATE_EXPERIENCE_NOT_CONFIGURED')
+        try:
+            return getattr(self.provider,method)(*args,**kwargs)
+        except BankError as error:
+            raise AuthError('个人体验空间暂时无法核对，请重新读取或登录。',error.status,error.code) from None
+        except Exception:
+            raise AuthError('个人体验空间暂不可用，请稍后再试。',503,'PRIVATE_EXPERIENCE_UNAVAILABLE') from None
+
+    def _session(self, token, *, verified=True):
+        session = self.auth.session(token)
+        if verified:
+            self.auth.registered_owner(token)
+        elif not session or session['user_id'] is None or session.get('identity_kind') != 'local':
+            raise AuthError('请先登录。',401,'REGISTRATION_REQUIRED')
+        self.auth.assert_current(token,session['user_id'])
+        return session
+
+    @staticmethod
+    def _invalid():
+        return AuthError('个人体验空间返回资料无法核对。',502,'PRIVATE_EXPERIENCE_INVALID')
+
+    def _project(self, session, lease):
+        if not isinstance(lease,dict):
+            raise self._invalid()
+        owner, subject = session['registered_user_id'], self.auth.auth_subject(session)
+        expiry = lease.get('auth_expires_at')
+        if (lease.get('registered_user_id') != owner or lease.get('auth_subject') != subject
+                or type(expiry) not in (int,float) or not math.isfinite(expiry)
+                or expiry != session['expires_at'] or expiry <= self.auth.clock()):
+            raise self._invalid()
+        if lease.get('selection_required') is True:
+            if lease.get('account_id') is not None or lease.get('workspace_id') is not None or lease.get('upstream_cookies') != {}:
+                raise self._invalid()
+            entries = lease.get('accounts')
+            if (not isinstance(entries,list) or len(entries)!=len(EXPERIENCE_ACCOUNTS)
+                    or {e.get('account_id') for e in entries if isinstance(e,dict)} != set(EXPERIENCE_ACCOUNTS)):
+                raise self._invalid()
+            return None
+        cookie = lease.get('upstream_cookies')
+        expiry = lease.get('lease_expires_at')
+        if (lease.get('selection_required') is not False or lease.get('account_id') not in EXPERIENCE_ACCOUNTS
+                or not isinstance(lease.get('workspace_id'),str) or re.fullmatch('[0-9a-f]{32}',lease['workspace_id']) is None
+                or type(expiry) not in (int,float) or not math.isfinite(expiry)
+                or not self.auth.clock() < expiry <= session['expires_at']
+                or any(type(lease.get(k)) is not int or lease[k]<0 for k in ('session_generation','privacy_revision','personal_revision'))
+                or not isinstance(cookie,dict) or set(cookie)!={'qz_bank_user'}
+                or not isinstance(cookie['qz_bank_user'],str) or re.fullmatch('[A-Za-z0-9_-]{20,200}',cookie['qz_bank_user']) is None):
+            raise self._invalid()
+        if self._call('owner_for_workspace',lease['workspace_id']) != owner:
+            raise self._invalid()
+        return {'environment':'simulation','registered_user_id':owner,'auth_subject':subject,
+            'account_id':lease['account_id'],'workspace_id':lease['workspace_id'],
+            'display_name':EXPERIENCE_ACCOUNTS[lease['account_id']],
+            'privacy_revision':lease['privacy_revision'],'personal_revision':lease['personal_revision'],
+            'generation':lease['session_generation'],'session_generation':lease['session_generation'],
+            'auth_expires_at':lease['auth_expires_at'],'lease_expires_at':lease['lease_expires_at']}
+
+    def _revoke(self, session):
+        result = self._call('revoke_subject',session['registered_user_id'],self.auth.auth_subject(session))
+        if (not isinstance(result,dict) or type(result.get('revoked_session_count')) is not int
+                or result['revoked_session_count']<0 or result.get('persistent_instances_retained') is not True):
+            raise AuthError('业务退出尚未核实，请重试。',502,'BUSINESS_LOGOUT_UNVERIFIED')
+        return result
+
+    def _store(self, token, session, lease, previous, *, may_issue=False):
+        try:
+            identity = self._project(session,lease)
+            self.auth.assert_current(token,session['user_id'],previous)
+            if identity:
+                if WelcomeHandler._bank_cookie_value(previous) != lease['upstream_cookies']['qz_bank_user']:
+                    self.auth.update_upstream_cookies(session['user_id'],
+                        ['qz_bank_user='+lease['upstream_cookies']['qz_bank_user']],
+                        session_token=token,expected_cookie=previous)
+            elif previous:
+                raise self._invalid()
+            return identity
+        except AuthError:
+            # 已签出的链不能因welcome CAS或返回合同失败成为未登记的存活令牌。
+            if may_issue:
+                self._revoke(session)
+                try:
+                    self.auth.update_upstream_cookies(session['user_id'],['qz_bank_user=; Max-Age=0'],
+                        session_token=token,expected_cookie=previous)
+                    self.auth.mark_business_revoked(token,session['user_id'])
+                except AuthError:
+                    pass
+            raise
+
+    def resume(self, token):
+        session = self._session(token)
+        with self.auth.user_lock(self.auth.business_lock_key(session)):
+            session = self._session(token)
+            if self.auth.business_revoked(token):
+                raise AuthError('当前业务会话已退出，请重新登录。',409,'WELCOME_BUSINESS_REVOKED')
+            previous = self.auth.upstream_cookie(session['user_id'],session_token=token)
+            bank_token = WelcomeHandler._bank_cookie_value(previous) if previous else None
+            lease = self._call('resume',session['registered_user_id'],self.auth.auth_subject(session),
+                auth_expires_at=session['expires_at'],bank_session_token=bank_token)
+            return self._store(token,session,lease,previous,may_issue=bank_token is None)
+
+    def select(self, token, persona):
+        session = self._session(token)
+        with self.auth.user_lock(self.auth.business_lock_key(session)):
+            session = self._session(token)
+            if self.auth.business_revoked(token):
+                raise AuthError('当前业务会话已退出，请重新登录。',409,'WELCOME_BUSINESS_REVOKED')
+            previous = self.auth.upstream_cookie(session['user_id'],session_token=token)
+            current = self.resume(token) if previous else None
+            lease = self._call('select_registered',session['registered_user_id'],persona,self.auth.auth_subject(session),
+                auth_expires_at=session['expires_at'],expected_workspace_id=current['workspace_id'] if current else None)
+            return self._store(token,session,lease,previous,may_issue=True)
+
+    def revoke(self, token):
+        session = self._session(token,verified=False)
+        with self.auth.user_lock(self.auth.business_lock_key(session)):
+            session = self._session(token,verified=False)
+            previous = self.auth.upstream_cookie(session['user_id'],session_token=token)
+            if self.provider is not None:
+                result = self._revoke(session)
+            elif previous:
+                raise AuthError('业务退出暂不可用，请稍后重试。',503,'PRIVATE_EXPERIENCE_NOT_CONFIGURED')
+            else:
+                result = {'revoked_session_count':0,'persistent_instances_retained':True}
+            self.auth.mark_business_revoked(token,session['user_id'])
+            return result
+
+    def adopt_headers(self, token, values, previous):
+        """银行切号回复先由同进程provider验证归属、会话和TTL，再写本会话jar。"""
+        session = self._session(token)
+        parsed = []
+        for value in values:
+            jar = SimpleCookie()
+            try: jar.load(value)
+            except Exception: continue
+            if 'qz_bank_user' not in jar: continue
+            morsel = jar['qz_bank_user']
+            if morsel['domain'] not in ('','127.0.0.1','localhost'): continue
+            parsed.append('' if morsel['max-age']=='0' else morsel.value)
+        if not parsed:
+            self.auth.assert_current(token,session['user_id'],previous)
+            return previous
+        if len(set(parsed))!=1:
+            raise self._invalid()
+        if not parsed[0]:
+            # 直接业务logout同样撤完整subject；不得在下一次session轮询中自动复活。
+            self._revoke(session)
+            result = self.auth.update_upstream_cookies(session['user_id'],['qz_bank_user=; Max-Age=0'],
+                session_token=token,expected_cookie=previous)
+            self.auth.mark_business_revoked(token,session['user_id'])
+            return result
+        lease = self._call('resume',session['registered_user_id'],self.auth.auth_subject(session),
+            auth_expires_at=session['expires_at'],bank_session_token=parsed[0])
+        self._store(token,session,lease,previous,may_issue=True)
+        return self.auth.upstream_cookie(session['user_id'],session_token=token)
 
 
 class WelcomeHandler(server.SimpleHTTPRequestHandler):
@@ -395,13 +800,17 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
         session = auth.session(token)
         if path == AUTH_PREFIX + 'session' and self.command == 'GET':
             cookie = None
+            if session and session.get('identity_kind') == 'experience' and not auth.allow_legacy_experience:
+                auth.retire_legacy_experience(token)
+                session = None
             if not session:
                 token, session = auth.new_session()
                 cookie = self._cookie(token, session)
-            identity, status = self._current_business(session, token)
+            identity, status = self._current_business(session,token)
             self._json(200, auth.public_session(session, identity, status), cookie)
             return
-        if self.command != 'POST' or path not in {AUTH_PREFIX + x for x in ('register', 'login', 'logout', 'experience')}:
+        if self.command != 'POST' or path not in {AUTH_PREFIX + x for x in
+                ('register', 'login', 'logout', 'experience', 'sms/send', 'sms/login', 'sms/bind')}:
             raise AuthError('这个登录接口不存在。', 404)
         if not session or not hmac.compare_digest(self.headers.get('X-Welcome-CSRF', ''), session['csrf']):
             raise AuthError('登录页面已过期，请刷新后再试。', 403)
@@ -420,38 +829,76 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
             raise AuthError('登录请求无法读取。') from None
         if not isinstance(data, dict):
             raise AuthError('登录请求格式不正确。')
+        if path.endswith('/sms/send'):
+            expected = {'phone', 'purpose', 'password'} if data.get('purpose') == 'bind' else {'phone', 'purpose'}
+            if set(data) != expected:
+                raise AuthError('短信发送请求格式不正确。')
+            with auth.user_lock(session['token_hash']):
+                auth.assert_current(token, session['user_id'])
+                result = auth.send_sms(token, data['purpose'], data['phone'], password=data.get('password'),
+                                       client_ip=self.client_address[0])
+                auth.assert_current(token, session['user_id'])
+            self._json(200, result)
+            return
+        sms_action = ('register' if path.endswith('/register') and not auth.allow_unverified_registration else
+                      'login' if path.endswith('/sms/login') else 'bind' if path.endswith('/sms/bind') else None)
+        if sms_action:
+            auth.sms.require_configured()
+            expected = {'phone', 'challenge_id', 'verification_code'}
+            if sms_action in ('register', 'bind'):
+                expected.add('password')
+            if sms_action == 'register':
+                expected.add('password_confirmation')
+            if set(data) != expected:
+                raise AuthError('请填写手机号和短信验证码。', 400, 'SMS_REQUIRED')
+            with auth.user_lock(session['token_hash']):
+                auth.assert_current(token, session['user_id'])
+                if sms_action == 'register':
+                    token, session = auth.sms_register(data['phone'], data['password'], data['challenge_id'], data['verification_code'], token,
+                        password_confirmation=data['password_confirmation'])
+                elif sms_action == 'login':
+                    token, session = auth.sms_login(data['phone'], data['challenge_id'], data['verification_code'], token)
+                else:
+                    token, session = auth.sms_bind(data['phone'], data['password'], data['challenge_id'], data['verification_code'], token,
+                        before_rotate=None if auth.allow_legacy_experience else lambda:self.server.experiences.revoke(token))
+            identity, status = self._current_business(session,token)
+            self._json(201 if sms_action == 'register' else 200, auth.public_session(session,identity,status), self._cookie(token, session))
+            return
         if path.endswith('/logout'):
             if data:
                 raise AuthError('退出请求格式不正确。')
             self._complete_logout(session, token)
-            self._json(200, {'authenticated': False, 'redirect': '/?view=experience',
+            self._json(200, {'authenticated': False, 'redirect': '/?view=experience' if auth.allow_legacy_experience else '/?view=login',
                             'scope': 'welcome_subject', 'business_requests_revoked': True},
                        f'{COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
             return
         if path.endswith('/experience'):
             if set(data) != {'user_id'} or not isinstance(data['user_id'], str) or data['user_id'] not in EXPERIENCE_ACCOUNTS:
                 raise AuthError('请选择列表中的测试账户。')
+            if not auth.allow_legacy_experience:
+                identity = self.server.experiences.select(token,data['user_id'])
+                self._json(200,auth.public_session(session,identity,'verified'))
+                return
             if session['user_id'] is not None:
-                # 应用内回到既有四账户入口：复用当前欢迎主体和固定业务目录。
-                with auth.user_lock(session['user_id']):
-                    auth.assert_current(token, session['user_id'])
-                    previous = auth.upstream_cookie(session['user_id'])
+                with auth.user_lock(auth.business_lock_key(session)):
+                    auth.assert_current(token,session['user_id'])
+                    previous = auth.upstream_cookie(session['user_id'],session_token=token)
                     if not previous:
-                        raise AuthError('当前业务账户尚未连接，请先完成登录。', 409)
-                    bank_cookie, selected = self._select_experience(data['user_id'], previous)
-                    auth.update_upstream_cookies(session['user_id'], ['qz_bank_user=' + bank_cookie],
-                                                 session_token=token, expected_cookie=previous)
+                        raise AuthError('当前业务账户尚未连接，请先完成登录。',409)
+                    bank_cookie,selected = self._select_experience(data['user_id'],previous)
+                    auth.update_upstream_cookies(session['user_id'],['qz_bank_user='+bank_cookie],
+                        session_token=token,expected_cookie=previous)
             else:
-                bank_cookie, selected = self._select_experience(data['user_id'])
+                bank_cookie,selected = self._select_experience(data['user_id'])
                 try:
-                    token, session = auth.experience_session(data['user_id'], bank_cookie, token)
+                    token,session = auth.experience_session(data['user_id'],bank_cookie,token)
                 except AuthError:
-                    # CAS失败没有发出欢迎身份，也不能遗留仍有效的临时业务令牌。
                     self._revoke_business_cookie(bank_cookie)
                     raise
-            self._json(200, auth.public_session(session, self._project_identity(selected), 'verified'),
-                       self._cookie(token, session))
+            self._json(200,auth.public_session(session,self._project_identity(selected),'verified'),self._cookie(token,session))
             return
+        if session['user_id'] is not None and not auth.allow_legacy_experience:
+            raise AuthError('请先退出当前账户，再登录其他账户。',409,'WELCOME_LOGOUT_REQUIRED')
         using_phone = set(data) == {'phone', 'password'}
         if using_phone:
             username = auth.validate_phone(data['phone'])
@@ -461,7 +908,7 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
             raise AuthError('请输入手机号和密码。')
         action = auth.register if path.endswith('/register') else auth.login
         try:
-            with auth.user_lock(session['user_id'] if session['user_id'] is not None else session['token_hash']):
+            with auth.user_lock(auth.business_lock_key(session)):
                 auth.assert_current(token, session['user_id'])
                 token, session = action(username, data['password'], token)
         except AuthError as error:
@@ -470,7 +917,8 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
             if using_phone and error.status == 409:
                 raise AuthError('这个手机号已被使用，请登录。', 409) from None
             raise
-        self._json(201 if path.endswith('/register') else 200, auth.public_session(session), self._cookie(token, session))
+        identity, status = self._current_business(session,token)
+        self._json(201 if path.endswith('/register') else 200, auth.public_session(session,identity,status), self._cookie(token, session))
 
     def _business_request(self, method, path, payload=None, *, cookie=None, csrf=None, timeout=5):
         """固定同源上游、有界 JSON，不在只读身份核验中建立业务账户。"""
@@ -543,7 +991,20 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
         if session['user_id'] is None:
             return None, 'not_connected'
         auth = self.server.auth
-        previous = auth.upstream_cookie(session['user_id'])
+        if not auth.allow_legacy_experience:
+            if not session.get('phone_verified'):
+                return None,'not_connected'
+            if self.server.experiences.provider is None:
+                return None,'not_connected'
+            try:
+                identity = self.server.experiences.resume(token)
+                return identity,'verified' if identity else 'not_connected'
+            except AuthError as error:
+                auth.assert_current(token,session['user_id'])
+                revoked = error.code in ('SESSION_CHANGED','WORKSPACE_CHANGED','WELCOME_BUSINESS_REVOKED','WELCOME_SESSION_REVOKED',
+                    'WELCOME_SESSION_EXPIRED','UNAUTHENTICATED')
+                return None,'revoked' if revoked else 'unavailable'
+        previous = auth.upstream_cookie(session['user_id'],session_token=token)
         if not previous:
             return None, 'not_connected'
         try:
@@ -589,10 +1050,15 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
     def _complete_logout(self, session, token):
         auth = self.server.auth
         # 与业务切号/代理发送互斥，等待响应的普通业务请求不占此锁。
-        lock = auth.user_lock(session['user_id'] if session['user_id'] is not None else session['token_hash'])
+        lock = auth.user_lock(auth.business_lock_key(session))
         with lock:
             auth.assert_current(token, session['user_id'])
-            previous = auth.upstream_cookie(session['user_id']) if session['user_id'] is not None else ''
+            if not auth.allow_legacy_experience:
+                if session['user_id'] is not None:
+                    self.server.experiences.revoke(token)
+                auth.logout(token,session['user_id'])
+                return
+            previous = auth.upstream_cookie(session['user_id'],session_token=token) if session['user_id'] is not None else ''
             if previous:
                 self._revoke_business_cookie(self._bank_cookie_value(previous))
                 auth.assert_current(token, session['user_id'], previous)
@@ -664,13 +1130,27 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
         return selected_cookie, selected
 
     def _guard(self, path):
-        session = self.server.auth.session(self._token())
-        if session and session['user_id'] is not None:
+        auth = self.server.auth
+        token = self._token()
+        session = auth.session(token)
+        if auth.allow_legacy_experience and session and session['user_id'] is not None:
             return session
+        try:
+            auth.registered_owner(token)
+            error = AuthError('请先选择本人的体验画像。',409,'EXPERIENCE_SELECTION_REQUIRED')
+            redirect = '/?view=experience'
+            if self.server.experiences.provider is not None and self.server.experiences.resume(token) is not None:
+                return session
+        except AuthError as denied:
+            error = denied
+            redirect = '/?view=bind' if denied.code=='PHONE_VERIFICATION_REQUIRED' else (
+                '/?view=experience' if session and session.get('phone_verified') else '/?view=login')
+        if auth.allow_legacy_experience:
+            redirect='/'
         if path.startswith('/api/'):
-            raise AuthError('请先登录 Navren。', 401)
+            raise error
         self.send_response(303)
-        self.send_header('Location', '/')
+        self.send_header('Location', redirect)
         self.send_header('Content-Length', '0')
         self.end_headers()
         return None
@@ -678,7 +1158,11 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
     def _ensure_upstream_session(self, user_id, token):
         """本地认证通过后，独立连接已有银行演示身份；调用者持有用户锁。"""
         auth = self.server.auth
-        if auth.upstream_cookie(user_id):
+        if not auth.allow_legacy_experience:
+            if self.server.experiences.resume(token) is None:
+                raise AuthError('请先选择本人的体验画像。',409,'EXPERIENCE_SELECTION_REQUIRED')
+            return
+        if auth.upstream_cookie(user_id,session_token=token):
             return
         upstream = f'127.0.0.1:{self.server.upstream_port}'
         bootstrap = client.HTTPConnection('127.0.0.1', self.server.upstream_port, timeout=15)
@@ -696,7 +1180,7 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
             auth.update_upstream_cookies(user_id,
                 [value for key, value in response.getheaders() if key.lower() == 'set-cookie'],
                 session_token=token, expected_cookie='')
-            if not auth.upstream_cookie(user_id):
+            if not auth.upstream_cookie(user_id,session_token=token):
                 raise AuthError('Navren 账户连接未完成，请稍后重试。', 502)
         except (OSError, client.HTTPException):
             raise AuthError('Navren 账户服务暂不可用，请稍后重试。', 502) from None
@@ -705,9 +1189,27 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
 
     def _proxy(self, session=None):
         path = urlsplit(self.path).path
+        if (session and not self.server.auth.allow_legacy_experience and self.command=='POST'
+                and path=='/api/finance/session'):
+            raise AuthError('请从当前注册账户恢复或选择体验画像。',409,'REGISTERED_SESSION_REQUIRED')
         body_limit = MAX_CSV_BODY if path in CSV_PREVIEW_PATHS else MAX_BODY
+        media_upload = self.command=='POST' and self.path==CHAT_MEDIA_UPLOAD_PATH
+        research_upload = self.command=='POST' and self.path==RESEARCH_UPLOAD_PATH
+        if media_upload:
+            body_limit=MAX_CHAT_MEDIA_BODY
+        elif research_upload:
+            body_limit=MAX_RESEARCH_UPLOAD_BODY
         body = self._body(body_limit) if self.command in ('POST', 'PUT', 'PATCH', 'DELETE') else None
-        headers = {key: value for key, value in self.headers.items() if key.lower() in FORWARDED_HEADERS}
+        allowed_headers = FORWARDED_HEADERS | CHAT_MEDIA_UPLOAD_HEADERS if media_upload else FORWARDED_HEADERS
+        if self.command=='POST' and self.path==CHAT_MEDIA_BIND_PATH:
+            allowed_headers = FORWARDED_HEADERS | CHAT_MEDIA_BIND_HEADERS
+        elif self.command=='POST' and self.path==ACCOUNT_STATE_WRITE_PATH:
+            allowed_headers = FORWARDED_HEADERS | ACCOUNT_STATE_WRITE_HEADERS
+        elif self.command=='POST' and (research_upload or RESEARCH_PRIVATE_WRITE.fullmatch(self.path)):
+            allowed_headers = FORWARDED_HEADERS | ACCOUNT_STATE_WRITE_HEADERS
+            if research_upload:allowed_headers |= RESEARCH_UPLOAD_HEADERS
+        # 这些客户端字段只作上游前置条件；身份仍由当前welcome session的服务端银行Cookie确定。
+        headers = {key: value for key, value in self.headers.items() if key.lower() in allowed_headers}
         upstream = f'127.0.0.1:{self.server.upstream_port}'
         headers.update(Host=upstream, Origin='http://' + upstream, **{'Sec-Fetch-Site': 'same-origin'})
         websocket = self.headers.get('Upgrade', '').lower() == 'websocket' and urlsplit(self.path).path == '/api/speech/ws'
@@ -724,10 +1226,17 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
         token = self._token()
         expected_cookie = None
         response_headers = []
-        lock = auth.user_lock(session['user_id']) if session else threading.Lock()
+        business_logout_response = False
+        lock = auth.user_lock(auth.business_lock_key(session)) if session else threading.Lock()
         def check_current():
             if session:
-                auth.assert_current(token, session['user_id'], expected_cookie)
+                auth.assert_current(token,session['user_id'],None if business_logout_response else expected_cookie)
+        def adopt_headers():
+            values = [value for key,value in response_headers if key.lower()=='set-cookie']
+            if not auth.allow_legacy_experience:
+                return self.server.experiences.adopt_headers(token,values,expected_cookie)
+            return auth.update_upstream_cookies(session['user_id'],values,
+                session_token=token,expected_cookie=expected_cookie)
         try:
             # 下游停止读取不能无限占住主体锁、阻塞退出。
             self.connection.settimeout(5)
@@ -738,7 +1247,7 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
                     auth.assert_current(token, session['user_id'])
                     if not (self.command == 'POST' and path == '/api/finance/session'):
                         self._ensure_upstream_session(session['user_id'], token)
-                    expected_cookie = auth.upstream_cookie(session['user_id'])
+                    expected_cookie = auth.upstream_cookie(session['user_id'],session_token=token)
                     if expected_cookie:
                         headers['Cookie'] = expected_cookie
                 connection.request(self.command, self.path, body=body, headers=headers)
@@ -747,18 +1256,18 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
                     response = connection.getresponse()
                     response_headers = response.getheaders()
                     check_current()
-                    expected_cookie = auth.update_upstream_cookies(session['user_id'],
-                        [value for key, value in response_headers if key.lower() == 'set-cookie'],
-                        session_token=token, expected_cookie=expected_cookie)
+                    expected_cookie = adopt_headers()
+                    business_logout_response = (not auth.allow_legacy_experience and response.status==200
+                        and path=='/api/finance/session/logout' and auth.business_revoked(token))
             if response is None:
                 response = connection.getresponse()
                 response_headers = response.getheaders()
                 with lock:
                     check_current()
                     if session:
-                        expected_cookie = auth.update_upstream_cookies(session['user_id'],
-                            [value for key, value in response_headers if key.lower() == 'set-cookie'],
-                            session_token=token, expected_cookie=expected_cookie)
+                        expected_cookie = adopt_headers()
+                        business_logout_response = (not auth.allow_legacy_experience and response.status==200
+                            and path=='/api/finance/session/logout' and auth.business_revoked(token))
             html = None
             inject_session = (session is not None and self.command == 'GET' and response.status == 200
                 and path.lstrip('/') in APP_PAGES
@@ -822,9 +1331,18 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
                     unclaimed = self._experience_bank_cookie(response_headers)
                 except AuthError:
                     unclaimed = None
-                if unclaimed and self._bank_cookie_value(auth.upstream_cookie(session['user_id'])) != unclaimed:
-                    # 已知新令牌但CAS未认领，回收它；完全丢失响应头需要Base恢复合同。
-                    self._revoke_business_cookie(unclaimed)
+                with lock:
+                    try:
+                        current = auth.upstream_cookie(session['user_id'],session_token=token)
+                    except AuthError:
+                        current = None
+                    if (unclaimed and current is not None and current==expected_cookie
+                            and self._bank_cookie_value(current)!=unclaimed and not auth.business_revoked(token)):
+                        # 只回收本次失败交换；后来成功选择的新jar不能被迟到清理撤销。
+                        if auth.allow_legacy_experience:
+                            self._revoke_business_cookie(unclaimed)
+                        else:
+                            self.server.experiences.revoke(token)
             if response_started:
                 self.close_connection = True
             else:
@@ -888,7 +1406,7 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
                 self._proxy()
                 return
             raise AuthError('页面不存在。', 404)
-        except AuthError as error:
+        except (AuthError, SmsFailure) as error:
             # 错误请求可能含尚未读取的 body；关闭连接防止残留内容变成下一条请求。
             self.close_connection = True
             data = {'error': error.message}
@@ -915,14 +1433,20 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
         self._json(403, {'error': 'Navren 不开放跨站登录或业务请求。'})
 
 
-def create_welcome_server(port=18768, database=None, *, root=ROOT, upstream_port=18767, clock=time.time):
+def create_welcome_server(port=18768, database=None, *, root=ROOT, upstream_port=18767, clock=time.time,
+                          sms_transport=None, allow_test_sms=False, allow_unverified_registration=False,
+                          experience_provider=None, allow_legacy_experience=False):
     """生产启动固定代理 127.0.0.1:18767；端口注入只用于隔离测试。"""
     instance = server.ThreadingHTTPServer(('127.0.0.1', port), WelcomeHandler)
     instance.daemon_threads = True
     instance.root = Path(root).resolve()
     instance.upstream_port = upstream_port
     try:
-        instance.auth = WelcomeAuth(database, clock)
+        instance.auth = WelcomeAuth(database, clock, sms_transport=sms_transport, allow_test_sms=allow_test_sms,
+            allow_unverified_registration=allow_unverified_registration,allow_legacy_experience=allow_legacy_experience)
+        if allow_legacy_experience and experience_provider is not None:
+            raise ValueError('legacy_and_registered_experience_are_exclusive')
+        instance.experiences = RegisteredExperienceAdapter(instance.auth,experience_provider)
     except BaseException:
         instance.server_close()
         raise

@@ -13,6 +13,7 @@ from financial_methods import MetricContext
 from financial_methods.contracts import iso_date, money_metric
 from financial_methods.funding import CashSnapshot, FundingEvent, Hold, evaluate_funding
 from simulated_bank import BankError
+from base_runtime.money_range import project_report_money
 
 
 CONTRACT = 'navren.finance-funding-source/1'
@@ -256,4 +257,4 @@ def evaluate_source(source, *, additional_versions=()):
                 assumptions=metric.assumed_inputs)
         result = replace(result, metrics=metrics,
                          coverage_gaps=tuple(dict.fromkeys((*result.coverage_gaps, 'missing_balance'))))
-    return result.to_dict()
+    return project_report_money(result.to_dict())

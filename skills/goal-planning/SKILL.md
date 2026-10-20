@@ -3,7 +3,7 @@ name: goal-planning
 description: 用户要为购置、教育、生活事件、应急金或多目标安排资金，比较目标取舍和未来缺口时，使用精确预算及独立情景工具规划。
 metadata:
   role: advisor
-  tools: [load_skill, account_summary, budget, cashflow, customer_records, personal_graph, graph_scenario, calendar_query, calendar_budget_scenario, money_calculation, answer_reviewed]
+  tools: [load_skill, account_summary, budget, cashflow, business_records, prepare_operation, customer_records, personal_graph, graph_scenario, calendar_query, calendar_budget_scenario, money_calculation, answer_reviewed]
   delivery: native
 ---
 
@@ -13,7 +13,7 @@ metadata:
 
 ## 触发与必要读取
 
-单目标是否可达、多目标先后顺序、留应急金及未来生活预算使用本技能。先 `account_summary` 选实际账户/币种。用户只问已知账款的留款差额时，账户和两次预算已足够，不读取全收支图。需要现有目标关系时才读相关 `customer_records(domain="goals")` 或 `personal_graph(view="plans")`；金额、期限和优先级不明时只核实关键项。
+单目标是否可达、多目标先后顺序、留应急金及未来生活预算使用本技能。涉及本人当前资金时，先 `account_summary` 选实际账户/币种；明确非本人事实、非已确认目标的纯假设讨论直接分析条件和约束，不先读私人账户、现有目标或正式风险等级，也不写入这些记录。用户只问已知账款的留款差额时，账户和两次预算已足够，不读取全收支图。需要现有目标关系时才读相关 `customer_records(domain="goals")` 或 `personal_graph(view="plans")`；金额、期限和优先级不明时只核实关键项。
 
 ## 分析顺序
 
@@ -36,3 +36,10 @@ metadata:
 ## 按需参考
 
 涉及多个目标、日历关联或时间歧义时，调用 `load_skill(name="goal-planning", reference="scenario-check.md")`。
+
+
+## 已登记生活任务的核对与独立操作
+
+核对现有任务、任务预算、报价或留款记录时，使用当前account_summary与business_records(kind="tasks")，不把它扩展成逐项扫描无关日历。任务、预留、服务草稿分别按原件状态说明：proposed不形成生效占用，draft服务记录不是确认订单或实际付款；当前报价必须有明确类型、金额、币种和有效期。金额只选本轮独立签名指标。当前模拟任务币种来自银行明确的simulation/currency合同，并核对账户和报价币种；不猜默认币种。
+
+用户明确单笔操作后，模型仍选择全部实际对象与金融参数。reserve_funds必填action/account_id/task_id/amount_minor/expires_on；book_services必填action/account_id/task_id/hold_id/quote_ids；release_funds必填action/account_id/hold_id。宿主复用原“模型先选账户，宿主先查该账户当前budget再准备”流程完成预留/预约的必要预算读取；它只查询，不替模型选择账户、金额、日期或报价，也不执行。现有留款成功后，后续预约、释放均另行重读对象、新草案、完整GLM与FinalProof及本人独立确认。已生效留款不能用withdraw_draft撤销。

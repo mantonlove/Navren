@@ -2,6 +2,17 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script data-navren-theme-bootstrap>
+(() => {
+  try {
+    const theme=localStorage.getItem('navren:paint-theme:v1');
+    if(theme!=='light'&&theme!=='dark')return;
+    const root=document.documentElement;
+    root.dataset.theme=theme;root.style.colorScheme=theme;
+    root.style.backgroundColor=theme==='dark'?'#0d1725':'#edf3fa';
+  } catch(_) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -10,10 +21,16 @@
 <link rel="icon" type="image/png" href="assets/brand/navren-icon.png">
 <link rel="stylesheet" href="css/style.css?v=ui-20261003-3">
 <link rel="stylesheet" href="css/bank.css?v=ui-20261003-3">
-<link rel="stylesheet" href="css/design.css?ui=0833fdeb0038">
+<link rel="stylesheet" href="css/aa_payments.css?dq=dfca1eacd7bc">
+<link rel="stylesheet" href="css/design.css?dq=849ed9447642">
 <link rel="stylesheet" href="css/account_switcher.css">
 <link rel="stylesheet" href="css/task_components.css">
-<link rel="stylesheet" href="css/chat_reading.css">
+<link rel="stylesheet" href="css/chat_reading.css?dq=d49a5f3453de">
+<link rel="stylesheet" href="css/reply_components.css?dq=89a19ec1dd60">
+<link rel="stylesheet" href="css/reply_interactions.css?dq=51143333bf16">
+  <link rel="stylesheet" href="css/navigation_gestures.css?ui=dc4db77b8cb5">
+<link rel="stylesheet" href="css/form_controls.css?dq=546db5bc506d">
+  <link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
 </head>
 <body data-page="chat">
 <a class="skip-link" href="#mainContent">跳到主要内容</a>
@@ -84,29 +101,38 @@
   </main>
 </div>
 
-<script src="js/storage.js?v=ui-20261003-3"></script>
+<script src="js/storage.js?v=uss-20261016"></script>
 <script src="js/market_ui.js"></script>
-<script src="js/i18n.js"></script>
-<script src="js/design.js?ui=a7ba89e189e9"></script>
+<script src="js/i18n.js?dq=9071cafe148f"></script>
+<script src="js/design.js?dq=da98490f38d1"></script>
 <script src="js/help.js"></script>
 <script src="js/config.js?v=7"></script>
 <script src="js/demo_products_index.js?v=7" defer></script>
 <script src="js/router.js?v=7"></script>
 <script src="js/data.js?v=7"></script>
-<script src="js/bank_client.js?v=bank2"></script>
+<script src="js/bank_client.js?v=uss-20261016"></script>
+<script src="js/chat_archive.js?v=uss-20261016"></script>
+<script src="assets/vendor/navren-avatars.min.js?v=navren-personal-flow-3"></script>
+<script src="js/personal_profile.js?v=20261014-avatar-1"></script>
 <script src="js/account_switcher.js"></script>
 <script src="js/task_components.js"></script>
 <script src="js/task_chat.js"></script>
-<script src="js/view_context.js"></script>
+<script src="js/view_context.js?ui=584da61469b8"></script>
 <script src="js/calendar_client.js"></script>
 <script src="js/calendar_ui.js"></script>
 <script src="js/speech.js"></script>
-<script src="js/bank_ui.js?v=ui-20261003-3"></script>
-<script src="js/api.js?v=bank2"></script>
-<script src="js/voice_messages.js"></script>
+<script src="js/bank_ui.js?dq=ada03283af4a"></script>
+<script src="js/money_input.js?dq=c78b0b27c459"></script>
+<script src="js/aa_payments.js?dq=c6fa7e32f5b4"></script>
+<script src="js/api.js?dq=uss-20261016"></script>
+<script src="js/voice_messages.js?v=uss-20261016"></script>
 <script src="assets/vendor/chat-markdown/marked.umd.js"></script>
 <script src="assets/vendor/chat-markdown/purify.min.js"></script>
 <script src="js/chat_markdown.js"></script>
-<script src="js/chat.js?v=navren-brand-20261005-1"></script>
+<script src="js/reply_components.js?dq=e9d7aa06afd1"></script>
+<script src="js/reply_interactions.js?dq=9aa29f5f6bdb"></script>
+<script src="js/chat.js?dq=uss-20261016"></script>
+  <script src="js/navigation_gestures.js?ui=acce6603cf27"></script>
+<script src="js/form_controls.js?dq=b4539a70b618"></script>
 </body>
 </html>

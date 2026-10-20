@@ -15,6 +15,7 @@ from financial_methods.contracts import iso_date
 from financial_methods.accounting import BalanceComponent, CashMovement, balance_sheet, cash_statement
 from financial_methods.allocation import AllocationGoal, ProductKey, ProductTerms, FormalRisk, arrange_funds
 from simulated_bank import BankError
+from base_runtime.money_range import project_report_money
 
 METHOD_TOOLS = ('accounting_report', 'returns_report', 'allocation_preview')
 CONTRACT = 'navren.finance-method-adapter/1'
@@ -28,7 +29,7 @@ def digest(value):
 def code_fingerprint():
     result = hashlib.sha256()
     for name in ('finance_methods.py', 'finance_returns.py', 'finance_sources.py',
-                 'finance_occupancy.py', 'finance_qualification.py', 'finance_funding.py'):
+                 'finance_occupancy.py', 'finance_qualification.py', 'finance_funding.py', 'money_range.py'):
         path = Path(__file__).with_name(name)
         result.update(name.encode())
         result.update(path.read_bytes() if path.exists() else b'not_connected')
@@ -271,6 +272,7 @@ class FinanceMethodAdapter:
             baseline=self.metrics.resolve_budget_baseline(workspace,args['budget_metric_id'],db=db)
             body = allocation_report(funds, value['records'], value['provenance'], ctx,
                                      bank_db=db,workspace=workspace,baseline=baseline)
+        body = project_report_money(body)
         result = {'schema_version': 1, 'adapter_contract': CONTRACT, 'workspace_id': workspace,
                   'scope': args['scope'], 'source_versions': versions, **body,
                   'no_financial_side_effect': True, 'execution_authority': False}

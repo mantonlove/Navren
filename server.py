@@ -9,7 +9,7 @@ from simulated_bank import BankError
 from voice_gateway import VoiceGateway
 from market_content import MarketStore
 PORT = int(os.environ.get('NAVREN_PORT', os.environ.get('QINGZHOU_PORT', '8765')))
-APP_PAGES = {'index.html', 'chat.html', 'recommend.html', 'account.html', 'mine.html', 'copilot.html'}
+APP_PAGES = {'index.html', 'chat.html', 'recommend.html', 'account.html', 'mine.html', 'copilot.html', 'messages.html'}
 
 def app_release():
     """内容版本同时覆盖页面、展示脚本和样式，避免旧链接拼出混合界面。"""
@@ -71,9 +71,18 @@ class PublicationSocket:
                 if restore_timeout:self.sock.settimeout(previous_timeout)
 
 class ProxyHandler(http.server.SimpleHTTPRequestHandler):
+    finance_send_guard_contract='navren.finance-send-guard/1'
     def __init__(self,*args,**kwargs):
         kwargs['directory']=str(Path(__file__).resolve().parent)
         super().__init__(*args,**kwargs)
+
+    def log_message(self, format, *args):
+        # A revoked or closed access-log stream must not interrupt HTTP replies.
+        # Financial audit records retain their independent persistent path.
+        try:
+            super().log_message(format, *args)
+        except (OSError, ValueError):
+            pass
 
     def setup(self):
         # 未缓冲wfile及WebSocket均使用这个socket；不改语音提供器或另建模型链。
@@ -87,7 +96,34 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
         super().end_headers()
+
+    def flush_headers(self):
+        if hasattr(self,'_headers_buffer'):
+            headers=self._headers_buffer
+            # 原件回查可能在真正send前拒绝；缓冲区先清空，避免拼接第二个状态行。
+            self._headers_buffer=[]
+            self.wfile.write(b''.join(headers))
+
+    def _history_failure(self,error):
+        self._headers_buffer=[]
+        if getattr(self.connection,'published',False):
+            import socket
+            self.close_connection=True
+            try:self.connection.shutdown(socket.SHUT_RDWR)
+            except OSError:pass
+            return
+        if isinstance(error,BankError):
+            self._finance_json(error.status,{'error':error.as_dict()})
+        else:
+            self._finance_json(503,{'error':{'code':'MARKET_HISTORY_UNAVAILABLE','message':'历史资料暂时无法核对。'}})
     def _finance_json(self, status, data, cookie=None):
+        guard=getattr(self,'_navren_finance_send_guard',None)
+        if status==200 and guard is not None:
+            self._navren_finance_send_guard=None
+            with guard(data):return self._finance_json_body(status,data,cookie)
+        return self._finance_json_body(status,data,cookie)
+
+    def _finance_json_body(self, status, data, cookie=None):
         # 客户端超时后的FIN有时不会让第一次send立即报错；检查已读完请求的连接，
         # 不消费任何字节。只有实际EOF/连接错误才交给既有断连回执审计。
         import select, socket
@@ -118,8 +154,78 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _dispatch_chat_media(self):
+        path = urlsplit(self.path).path
+        if path != '/api/finance/chat-media' and not path.startswith('/api/finance/chat-media/'):
+            return False
+        try:
+            service = getattr(self.server.finance, 'chat_media', None)
+            if service is None:
+                raise BankError('CHAT_MEDIA_NOT_CONFIGURED', '聊天原件保存暂不可用。', 503)
+            if path == '/api/finance/chat-media/context' and self.command == 'GET':
+                service.context_http(self)
+            elif path == '/api/finance/chat-media' and self.command == 'POST':
+                # 独立原始二进制入口，保持普通 request_json 的 1MiB 上限。
+                service.upload_http(self)
+            elif path == '/api/finance/chat-media/bind' and self.command == 'POST':
+                # 仅当前已认证主体主动迁移自己已有回合的原件，不改写原归档包。
+                # 先验证身份/CSRF并有界读取，避免慢请求体持有银行写锁。
+                self.server.finance.origin_check(self)
+                _, token = self.server.finance.identity(self)
+                self.server.finance.check_csrf(self, token)
+                data = request_json(self)
+                if (type(data) is not dict or set(data) != {'request_id', 'media_ids'}
+                        or type(data['request_id']) is not str
+                        or re.fullmatch(r'[A-Za-z0-9_-]{1,160}', data['request_id']) is None):
+                    raise BankError('CHAT_MEDIA_BIND_INVALID', '旧原件关联参数无效。', 422)
+                with service._http_scope(self) as (workspace, token, db, scope):
+                    self.server.finance.check_csrf(self, token)
+                    privacy = self.headers.get('X-Navren-Privacy-Revision', '')
+                    epoch = self.headers.get('X-Navren-Archive-Epoch', '')
+                    if (self.headers.get('X-Navren-Expected-Workspace') != workspace
+                            or re.fullmatch(r'[0-9]{1,12}', privacy) is None
+                            or re.fullmatch(r'[0-9]{1,12}', epoch) is None
+                            or (int(privacy), int(epoch)) != (scope['privacy_revision'], scope['archive_epoch'])):
+                        raise BankError('CHAT_MEDIA_STALE', '当前账户或资料权限已变化，请重新读取。', 409)
+                    result = service.bind_existing_user(workspace, data['request_id'], data['media_ids'],
+                        bank_db=db, expected_privacy=int(privacy), expected_epoch=int(epoch))
+                    self._finance_json(200, result)
+            elif re.fullmatch(r'/api/finance/chat-media/[0-9a-f]{64}', path) and self.command == 'GET':
+                service.read_http(self, path.rsplit('/', 1)[1])
+            else:
+                raise BankError('CHAT_MEDIA_ROUTE_INVALID', '聊天原件地址或请求方式无效。', 404)
+        except BankError as error:
+            if getattr(self, '_navren_chat_media_response_started', False):
+                # 二进制原件已开始传输时，只中止连接，禁止追加JSON或第二状态行。
+                import socket
+                self._headers_buffer = []
+                self.close_connection = True
+                try: self.connection.shutdown(socket.SHUT_RDWR)
+                except OSError: pass
+            else:
+                self._finance_json(error.status, {'error': error.as_dict()})
+        return True
+
     def do_GET(self):
         path = urlsplit(self.path).path
+        if self._dispatch_chat_media(): return
+        if path.startswith('/api/market/history/'):
+            try:
+                from urllib.parse import parse_qs
+                from agent_runtime.history_binding import parse_route, read_exact, public_view, make_local_binding, history_publication_guard
+                requested=parse_route(path,parse_qs(urlsplit(self.path).query,keep_blank_values=True))
+                with self.server.market.db() as history_db:
+                    history_db.execute('BEGIN')
+                    packet=read_exact(self.server.market,requested,db=history_db)
+                    binding=make_local_binding(self.server.market,packet,db=history_db) if packet['status']=='historical_readable' else None
+                    view=public_view(packet)
+                with history_publication_guard(self.server.market,packet,binding):
+                    self._finance_json(200 if view['status']=='historical_readable' else 409,view)
+            except BankError as error:
+                self._history_failure(error)
+            except Exception as error:
+                self._history_failure(error)
+            return
         if path.startswith('/api/market/'):
             from market_daily import MarketDailyError
             try:
@@ -217,6 +323,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         return super().send_head()
 
     def do_POST(self):
+        if self._dispatch_chat_media(): return
         if urlsplit(self.path).path == '/api/speech/session':
             try:
                 self._finance_json(200, self.server.voice.session(self))
@@ -239,18 +346,33 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         """统一入口；身份与权限由服务端校验，纯社交输入走本地固定回复。"""
         stream = None
         request_guard = None
+        workspace = request_id = None
+        self._navren_workspace = self._navren_request_id = None
         try:
             data = request_json(self)
+            allowed_fields={'text','mode','profile','history','followup_memory','holdings','image',
+                            'page_context_id','market_context','graph_context','language','media_ids'}
+            if not isinstance(data,dict) or set(data)-allowed_fields:
+                raise BankError('AGENT_REQUEST_FIELDS_INVALID','请求包含不受支持的Agent配置字段。',422)
 
             text = data.get('text', '')
             mode = data.get('mode', 'classic')
+            media_ids = data.get('media_ids', [])
+            if (type(media_ids) is not list or len(media_ids) > 8
+                    or any(type(mid) is not str or re.fullmatch(r'[0-9a-f]{64}', mid) is None for mid in media_ids)
+                    or len(set(media_ids)) != len(media_ids)):
+                raise BankError('CHAT_MEDIA_IDS_INVALID', '请重新选择有效的聊天附件。', 422)
+            has_attachment = bool(media_ids or data.get('image'))
 
-            if not isinstance(text,str) or not text.strip():
+            if not isinstance(text,str) or len(text.strip())>6000 or (not text.strip() and data.get('page_context_id') is None and not media_ids):
                 self.send_response(400)
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
-                self.wfile.write(json.dumps({'error': 'text is required'}).encode())
+                self.wfile.write(json.dumps({'error': '请输入问题或关联有效资料，问题不能超过6000字。'},ensure_ascii=False).encode('utf-8'))
                 return
+
+            from agent_runtime.request_privacy import RequestPrivacyPolicy
+            request_policy=RequestPrivacyPolicy.from_text(text)
 
             gateway=self.server.finance
             gateway.origin_check(self)
@@ -264,6 +386,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             from user_memory import privacy_revision
             with closing(gateway.bank.connect()) as db:request_privacy=privacy_revision(db,workspace)
             request_id=uuid.uuid4().hex
+            self._navren_request_id=request_id
             if 'text/event-stream' in self.headers.get('Accept',''):
                 from agent_runtime.events import RuntimeEvents
                 self.send_response(200)
@@ -278,28 +401,49 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 stream=RuntimeEvents(write_event,hashlib.sha256(workspace.encode()).hexdigest()[:16],request_id)
                 stream.start()
             # 客户端画像/历史不能覆盖银行正式状态或注入伪造工具消息。
-            options={'mode':mode,'has_attachment':bool(data.get('image')),'request_id':request_id}
+            options={'mode':mode,'has_attachment':has_attachment,'request_id':request_id}
             response_language=data.get('language','zh')
             if response_language not in ('zh','en'):raise BankError('INVALID_LANGUAGE','答复语言须为zh或en。',422)
+            if getattr(gateway,'approved_responses',None) is not None:
+                import inspect
+                parameters=inspect.signature(self.server.conversation_agent.process).parameters
+                if 'language' in parameters or any(p.kind==inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+                    options['language']=response_language
+                elif response_language!='zh':
+                    raise BankError('AGENT_LANGUAGE_WIRING_REQUIRED','当前Agent尚未接入可信英文终结合同。',503)
             request_personal=gateway.personal_data.revision(workspace)
             from agent_runtime.social_reply import resolve_social_reply
             social_match=resolve_social_reply(text, language=response_language,
-                has_attachment=bool(data.get('image')),
+                has_attachment=has_attachment,
                 has_selected_context=any(data.get(key) is not None for key in
                     ('page_context_id','market_context','graph_context')))
             if social_match is not None:
+                self._archive_user_request(gateway,workspace,request_id,text,request_personal,
+                    request_privacy,[],has_image=bool(data.get('image')),media_ids=media_ids)
                 self._publish_local_social_reply(gateway,workspace,token,text,social_match,
                     request_id,request_privacy,request_personal,stream)
                 return
             if data.get('page_context_id') is not None:
+                if request_policy.private_context_disabled:
+                    # Tickets and their references are server-owned and immutable
+                    # after creation. Inspect their kind before any resolver can
+                    # read an account/graph/calendar object; consume still checks
+                    # ownership, privacy version, expiry and single-use status.
+                    with gateway.page_contexts.lock:
+                        reference=gateway.page_contexts._entry(workspace,token,data['page_context_id']).get('reference')
+                        if reference and reference.get('kind') not in ('event','article','weekly'):
+                            raise BankError('REQUEST_PRIVATE_DATA_FORBIDDEN','本轮已禁止读取个人资料，请移除个人资料引用后重新提问。',403)
                 page_context=gateway.page_contexts.consume(workspace,token,data['page_context_id'],text)
-            # 同一现有研究组合服务先完成只读投影缓存，再固定输入版本。
-            # BankTools同样会调用provision；不能把首次缓存创建误判成用户资料变更。
-            gateway.wealth.provision(workspace)
-            request_metrics=gateway.financial_metrics.snapshot(workspace,60)
-            memory_enabled=gateway.memories.state(workspace)['enabled']
-            if memory_enabled:
-                gateway.personal_data.register_conversation_source(workspace,request_id,text,expected_revision=request_personal)
+            historical_context=None
+            if page_context is not None:
+                from agent_runtime.history_binding import HostHistoryContext, host_binding, requested_history
+                if type(page_context) is HostHistoryContext:
+                    host_binding(page_context,owner=gateway.page_contexts,workspace=workspace,market=gateway.market)
+                    historical_context=page_context
+                elif requested_history(page_context) or page_context.get('reading_mode')=='historical_audit':
+                    raise BankError('HISTORY_CONTEXT_REQUIRED','历史引用必须来自本次已验证的页面票据。',403)
+            if not text.strip() and not media_ids and (not page_context or page_context.get('request_mode')!='reference_overview'):
+                raise BankError('INVALID_TEXT','请先输入问题或选择有效的关联资料。')
             if page_context:
                 options['page_context']=page_context
                 if page_context['kind'] in ('event','article','weekly'):
@@ -307,24 +451,72 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 elif page_context['kind']=='graph':options['graph_context']=page_context['parameters']
             if data.get('market_context') is not None:
                 context=data['market_context']
+                from agent_runtime.history_binding import requested_history
+                if requested_history(context) or (isinstance(context,dict) and
+                        (context.get('reading_mode')=='historical_audit' or context.get('historical_only') is True)):
+                    raise BankError('HISTORY_CONTEXT_REQUIRED','调用方历史标记不能赋予历史资料权限。',403)
                 if not isinstance(context,dict) or set(context)!={'kind','id'} or context['kind'] not in ('event','article','weekly') or not isinstance(context['id'],str) or len(context['id'])>128:
                     raise BankError('MARKET_CONTEXT_INVALID','市场提问对象不合法。')
-                try:
-                    obj={'event':self.server.market.event,'article':self.server.market.article,'weekly':self.server.market.weekly}[context['kind']](context['id'])
-                    if context['kind']=='weekly' and obj['report'] is None:raise KeyError('weekly_not_found')
-                except KeyError:raise BankError('MARKET_NOT_FOUND','市场提问对象不存在或已撤下。',404)
-                if page_context and page_context['kind'] in ('event','article','weekly'):
-                    if (context['kind'],context['id'])!=(page_context['kind'],page_context['id']):
-                        raise BankError('MARKET_CONTEXT_CONFLICT','市场对象与当前页面引用不一致。',409)
-                else:options['market_context']=gateway.page_contexts.resolve(workspace,context)
+                if historical_context is not None:
+                    if (context['kind'],context['id'])!=(historical_context['kind'],historical_context['id']):
+                        raise BankError('MARKET_CONTEXT_CONFLICT','市场对象与选定历史票据不一致。',409)
+                else:
+                    try:
+                        obj={'event':self.server.market.event,'article':self.server.market.article,'weekly':self.server.market.weekly}[context['kind']](context['id'])
+                        if context['kind']=='weekly' and obj['report'] is None:raise KeyError('weekly_not_found')
+                    except KeyError:raise BankError('MARKET_NOT_FOUND','市场提问对象不存在或已撤下。',404)
+                    if page_context and page_context['kind'] in ('event','article','weekly'):
+                        if (context['kind'],context['id'])!=(page_context['kind'],page_context['id']):
+                            raise BankError('MARKET_CONTEXT_CONFLICT','市场对象与当前页面引用不一致。',409)
+                    else:options['market_context']=gateway.page_contexts.resolve(workspace,context)
             if stream:options.update(on_event=stream.progress,request_id=request_id)
+            selected_graph=None
             if data.get('graph_context') is not None:
+                if historical_context is not None:
+                    raise BankError('HISTORY_PRIVATE_CONTEXT_CONFLICT','历史复核不能同时读取个人图谱，请另开本人的当前资料问题。',403)
+                request_policy.require_tool('personal_graph')
                 gc=data['graph_context']
                 if not isinstance(gc,dict) or set(gc)-{'node_id','insight_id','edge_id','view','from','to','source'}:
                     raise BankError('GRAPH_CONTEXT_INVALID','图谱对象不合法。')
-                gateway.financial_graph.query(workspace,gc,for_agent=True)
+                graph_result=gateway.financial_graph.query(workspace,gc,for_agent=True)
+                selected_graph={'kind':'graph','id':gc.get('node_id') or gc.get('edge_id') or gc.get('insight_id') or 'overview',
+                    'source_scope':gc.get('source','simulation'),'version':graph_result['version'],'parameters':gc}
                 options['graph_context']=gc
-            from copy import copy
+            # 范围由宿主在票据/图谱对象已核验后推导；前端不能提交权限。
+            request_policy=RequestPrivacyPolicy.for_turn(text,page_context=page_context,
+                graph_context=options.get('graph_context'))
+            if historical_context is not None and not request_policy.private_context_disabled:
+                request_policy=RequestPrivacyPolicy(True,version=request_policy.version,scope_reason='historical_audit')
+            # 先核验并消费宿主引用，再归档。空原话的合法资料概览保留真实结构，
+            # 不伪造用户问题；原件由受信媒体ID在同一私库事务内绑定。
+            archived_user = self._archive_user_request(gateway,workspace,request_id,text,request_personal,
+                request_privacy,[page_context,options.get('market_context'),selected_graph],
+                has_image=bool(data.get('image')),media_ids=media_ids)
+            if not text.strip() and media_ids and not any((page_context, options.get('market_context'), selected_graph)):
+                # 接收原始图片/无转写录音不等于识别内容，也不触发模型或伪造助手审核。
+                result = {'bank': True, 'bank_response_id': request_id, 'workspace_id': workspace,
+                          'privacy_revision': request_privacy, 'personal_revision': request_personal,
+                          'reply': '附件已保存。你可以继续补充希望了解的问题。',
+                          'attachment_receipt': {'status': 'archived', 'request_id': request_id},
+                          'user_attachments': archived_user.get('attachments', []),
+                          'isFallback': True}
+                with gateway.publication_guard(workspace, request_privacy, request_personal):
+                    gateway.demo_sessions.validate(token, workspace)
+                    if stream: stream.finish(result)
+                    else: self._finance_json(200, result)
+                return
+            # 同一现有研究组合服务先完成只读投影缓存，再固定输入版本。
+            # BankTools同样会调用provision；不能把首次缓存创建误判成用户资料变更。
+            if request_policy.private_context_disabled:
+                request_metrics=None
+                memory_enabled=False
+            else:
+                gateway.wealth.provision(workspace)
+                request_metrics=gateway.financial_metrics.snapshot(workspace,60)
+                memory_enabled=gateway.memories.state(workspace)['enabled']
+            if memory_enabled and text.strip():
+                gateway.personal_data.register_conversation_source(workspace,request_id,text,expected_revision=request_personal)
+            from copy import copy,deepcopy
             from base_runtime.evidence import PublicEvidenceObserver, MetricEvidenceObserver, EvidenceGuardedClient
             from base_runtime.tool_scope import ScopedEvidenceClient, statement_tool_scope, statement_month_context
             request_gateway=copy(gateway)
@@ -334,26 +526,40 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             public_observer=PublicEvidenceObserver(prepared.provider)
             request_gateway.knowledge_provider=public_observer
             request_gateway.public_products=RoundProductCatalog(public_observer,prepared.provider.records)
+            # 独立宿主选源；HTTP JSON、模型正文和工具参数不能安装或发行来源。
+            catalog_information=gateway.catalog_information_host.pin(request_id=request_id,
+                workspace=workspace,privacy_revision=request_privacy,personal_revision=request_personal,
+                public_only=request_policy.private_context_disabled)
+            if catalog_information is not None:
+                from local_knowledge.catalog_information import ScopedProductCatalog, CatalogInformationEvidenceObserver
+                prepared=type(prepared)(prepared.provider,{**deepcopy(prepared.report),
+                    'catalog_information':catalog_information.snapshot()})
+                request_gateway.catalog_information_observer=catalog_information
+                request_gateway.public_products=ScopedProductCatalog(request_gateway.public_products,catalog_information)
+                public_observer=CatalogInformationEvidenceObserver(public_observer,catalog_information)
+                request_gateway.knowledge_provider=public_observer
             metric_observer=MetricEvidenceObserver(gateway.financial_metrics)
             request_gateway.financial_metrics=metric_observer
             request_agent=copy(self.server.conversation_agent)
-            statement_history=gateway.personal_data.read_history(workspace)
-            tool_scope=statement_tool_scope(text,has_attachment=bool(data.get('image')),
+            statement_history=[] if request_policy.private_context_disabled else gateway.personal_data.read_history(workspace)
+            tool_scope=request_policy.allowed_tools if request_policy.private_context_disabled else statement_tool_scope(text,has_attachment=has_attachment,
                 has_context=any(value is not None for value in
                     (page_context,data.get('market_context'),data.get('graph_context'))),
                 history=statement_history)
             with closing(gateway.bank.connect()) as statement_db:
                 statement_as_of=gateway.bank._workspace(statement_db,workspace)['as_of']
-            statement_month=statement_month_context(text,statement_history,statement_as_of) if tool_scope else None
+            statement_month=statement_month_context(text,statement_history,statement_as_of) if tool_scope and not request_policy.private_context_disabled else None
             for client_name in ('primary','reviewer'):
                 client=getattr(request_agent,client_name,None)
                 if client is not None:
                     guarded=(ScopedEvidenceClient(client,public_observer,prepared.report,
                         allowed_tools=tool_scope) if client_name=='primary' else
                         EvidenceGuardedClient(client,public_observer,prepared.report))
-                    if client_name=='primary':
+                    if client_name=='primary' and catalog_information is not None:
+                        guarded.append_notice('\n本轮宿主选定了历史或合成目录，只用于资料研究。先调用knowledge_status，再调用public_products(view="historical_conditions")；查询参数留空以读取完整选定资料。工具返回的conditions_draft来自实际目录、检索状态和用款期限，可原样作为answer_reviewed正文并引用本轮证据，不据此声称当前费用、在售或执行资格。')
+                    if client_name=='primary' and not request_policy.private_context_disabled:
                         # 后端已接通的读取能力属于服务端事实；不能把尚未调用说成没有数据。
-                        guarded.notice=(guarded.notice or '')+'\n本机已接通当前登录主体的财务读取工具。'+(
+                        guarded.append_notice('\n本机已接通当前登录主体的财务读取工具。'+(
                             '询问某月钱花在哪、收入支出或消费分类，先调用monthly_statement(month=YYYY-MM)，'
                             '按本轮as_of解析未指定的年份，再根据返回的分类、facts和metrics回答。'
                             '没有调用对应工具前，不得声称没有账单、要求用户上传已有账单，或让用户换一种问法再查。'
@@ -361,9 +567,9 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                             '追问某项分几笔、具体日期或明细，调用statement_details，category使用本人所问的分类，'
                             '笔数和合计用返回的transaction_count与total_minor，不以页长或总额猜测笔数。'
                             '独立历史库的银行账户、银行卡、保险、持仓和资产可用financial_*工具读取；'
-                            '历史合成资料与现行模拟操作分开，不把历史估值当可执行余额。')
+                            '历史合成资料与现行模拟操作分开，不把历史估值当可执行余额。'))
                         if statement_month:
-                            guarded.notice+='\n本轮本人账单问句的月份上下文：'+statement_month+'。沿用月份只为读取；必须重新查工具取得本轮证据。'
+                            guarded.append_notice('\n本轮本人账单问句的月份上下文：'+statement_month+'。沿用月份只为读取；必须重新查工具取得本轮证据。')
                     setattr(request_agent,client_name,guarded)
             def finalize_result(result,commit_history=None):
                 history_attempted=False
@@ -373,7 +579,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                     result['knowledge_snapshot']=public_observer.snapshot(result.get('knowledge_snapshot'))
                     result['knowledge_preparation']=prepared.report
                     gateway.demo_sessions.validate(token,workspace)
-                    gateway.financial_metrics.validate(workspace,request_metrics)
+                    if request_metrics is not None:gateway.financial_metrics.validate(workspace,request_metrics)
                     result['financial_metric_snapshot']=request_metrics
                     from contextlib import closing
                     from user_memory import privacy_revision
@@ -384,7 +590,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                             raise BankError('PERSONAL_VERSION_CONFLICT','个人资料已变化，旧答复已丢弃。',409)
                         result.update(workspace_id=workspace,privacy_revision=revision,personal_revision=request_personal)
                     result['memory_proposals']=gateway.personal_data.propose_candidates(workspace,text,request_id,
-                        expected_revision=request_personal) if memory_enabled and not result.get('isFallback') else []
+                        expected_revision=request_personal) if memory_enabled and text.strip() and not result.get('isFallback') else []
                     # 切断模型/工具/Observer持有的嵌套可变别名；Agent历史回调仍
                     # 指向这个同一dict，正文、组件和最终绑定保持一致。
                     from copy import deepcopy
@@ -398,9 +604,10 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                     with gateway.response_guard(workspace,request_privacy,request_personal,result.get('knowledge_snapshot'),expected_context,
                                                 market_snapshot=result.get('market_snapshot'),metric_snapshot=request_metrics,
                                                 service_snapshot=result.get('service_snapshot'),
-                                                metric_batches=metric_observer.batches) as guarded_db:
+                                                metric_batches=metric_observer.batches,
+                                                catalog_information=catalog_information.snapshot() if catalog_information is not None else None) as guarded_db:
                         gateway.demo_sessions.validate(token,workspace)
-                        gateway.financial_metrics.validate(workspace,request_metrics)
+                        if request_metrics is not None:gateway.financial_metrics.validate(workspace,request_metrics)
                         gateway.operation_evidence.bind_answer(workspace,result,guarded_db)
                     # 绑定事务先成功提交。第二阶段重新按bank→market→knowledge→rules
                     # 取得只读发布锁并复验，避免commit失败前发送成功答复。
@@ -413,19 +620,35 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                             # 私库可能commit后再抛异常；从实际调用前标记，撤回只做本轮CAS。
                             history_attempted=True
                             return writer(*args,bank_db=bank_db,**kwargs)
-                        commit_history(writer=guarded_writer)
+                        approved=getattr(gateway,'approved_responses',None)
+                        selected_writer=guarded_writer
+                        if approved is not None and result.get('agent_review',{}).get('status')=='approved' and not result.get('isFallback'):
+                            sealer=getattr(commit_history,'seal_final_response',None)
+                            if not callable(sealer):
+                                raise BankError('AGENT_FINAL_TRANSPORT_WIRING_REQUIRED','Agent尚未接入原发布事务的最终封存。',503)
+                            sealer(bank_db=bank_db,language=response_language,server_gateway=gateway,session_token=token)
+                            selected_writer=approved.guarded_writer(workspace,result,guarded_writer,bank_db=bank_db,language=response_language)
+                        if approved is not None:
+                            commit_history(writer=selected_writer,bank_db=bank_db,server_gateway=gateway,session_token=token)
+                        else:commit_history(writer=selected_writer)
                     failure_stage='publication'
                     with gateway.publication_guard(workspace,request_privacy,request_personal,result.get('knowledge_snapshot'),expected_context,
                             market_snapshot=result.get('market_snapshot'),metric_snapshot=request_metrics,
                             service_snapshot=result.get('service_snapshot'),metric_batches=metric_observer.batches,
                             before_send=save_history if commit_history is not None else None,
                             budget_check=commit_history.assert_budget if commit_history is not None else None,
-                            budget_remaining=commit_history.remaining_seconds if commit_history is not None else None):
+                            budget_remaining=commit_history.remaining_seconds if commit_history is not None else None,
+                            catalog_information=catalog_information.snapshot() if catalog_information is not None else None) as publication_db:
                         gateway.demo_sessions.validate(token,workspace)
                         if stream:
                             stream.finish(result)
                             if not stream.connected:raise PublicationInterrupted('publication_client_disconnected')
                         else:self._finance_json(200,result)
+                        approved=getattr(gateway,'approved_responses',None)
+                        if approved is not None and history_attempted and result.get('agent_review',{}).get('status')=='approved' and not result.get('isFallback'):
+                            approved.published(workspace,request_id,bank_db=publication_db)
+                            archive=getattr(gateway,'dialogue_archive',None)
+                            if archive is not None:archive.attest_published(workspace,request_id,bank_db=publication_db)
                     return result
                 except Exception as error:
                     try:
@@ -439,6 +662,14 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                     raise
             from agent_runtime.conversation import ConversationAgent
             if isinstance(request_agent,ConversationAgent):
+                if getattr(gateway,'approved_responses',None) is not None:
+                    import inspect
+                    parameters=inspect.signature(request_agent.process).parameters
+                    if ('publication_sources' not in parameters
+                            and not any(p.kind==inspect.Parameter.VAR_KEYWORD for p in parameters.values())):
+                        raise BankError('AGENT_FINAL_TRANSPORT_WIRING_REQUIRED','Agent尚未接入本轮实际发布来源读取。',503)
+                    options['publication_sources']=lambda:deepcopy({'knowledge_preparation':prepared.report,
+                                                                   'financial_metric_snapshot':request_metrics})
                 options['finalize_result']=finalize_result
                 request_agent.process(request_gateway,workspace,text,**options)
             else:
@@ -446,6 +677,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 finalize_result(request_agent.process(request_gateway,workspace,text,**options))
 
         except BankError as e:
+            self._audit_agent_rejection(workspace,request_id,e)
             if self.request.published:
                 self.close_connection=True
                 return
@@ -458,6 +690,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             # 已发送部分帧后失效，关闭连接；不能追加另一份HTTP或续播旧内容。
             self.close_connection=True
         except Exception as error:
+            self._audit_agent_rejection(workspace,request_id,error)
             # 保留可定位的服务端异常；不记录问题正文、密钥或异常消息。
             import traceback
             frames = [{'file':Path(frame.filename).name, 'line':frame.lineno,
@@ -476,6 +709,37 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         finally:
             if request_guard:request_guard.__exit__(None,None,None)
 
+    def _audit_agent_rejection(self,workspace,request_id,error):
+        if workspace is None:return
+        from agent_runtime.bank_tools import _host_security_rejection
+        event_id=('agent:http' if request_id is not None else 'agent:http:'+uuid.uuid4().hex)
+        _host_security_rejection(self.server.finance,workspace,error,
+            request_id=request_id,event_id=event_id,phase='http')
+
+    def _archive_user_request(self,gateway,workspace,request_id,text,personal,privacy,contexts,*,has_image,media_ids=None):
+        archive=getattr(gateway,'dialogue_archive',None)
+        if archive is None:
+            if media_ids: raise BankError('DIALOGUE_ARCHIVE_STORAGE_REQUIRED','当前会话尚未接入原件归档。',503)
+            return {}
+        from copy import deepcopy
+        from personal_data import ARCHIVE_REFERENCE_LABELS,ARCHIVE_REFERENCE_PARAMETERS
+        references=[]
+        for context in contexts:
+            if context is None:continue
+            kind=context['kind'];ident=context['id']
+            if kind not in ARCHIVE_REFERENCE_LABELS:
+                raise BankError('DIALOGUE_REFERENCE_UNSUPPORTED','资料引用暂不支持完整聊天归档。',422)
+            parameters={k:deepcopy(v) for k,v in context.get('parameters',{}).items()
+                        if k in ARCHIVE_REFERENCE_PARAMETERS.get(kind,())}
+            reference={'contract':'navren.archived-reference/1','kind':kind,'id':ident,
+                'source_scope':context['source_scope'],'version':context['version'],
+                'label':ARCHIVE_REFERENCE_LABELS[kind]+' · '+ident,'parameters':parameters,
+                'historical_readonly':True,'current_fact_eligible':False,'execution_authority':False}
+            if reference not in references:references.append(reference)
+        return archive.archive_user_turn(workspace,request_id,text,references=references,media_ids=media_ids,
+            attachments=[{'kind':'image','storage_status':'not_archived'}] if has_image else [],
+            expected_personal_revision=personal,expected_privacy_revision=privacy)
+
     def _publish_local_social_reply(self, gateway, workspace, token, text, match,
                                     request_id, request_privacy, request_personal, stream):
         """本地固定社交文本：保留身份、版本与历史发布守卫，不准备金融证据。"""
@@ -485,6 +749,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         if not lock.acquire(blocking=False):
             raise BankError('AGENT_BUSY','这段会话正在处理上一项请求，请稍后再发。',409)
         result = None
+        local_speech_receipt = None
         history_attempted = False
         try:
             result = build_social_reply_result(workspace, request_id, match)
@@ -499,29 +764,46 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 gateway.bank._audit(bank_db, workspace, 'agent_social_reply_prepared',
                     {'request_id':request_id, 'rule_id':match['rule_id'],
                      'model_calls':0, 'tool_calls':0, 'review_calls':0})
+            # 独立申请只读朗读凭据必须在 publication_guard 的银行锁外，
+            # 之后仍由原保存/发布门控制交付，失败路径撤回该凭据。
+            local_speech_receipt = gateway.approve_speech(workspace,
+                {**result, 'compliance_pass': True}, token)
+            wire_result = {**result, **({'speech_receipt': local_speech_receipt} if local_speech_receipt else {})}
             def save_history(bank_db):
                 nonlocal history_attempted
                 gateway.demo_sessions.validate(token, workspace)
                 history_attempted = True
-                if gateway.personal_data.save_turn_guarded(workspace, messages, request_id, [],
+                widgets=[]
+                if getattr(gateway,'dialogue_archive',None) is not None:
+                    approved=getattr(gateway,'approved_responses',None)
+                    if approved is None:
+                        raise BankError('LOCAL_PUBLICATION_UNAVAILABLE','本地回复归档尚未接入。',503)
+                    widgets.append(approved.prepare_local_rule(workspace,result,bank_db=bank_db))
+                if gateway.personal_data.save_turn_guarded(workspace, messages, request_id, widgets,
                         bank_db=bank_db, expected_revision=request_personal,
                         expected_privacy=request_privacy) is not True:
                     raise BankError('STALE_EVIDENCE','资料刚刚发生变化，本轮对话未保存。',409)
             with gateway.publication_guard(workspace, request_privacy, request_personal,
-                                            before_send=save_history):
+                                            before_send=save_history) as publication_db:
                 gateway.demo_sessions.validate(token, workspace)
                 gateway.assert_publication_current()
                 if stream:
                     stream.progress({'kind':'activity', 'call_id':'local-social-reply',
                         'activity_kind':'reply', 'name':'social_reply', 'label':'本地问候回复',
                         'status':'completed', 'summary':{'source':'local_rule'}})
-                    stream.finish(result)
+                    stream.finish(wire_result)
                     if not stream.connected:
                         raise PublicationInterrupted('publication_client_disconnected')
                 else:
-                    self._finance_json(200, result)
+                    self._finance_json(200, wire_result)
+                if getattr(gateway,'dialogue_archive',None) is not None:
+                    gateway.approved_responses.published(workspace,request_id,bank_db=publication_db)
+                    gateway.dialogue_archive.attest_published(workspace,request_id,bank_db=publication_db)
             return result
         except Exception as error:
+            if local_speech_receipt:
+                with gateway._speech_lock:
+                    gateway._speech_receipts.pop(local_speech_receipt, None)
             if history_attempted and result is not None:
                 gateway.discard_unpublished_answer(workspace, request_id, result,
                     expected_privacy=request_privacy, expected_personal=request_personal,
@@ -551,40 +833,52 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
 
 class NavrenHTTPServer(http.server.ThreadingHTTPServer):
     def server_close(self):
+        finance=getattr(self,'finance',None)
+        if finance is not None:finance.stop_public_sync(timeout=2)
         runtime=getattr(self,'evidence_runtime',None)
         if runtime is not None:runtime.close()
         super().server_close()
 
 
 def create_server(port=PORT, database=None, voice=None, model_agents=None, conversation_agent=None,
-                  evidence_runtime=None, market_database=None):
-    from agent_runtime.conversation import ConversationAgent
+                  evidence_runtime=None, market_database=None, public_catalog=None, public_sync_enabled=None,
+                  agent_route_provider=None,finance_factory=None):
+    if conversation_agent is not None:
+        if agent_route_provider is not None:
+            raise ValueError('agent_injection_and_route_provider_conflict')
+        selected_agent=conversation_agent
+    else:
+        from agent_runtime.agent_factory import create_agent
+        selected_agent=create_agent(route_provider='off' if agent_route_provider is None else agent_route_provider)
     server=NavrenHTTPServer(('127.0.0.1',port),ProxyHandler)
-    server.app_release=app_release()
-    server.finance=FinanceGateway(database)
-    # 显式数据库用于隔离验收；不得把开发验收资料写入现役市场缓存。
-    server.market=MarketStore(market_database if market_database is not None else
-        (Path(database).with_name(Path(database).stem+'.market.sqlite3') if database else None))
-    server.finance.market=server.market
-    server.knowledge_import=server.finance.knowledge_provider.import_market_store(server.market,publish=True)
-    from local_knowledge.runtime import EvidenceRuntime
-    server.evidence_runtime=evidence_runtime or EvidenceRuntime(server.finance.knowledge_provider)
-    server.voice=voice or VoiceGateway()
-    server.agent_models=model_agents  # 仅旧行为对照测试可注入；生产对话不使用。
-    server.conversation_agent=conversation_agent if conversation_agent is not None else ConversationAgent()
+    try:
+        server.app_release=app_release()
+        if finance_factory is None:
+            from base_runtime.service_assembly import AssembledGateway
+            finance_factory=AssembledGateway
+        server.finance=finance_factory(database,public_catalog=public_catalog)
+        from base_runtime.chat_media import ChatMediaService
+        server.finance.chat_media = ChatMediaService(server.finance)
+        # 显式数据库用于隔离验收；不得把开发验收资料写入现役市场缓存。
+        server.market=MarketStore(market_database if market_database is not None else
+            (Path(database).with_name(Path(database).stem+'.market.sqlite3') if database else None))
+        server.finance.market=server.market
+        server.knowledge_import=server.finance.knowledge_provider.import_market_store(server.market,publish=True)
+        from local_knowledge.runtime import EvidenceRuntime
+        server.evidence_runtime=evidence_runtime or EvidenceRuntime(server.finance.knowledge_provider)
+        server.voice=voice or VoiceGateway()
+        server.agent_models=model_agents  # 仅旧行为对照测试可注入；生产对话不使用。
+        server.conversation_agent=selected_agent
+        approved=getattr(server.finance,'approved_responses',None)
+        if approved is not None and callable(getattr(selected_agent,'validate_final_response',None)):
+            approved.validator=selected_agent.validate_final_response
+        server.finance.start_public_sync(enabled=public_sync_enabled)
+    except BaseException:
+        server.server_close()
+        raise
     return server
 
 
 if __name__ == '__main__':
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    print(f'Navren服务器 → http://localhost:{PORT}')
-    print(f'Chat API 代理 → {API_URL}')
-    print('Agent 对话 → /api/agent (DeepSeek 原生工具调用 + GLM 独立审核)')
-    print('云端 TTS 与语音接入接口 → /api/speech/ws（原始录音出库默认关闭）')
-    if API_KEY:
-        print('模型服务密钥已加载')
-    server=create_server()
-    from market_pipeline import start_background
-    stop=start_background(server.market)
-    try:server.serve_forever()
-    finally:stop.set();server.server_close()
+    from scripts.serve_financial_frontend import main
+    main()

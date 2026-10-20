@@ -254,3 +254,154 @@ def unpack_review_evidence(packet: dict) -> dict:
         _fail('REVIEW_EVIDENCE_UNUSED_REF')
     del result[_CATALOG]
     return result
+
+
+# Existing reversible whole-provider metric transport; not a metric issuer.
+_RATIO_FIELDS=(_FIELDS-{"value_minor"})|{"value_decimal"}
+_FINANCE_CATALOG='financial_metric_catalog'
+_FINANCE_REF='financial_metric_ref'
+_FINANCE_REF_PATTERN=re.compile(r'fmetric_[a-f0-9]{64}\Z')
+
+
+def _financial_snapshot(value):
+    if type(value) is not dict:return False
+    fields=_RATIO_FIELDS if value.get('unit')=='ratio' else _FIELDS
+    return set(value) in (fields,fields-{'source_versions'}|{'source_version_ref'})
+
+
+def _financial_ref(metric, packet):
+    if metric.get('unit') not in ('minor_currency','ratio'):_fail('FINANCIAL_EVIDENCE_UNIT_INVALID')
+    return 'fmetric_'+hashlib.sha256(_encoded(_full_metric(metric,packet),canonical=True)).hexdigest()
+
+
+def _check_financial_reserved(value):
+    if type(value) is dict:
+        if _FINANCE_CATALOG in value or _FINANCE_REF in value:_fail('FINANCIAL_EVIDENCE_RESERVED_FIELD')
+        for item in value.values():_check_financial_reserved(item)
+    elif type(value) is list:
+        for item in value:_check_financial_reserved(item)
+
+
+def _financial_data_path(path, review):
+    return bool(path and (path[0]=='data' if not review else
+        path[0] in ('presentation_review','provider_review','review_metric_catalog')
+        or len(path)>=3 and path[0]=='evidence' and type(path[1]) is int and path[2]=='data'))
+
+
+def _financial_top_records(packet, *, review=False):
+    """Native 字面完整原件可被 data 引用；绝不引用模型 claim。"""
+    tops={};identities={}
+    if review:return tops,identities
+    for collection,unit in (('metrics','minor_currency'),('ratios','ratio')):
+        if collection not in packet:continue
+        rows=packet[collection]
+        # A whole boundary gap remains literal and is never a reference target.
+        if type(rows) is not list:continue
+        for index,row in enumerate(rows):
+            metric=row.get('metric') if type(row) is dict else None
+            if not _financial_snapshot(metric):continue
+            if metric['unit']!=unit:
+                _fail('FINANCIAL_EVIDENCE_TOP_INVALID')
+            ref=_financial_ref(metric,packet);mid=metric['metric_id']
+            if row.get('metric_id')!=mid:_fail('FINANCIAL_EVIDENCE_TOP_INVALID')
+            if mid in identities and identities[mid]!=ref:_fail('FINANCIAL_EVIDENCE_METRIC_CONFLICT')
+            identities[mid]=ref
+            tops.setdefault(ref,({'collection':collection,'index':index,'metric_id':mid,'unit':unit},metric))
+    return tops,identities
+
+
+def _financial_catalog_metric(entry, packet, *, review=False):
+    if type(entry) is dict and set(entry)=={'collection','index','metric_id','unit'}:
+        collection,index=entry['collection'],entry['index']
+        if (review or collection not in ('metrics','ratios') or type(index) is not int or index<0
+                or type(packet.get(collection)) is not list or index>=len(packet[collection])):
+            _fail('FINANCIAL_EVIDENCE_TOP_INVALID')
+        row=packet[collection][index]
+        metric=row.get('metric') if type(row) is dict else None
+        expected_unit='ratio' if collection=='ratios' else 'minor_currency'
+        if (not _financial_snapshot(metric) or entry['unit']!=expected_unit or metric['unit']!=expected_unit
+                or entry['metric_id']!=metric['metric_id'] or row.get('metric_id')!=metric['metric_id']):
+            _fail('FINANCIAL_EVIDENCE_TOP_INVALID')
+        return metric
+    if not _financial_snapshot(entry):_fail('FINANCIAL_EVIDENCE_CATALOG_MISMATCH')
+    return entry
+
+
+def pack_financial_evidence(packet, *, review=False):
+    """仅可信投影后producer调用。顶层claimable metrics/ratios原样保留。"""
+    original=_copy_packet(packet);_check_financial_reserved(original)
+    tops,identities=_financial_top_records(original,review=review)
+    originals={};counts={}
+    def collect(value,path=()):
+        if _financial_data_path(path,review) and _financial_snapshot(value):
+            ref=_financial_ref(value,original);mid=value['metric_id']
+            if mid in identities and identities[mid]!=ref:_fail('FINANCIAL_EVIDENCE_METRIC_CONFLICT')
+            identities[mid]=ref
+            if ref in originals and _encoded(originals[ref],canonical=True)!=_encoded(value,canonical=True):
+                _fail('FINANCIAL_EVIDENCE_REPRESENTATION_CONFLICT')
+            originals[ref]=value;counts[ref]=counts.get(ref,0)+1
+        elif type(value) is dict:
+            for key,item in value.items():collect(item,path+(key,))
+        elif type(value) is list:
+            for index,item in enumerate(value):collect(item,path+(index,))
+    collect(original)
+    catalog={}
+    for ref,value in originals.items():
+        if ref in tops and _encoded(tops[ref][1],canonical=True)==_encoded(value,canonical=True):
+            catalog[ref]=deepcopy(tops[ref][0])
+        elif counts[ref]>1:catalog[ref]=deepcopy(value)
+    if not catalog:return original
+    if len(catalog)>64:_fail('FINANCIAL_EVIDENCE_CATALOG_LIMIT')
+    def pack(value,path=()):
+        if _financial_data_path(path,review) and _financial_snapshot(value):
+            ref=_financial_ref(value,original)
+            if ref in catalog:return {_FINANCE_REF:ref,'metric_id':value['metric_id'],'unit':value['unit']}
+        if type(value) is dict:return {k:pack(v,path+(k,)) for k,v in value.items()}
+        if type(value) is list:return [pack(v,path+(i,)) for i,v in enumerate(value)]
+        return value
+    packed=pack(original);packed[_FINANCE_CATALOG]=catalog
+    if len(_encoded(packed))>=len(_encoded(original)):return original
+    if unpack_financial_evidence(packed,review=review)!=original:_fail('FINANCIAL_EVIDENCE_ROUNDTRIP')
+    return packed
+
+
+def unpack_financial_evidence(packet, *, review=False):
+    """纯一致性解包，不注册指标、不验签、不补模型claim的任何字段。"""
+    result=_copy_packet(packet)
+    if _FINANCE_CATALOG not in result:
+        _check_financial_reserved(result);return result
+    catalog=result.pop(_FINANCE_CATALOG)
+    if type(catalog) is not dict or not 1<=len(catalog)<=64:_fail('FINANCIAL_EVIDENCE_CATALOG_INVALID')
+    _,identities=_financial_top_records(result,review=review)
+    originals={}
+    for ref,entry in catalog.items():
+        metric=_financial_catalog_metric(entry,result,review=review)
+        if (type(ref) is not str or not _FINANCE_REF_PATTERN.fullmatch(ref)
+                or _financial_ref(metric,result)!=ref):_fail('FINANCIAL_EVIDENCE_CATALOG_MISMATCH')
+        _check_financial_reserved(entry)
+        if metric['metric_id'] in identities and identities[metric['metric_id']]!=ref:
+            _fail('FINANCIAL_EVIDENCE_METRIC_CONFLICT')
+        identities[metric['metric_id']]=ref;originals[ref]=metric
+    used=set()
+    def unpack(value,path=()):
+        if type(value) is dict:
+            if _FINANCE_CATALOG in value:_fail('FINANCIAL_EVIDENCE_RESERVED_FIELD')
+            if _FINANCE_REF in value:
+                if not _financial_data_path(path,review) or set(value)!={_FINANCE_REF,'metric_id','unit'}:
+                    _fail('FINANCIAL_EVIDENCE_RESERVED_FIELD')
+                ref=value[_FINANCE_REF]
+                if type(ref) is not str or ref not in catalog:_fail('FINANCIAL_EVIDENCE_UNKNOWN_REF')
+                metric=originals[ref]
+                if value['metric_id']!=metric['metric_id'] or value['unit']!=metric['unit']:
+                    _fail('FINANCIAL_EVIDENCE_BINDING_MISMATCH')
+                used.add(ref);return deepcopy(metric)
+            if _financial_data_path(path,review) and _financial_snapshot(value):
+                ref=_financial_ref(value,result);mid=value['metric_id']
+                if mid in identities and identities[mid]!=ref:_fail('FINANCIAL_EVIDENCE_METRIC_CONFLICT')
+                identities[mid]=ref
+            return {k:unpack(v,path+(k,)) for k,v in value.items()}
+        if type(value) is list:return [unpack(v,path+(i,)) for i,v in enumerate(value)]
+        return value
+    result=unpack(result)
+    if used!=set(catalog):_fail('FINANCIAL_EVIDENCE_UNUSED_REF')
+    return result

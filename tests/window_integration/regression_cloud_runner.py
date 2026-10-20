@@ -250,12 +250,13 @@ def validate_g2_execution(receipt, family, run_path, args, inputs, gate):
     argv = receipt.get('argv')
     script = public.checked_file(args.candidate, G2_SCRIPT[family])
     # 本轮协议只有此正式CLI；重复/额外参数不能覆盖先前绑定。
-    if (not isinstance(argv, list) or len(argv) != 16 or argv[1] != '-B' or
+    if (not isinstance(argv, list) or len(argv) != 18 or argv[1] != '-B' or
             Path(argv[2]).resolve() != script.resolve() or argv.count('--cloud') != 1 or
             public.sha(script) != inputs['sources'].get(G2_SCRIPT[family])):
         raise ValueError('g2_actual_cli_source_not_bound:' + family)
     for name, expected in (('--candidate', args.candidate), ('--source-manifest', args.source_manifest),
-                           ('--data-manifest', args.data_manifest), ('--out-dir', run_path.parent)):
+                           ('--data-manifest', args.data_manifest), ('--out-dir', run_path.parent),
+                           ('--paid-preflight-manifest',args.paid_preflight_manifest)):
         actual = Path(flag(argv, name)).resolve()
         if actual != Path(expected).resolve():
             # 不同manifest文件可以同内容，但不能只比较一个不完整map。
@@ -264,14 +265,21 @@ def validate_g2_execution(receipt, family, run_path, args, inputs, gate):
     archived_handoff = Path(flag(argv, '--handoff')).resolve()
     prior = public.cloud_gate(archived_handoff, flag(argv, '--handoff-sha256'),
                               inputs['sources'], inputs['datasets'], inputs['contract'])
-    for key in ('g1_run_path', 'g1_run_sha256', 'g1_execution_path', 'g1_execution_sha256'):
-        if prior[key] != gate[key]:
-            raise ValueError('g2_different_g1_execution:' + family)
+    if 'reuse_basis_sha256' in prior or 'reuse_basis_sha256' in gate:
+        if prior.get('reuse_basis_sha256') != gate.get('reuse_basis_sha256'):
+            raise ValueError('g2_different_reused_component_evidence:' + family)
+    else:
+        for key in ('g1_run_path', 'g1_run_sha256', 'g1_execution_path', 'g1_execution_sha256'):
+            if prior[key] != gate[key]:
+                raise ValueError('g2_different_g1_execution:' + family)
     return archived_handoff
 
 
-def validate_finance_execution(execution, candidate, case, out, cases):
+def validate_finance_execution(execution, candidate, case, out, cases, campaign_manifest=None, campaign_attempt=None):
     expected = financial_command(candidate, case['id'], out, cases)
+    if campaign_manifest is None or campaign_attempt is None:raise ValueError('finance_actual_campaign_binding_required')
+    expected += ['--paid-campaign-manifest',str(campaign_manifest),
+                 '--paid-campaign-delegated-attempt',campaign_attempt]
     if (not isinstance(execution.get('argv'), list) or execution['argv'][1:] != expected[1:]
             or Path(execution.get('cwd', '')).resolve() != Path(candidate).resolve()
             or execution.get('timeout_seconds') != 140):
@@ -321,7 +329,8 @@ def validate_g2(args, inputs, gate, tracked):
                 execution = finance.read_json(actual)
                 if execution != record.get('execution'):
                     raise ValueError('g2_finance_actual_child_receipt_not_bound')
-                validate_finance_execution(execution, args.candidate, case, path.parent, inputs['g3_cases']['finance'])
+                validate_finance_execution(execution, args.candidate, case, path.parent, inputs['g3_cases']['finance'],
+                    args.paid_preflight_manifest,record.get('paid_campaign',{}).get('attempt_id'))
                 raw, logs = finance.read_json(path), read_logs(log_path)
                 checked = finance.validate_child(execution, raw, logs, case['id'], case['prompt'], inputs['sources'], inputs['datasets'], args.candidate)
                 row = raw['records'][0]; result = row.get('result', {})
@@ -405,11 +414,15 @@ def cloud_gate(args, inputs, tracked):
         raise ValueError('explicit_cloud_required')
     gate = public.cloud_gate(args.handoff, args.handoff_sha256, inputs['sources'], inputs['datasets'], inputs['contract'])
     # 同内容桥接不要求两个物理candidate路径相等，所有完整map必须实际吻合。
-    g1 = finance.read_json(gate['g1_run_path'])
+    reused = 'reuse_basis_sha256' in gate
+    g1 = finance.read_json(gate['original_failed_G1_path'] if reused else gate['g1_run_path'])
     if g1.get('formal_support_sha256') != inputs['support']:
         raise ValueError('g1_g3_support_not_same_candidate')
-    for key in ('g1_run_path', 'g1_execution_path'):
-        tracked[Path(gate[key])] = public.sha(gate[key])
+    if reused:
+        tracked.update({Path(path): digest for path, digest in gate['tracked_evidence'].items()})
+    else:
+        for key in ('g1_run_path', 'g1_execution_path'):
+            tracked[Path(gate[key])] = public.sha(gate[key])
     tracked[Path(args.handoff)] = args.handoff_sha256
     g2 = validate_g2(args, inputs, gate, tracked)
     budget = budget_gate(finance.read_json(args.handoff), inputs, tracked)
@@ -434,12 +447,13 @@ def financial_command(candidate, ident, out, cases):
             str(Path(candidate) / finance.DATASET_PATH), '--out-dir', str(out), '--case-ids', ident]
 
 
-def public_command(args, ident, out):
+def public_command(args, ident, out, campaign_attempt):
     return [sys.executable, '-B', str(Path(args.candidate) / RUNNER_PATH),
             '--candidate', str(args.candidate), '--source-manifest', str(args.source_manifest),
             '--data-manifest', str(args.data_manifest), '--out-dir', str(out), '--cloud',
             '--handoff', str(args.handoff), '--handoff-sha256', args.handoff_sha256,
-            '--public-child', ident]
+            '--paid-preflight-manifest', str(args.paid_preflight_manifest),
+            '--public-child', ident, '--paid-campaign-delegated-attempt', campaign_attempt]
 
 
 def collected_file(path, scope):
@@ -473,7 +487,7 @@ def result_turn(raw, family):
     return turn if isinstance(turn, str) and 1 <= len(turn) <= 256 else None
 
 
-def execute_case(args, family, case, inputs, out):
+def execute_case(args, family, case, inputs, out, campaign_attempt=None):
     out = Path(out); out.mkdir(parents=True, exist_ok=False)
     configured_models = public.configured_model_contract(args.candidate)
     with tempfile.TemporaryDirectory(prefix='navren-g3-' + family + '-state-') as temp:
@@ -499,11 +513,14 @@ def execute_case(args, family, case, inputs, out):
         public.atomic_json(out/'controller-isolation.json', isolation)
         if family == 'public':
             result_out = out / 'public'
-            command = public_command(args, case['id'], result_out)
+            command = public_command(args, case['id'], result_out, campaign_attempt)
         else:
             result_out = out / 'semantic'
             dispatch_env['NAVREN_MODEL_CALL_LOG'] = str(result_out/'model-calls.jsonl')
             command = financial_command(args.candidate, case['id'], result_out, inputs['g3_cases']['finance'])
+            if campaign_attempt is None:raise ValueError('g3_finance_campaign_parent_required')
+            command += ['--paid-campaign-manifest',str(args.paid_preflight_manifest),
+                        '--paid-campaign-delegated-attempt',campaign_attempt]
         execution = inputs['contract'].execute(command, args.candidate, out/'process', CAPS[family], dispatch_env)
     result_path = result_out/case['id']/'record.json' if family == 'public' else result_out/'semantic-results.json'
     log_path = result_out/case['id']/'model-calls.jsonl' if family == 'public' else result_out/'model-calls.jsonl'
@@ -543,7 +560,8 @@ def execute_case(args, family, case, inputs, out):
                     checked[key] = None
             if native['actual_model_requests_sent'] is None:
                 checked['actual_model_requests_sent'] = None
-            validate_finance_execution(execution, args.candidate, case, result_out, inputs['g3_cases']['finance'])
+            validate_finance_execution(execution, args.candidate, case, result_out, inputs['g3_cases']['finance'],
+                args.paid_preflight_manifest,campaign_attempt)
         checked.update(raw_result=binding(result_path))
         actual_isolation = checked.get('business_isolation', {})
         actual_paths = actual_isolation.get('paths')
@@ -677,7 +695,9 @@ def public_child(args):
     if case is None or not unchanged(inputs, args.candidate, tracked):
         raise ValueError('g3_public_child_case_or_source_dependency')
     started = time.monotonic()
-    record = public.execute_case(Path(args.candidate).resolve(), case, inputs, out, True, 105)
+    identity = args.paid_campaign.delegated(args.paid_campaign_delegated_attempt,case_id=case['id'],output=out)
+    with args.paid_campaign.transport(identity):
+        record = public.execute_case(Path(args.candidate).resolve(), case, inputs, out, True, 105)
     elapsed = time.monotonic()-started  # execute_case finally 已完成真实服务/reader/线程/临时库清理。
     receipt = {'id': case['id'], 'duration_seconds': elapsed, 'task_wall_seconds': 105,
                'complete_prepare_http_cleanup': elapsed <= 105,
@@ -723,8 +743,13 @@ def run(args):
                     if path.is_file() and record.get('execution'):
                         public.atomic_json(path, record)
             public.atomic_json(out/'results.json', report)
+        from paid_campaign import execute as campaign_execute
+        def paid_case(family, case):
+            return campaign_execute(args.paid_campaign,suite_id='G3-original-public12-finance10',
+                case_id=case['id'],variant=family,output=out/family/case['id'],
+                call=lambda identity: execute_case(args,family,case,inputs,out/family/case['id'],identity))
         collect_serial([(family, inputs['g3_cases'][family]) for family in ('public', 'finance')], report, started=started,
-            execute=lambda family, case: execute_case(args, family, case, inputs, out/family/case['id']), guard=guard,
+            execute=paid_case, guard=guard,
             save=save)
     except Exception as error:
         report.update(status='not_run_gate_dependency' if not any(r['status'] != 'not_run' for g in report['families'].values()
@@ -744,10 +769,21 @@ def main():
     parser.add_argument('--data-manifest', type=Path, required=True)
     parser.add_argument('--out-dir', type=Path, required=True)
     parser.add_argument('--cloud', action='store_true')
+    parser.add_argument('--paid-preflight-manifest', type=Path)
     parser.add_argument('--handoff', type=Path)
     parser.add_argument('--handoff-sha256')
     parser.add_argument('--public-child')
+    parser.add_argument('--paid-campaign-delegated-attempt')
     args = parser.parse_args()
+    if args.cloud:
+        try:
+            from paid_entry_admission import admit_cli
+            args.paid_admission = admit_cli(args, root=args.candidate, suite_id='G3-original-public12-finance10', entrypoint=Path(__file__).resolve())
+            from paid_campaign import load_campaign
+            args.paid_campaign = load_campaign(args.candidate, args.paid_preflight_manifest)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print(json.dumps({'status':'paid_admission_blocked','reason':str(error),'provider_calls':0}))
+            return 2
     return public_child(args) if args.public_child else run(args)
 
 

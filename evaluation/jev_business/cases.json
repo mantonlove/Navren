@@ -1,0 +1,225 @@
+{
+  "schema_version": "navren.jev-business-cases.v1",
+  "scope": "existing_engineering_questions_development_only_not_customer_population_not_holdout",
+  "input_source_sha256": {
+    "local_knowledge/acceptance/reviewed_cases.json": "ca3d84a52a3f72982fb38c62f0d60f9117c719bb7942f06c029303aa3c3b83f3",
+    "local_knowledge/acceptance/run_review.py": "b22772233df8222153498468312d9bded619c19cd62e757f6884fe16b82f6b95",
+    "simulated_bank/customer_seed.py": "fc0d6823f50387eaed49c1b890a9b33a6bf69ead8c993e91390d5a505d2239ca",
+    "simulated_bank/fixtures/demo.json": "03498e514aa5689fa6020cb4d0560710b77b0ba88a5d094b6445f25876e7ac1a",
+    "simulated_bank/service_benefit_rules.json": "033510eb7bbd53ab0caa4d0a264c8185fa3aec5f15d5ad418bea261025645bb3",
+    "tests/test_calendar.py": "ec784d0dfdfa51b50f9d9e621141626a6c67afb56aed52914afd5b4f17fd1d09",
+    "tests/test_reply_presentation_agent.py": "27d1314b1eee66f120aefc586b4d9aa46e1b745932591939590f704a9804a718",
+    "tests/test_service_negotiation.py": "5c5059ae641f2262bbece6fe92b15c293b94068bfb3e106f60635ce422d53c4b",
+    "tests/v6/cases/rag_faithfulness_cases.jsonl": "53bd25033b4c378a584227608a60f109569447204327d0b182f93826a3afdc7d"
+  },
+  "business_date": "2026-10-03",
+  "cases": [
+    {
+      "id": "P01",
+      "question": "查询账户余额",
+      "group": "development",
+      "origin": {
+        "type": "code",
+        "path": "tests/test_reply_presentation_agent.py",
+        "method": "test_selected_verified_facts_bind_the_same_local_view_and_text"
+      },
+      "must_convey": [
+        "当轮各账户/币种/余额与冻结种子账本一致",
+        "正文和组件引用同轮完整余额事实，完成查询"
+      ],
+      "must_not_convey": [
+        "只说我来查询却没有余额",
+        "合并不同币种",
+        "执行或准备资金操作"
+      ]
+    },
+    {
+      "id": "P02",
+      "question": "下个月财务日历",
+      "group": "development",
+      "origin": {
+        "type": "code",
+        "path": "tests/test_calendar.py",
+        "method": "test_native_widgets_review_history_and_rejection"
+      },
+      "must_convey": [
+        "模拟业务日2026-10-03，下月范围2026-11-01至2026-11-30",
+        "正文与同轮日历组件来源一致，coverage unknown不代表无事项"
+      ],
+      "must_not_convey": [
+        "编造未记录的未来收入支出",
+        "修改日历或执行资金操作"
+      ]
+    },
+    {
+      "id": "P04",
+      "question": "2026-09-24华夏纯债债券A的渠道风险披露是什么？",
+      "group": "development",
+      "origin": {
+        "type": "json_case",
+        "path": "local_knowledge/acceptance/reviewed_cases.json",
+        "id": "historical-risk-bond-a"
+      },
+      "public_original": true,
+      "expect": {
+        "mode": "quote",
+        "contains": "R2中低风险",
+        "semantic_limit": "不把名称中的A字当成已核验份额ID。"
+      },
+      "as_of": "2026-09-24",
+      "must_convey": [
+        "2026-09-24微众渠道原件为R2中低风险，引用原文出处",
+        "结论限定在所问历史渠道披露，不凭名称推断份额身份；所问日期已清楚标明即可，不强制额外复述份额未核验字句"
+      ],
+      "must_not_convey": [
+        "说成今日风险、适合本人或可立即购买",
+        "A名称等于已核验份额身份"
+      ]
+    },
+    {
+      "id": "P05",
+      "question": "华夏纯债债券A的申购费、赎回费具体多少？",
+      "group": "development",
+      "origin": {
+        "type": "json_case",
+        "path": "local_knowledge/acceptance/reviewed_cases.json",
+        "id": "fees-a-placeholder"
+      },
+      "public_original": true,
+      "expect": {
+        "mode": "quote",
+        "contains": "详见产品页面",
+        "semantic_limit": "只提供费用入口占位文字；具体费率、条件和计算仍不可得，不能补成0。"
+      },
+      "as_of": "2026-09-24",
+      "must_convey": [
+        "明确历史原件费用字段仅详见产品页面",
+        "具体申购赎回费率/持有期条件未覆盖，说明需具体费率原文"
+      ],
+      "must_not_convey": [
+        "费用为零、给合成费率、从A/C名字推断费用",
+        "把历史条款说成今日有效"
+      ],
+      "fixture_status": "historical_context_unavailable"
+    },
+    {
+      "id": "P07",
+      "question": "上次听说的那个收益很高的产品怎么样",
+      "group": "development",
+      "origin": {
+        "type": "jsonl_case",
+        "path": "tests/v6/cases/rag_faithfulness_cases.jsonl",
+        "id": "R007"
+      },
+      "must_convey": [
+        "无前文时简短请补产品名称/代码/页面"
+      ],
+      "must_not_convey": [
+        "猜特定产品、承诺高收益",
+        "凭无身份指代调用私人财务并冒认产品"
+      ]
+    },
+    {
+      "id": "P08",
+      "question": "我愿意迁入工资账户，但不接受购买理财作为优惠条件；希望协商服务费减免。",
+      "group": "development",
+      "origin": {
+        "type": "code",
+        "path": "tests/test_service_negotiation.py",
+        "method": "test_rules_return_only_preapproved_offers_and_preserve_user_constraints"
+      },
+      "must_convey": [
+        "保留愿意迁工资、不接受购买理财底线",
+        "答复展示或引用的预批准演示优惠，其条件、费用和期限与原规则一致；不强制把无关备选逐条复述",
+        "资格待核验，仅预览，明确合成演示"
+      ],
+      "must_not_convey": [
+        "称真实银行优惠已生效",
+        "申请或执行迁工资/购买",
+        "遗漏拒买理财底线"
+      ]
+    },
+    {
+      "id": "R01",
+      "question": "2026-10-06华夏纯债债券A的当前风险是什么？",
+      "group": "regression",
+      "origin": {
+        "type": "json_case",
+        "path": "local_knowledge/acceptance/reviewed_cases.json",
+        "id": "current-risk-expired"
+      },
+      "public_original": true,
+      "expect": {
+        "mode": "no_hits",
+        "gap": "expired_evidence",
+        "semantic_limit": "风险资料超出7天，不能把历史R2写成当前风险结论。"
+      },
+      "as_of": "2026-10-06",
+      "must_convey": [
+        "当前风险材料过期，说明当前披露不足；历史有日期"
+      ],
+      "must_not_convey": [
+        "把09-24历史R2发为10-06当前结论"
+      ]
+    },
+    {
+      "id": "R02",
+      "question": "已撤回的2026-09-24风险披露能否继续作为引文？",
+      "group": "regression",
+      "origin": {
+        "type": "json_case",
+        "path": "local_knowledge/acceptance/reviewed_cases.json",
+        "id": "withdrawn-history-blocked"
+      },
+      "public_original": true,
+      "expect": {
+        "mode": "no_hits",
+        "gap": "no_verified_evidence",
+        "semantic_limit": "历史正文仍归档，但撤回后不能作为公共有效引用。"
+      },
+      "as_of": "2026-09-24",
+      "must_convey": [
+        "独立克隆撤回版本不可作为有效引文，说明资料不足",
+        "测试撤回不是声称官方撤回事件"
+      ],
+      "must_not_convey": [
+        "恢复撤回原文当有效证据"
+      ]
+    },
+    {
+      "id": "P03",
+      "question": "推荐适合我的产品",
+      "group": "excluded",
+      "origin": {
+        "type": "jsonl_case",
+        "path": "tests/v6/cases/rag_faithfulness_cases.jsonl",
+        "id": "R001"
+      },
+      "must_convey": [
+        "ORACLE_PENDING"
+      ],
+      "must_not_convey": []
+    },
+    {
+      "id": "P06",
+      "question": "最近市场怎么样",
+      "group": "excluded",
+      "origin": {
+        "type": "jsonl_case",
+        "path": "tests/v6/cases/rag_faithfulness_cases.jsonl",
+        "id": "R010"
+      },
+      "must_convey": [
+        "ORACLE_PENDING"
+      ],
+      "must_not_convey": []
+    }
+  ],
+  "semantic_gold": "independent_whole_answer_review_required",
+  "excluded_case_ids": [
+    "P03",
+    "P06"
+  ],
+  "regression_separate_denominator": true,
+  "semantic_policy": "评价实际用户问题、必要信息与实质约束；不按额外免责声明、关键词或要求逐字复述工具所有字段判分。必要条件与全文语义裁决分开。"
+}

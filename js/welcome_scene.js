@@ -11,6 +11,7 @@ let renderer, scene, camera, water, environment, loginUI, raf = 0;
 let lastFrame = 0, elapsed = 0, previousTime = 0;
 let resizeObserver;
 let renderSize = { width: 1, height: 1 };
+let sceneMotion = null;
 const pointer = new THREE.Vector2();
 const cameraOffset = new THREE.Vector2();
 const cameraHome = new THREE.Vector3();
@@ -207,18 +208,26 @@ function createSky(sunDirection) {
 
 function fitRenderResolution() {
   const nativeRatio = Math.min(window.devicePixelRatio || 1, 2);
-  const pixelRatio = nativeRatio;
+  // Keep a full-screen water frame within a practical fill-rate budget. The
+  // smaller login card can still use the display's full pixel ratio.
+  const pixelRatio = Math.min(nativeRatio,
+    Math.max(1, Math.sqrt(2400000 / (renderSize.width * renderSize.height))));
   if (Math.abs(renderer.getPixelRatio() - pixelRatio) > 0.001
       || canvas.width !== Math.floor(renderSize.width * pixelRatio)
       || canvas.height !== Math.floor(renderSize.height * pixelRatio)) {
-    renderer.setPixelRatio(pixelRatio);
-    renderer.setSize(renderSize.width, renderSize.height, false);
+    renderer.setDrawingBufferSize(renderSize.width, renderSize.height, pixelRatio);
   }
   canvas.dataset.pixelRatio = pixelRatio.toFixed(3);
 }
 
+function welcomeHorizontalTangent() {
+  const rect = canvas.closest('.welcome-stage').getBoundingClientRect();
+  const aspect = Math.max(1, rect.width) / Math.max(1, rect.height);
+  return Math.tan(THREE.MathUtils.degToRad(aspect < 1 ? 40 : 34) / 2) * aspect;
+}
+
 function resize() {
-  if (!renderer || state.disposed) return;
+  if (!renderer || state.disposed || sceneMotion) return;
   const rect = canvas.getBoundingClientRect();
   // The single-column account page hides the scene entirely.
   if (rect.width < 2 || rect.height < 2) return;
@@ -227,7 +236,11 @@ function resize() {
   camera.aspect = width / height;
   const portrait = camera.aspect < 1;
   const auth = loginUI?.started;
-  camera.fov = auth ? 34 : portrait ? 40 : 34;
+  // Keep the original horizontal scene in view as the card becomes narrower.
+  // Its vertical field expands instead of closing a crop around the logo.
+  camera.fov = auth
+    ? THREE.MathUtils.radToDeg(2 * Math.atan(welcomeHorizontalTangent() / camera.aspect))
+    : portrait ? 40 : 34;
   camera.filmOffset = auth || portrait ? 0 : -5.5;
   cameraHome.set(3.25, auth ? 3.7 : 2.9, auth ? 26 : portrait ? 35 : 22);
   lookAt.set(3.25, auth ? 3.5 : portrait ? 3.8 : 3.45, auth ? -4 : 0);
@@ -235,20 +248,38 @@ function resize() {
   camera.lookAt(lookAt);
   camera.updateProjectionMatrix();
   fitRenderResolution();
-  renderer.shadowMap.needsUpdate = true;
   canvas.dataset.reflectionResolution = '1536';
   canvas.dataset.viewport = `${Math.round(width)}x${Math.round(height)}`;
+  canvas.dataset.cameraHorizontalFov = THREE.MathUtils.radToDeg(2 * Math.atan(
+    Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect)).toFixed(3);
+  canvas.dataset.cameraVerticalFov = camera.fov.toFixed(3);
   if (state.ready) renderFrame();
 }
 
 function renderFrame() {
   fitRenderResolution();
   water.update(elapsed);
-  cameraOffset.lerp(pointer, motionPreference.matches || loginUI?.started ? 1 : 0.025);
-  camera.position.copy(cameraHome);
-  if (!loginUI?.started) {
-    camera.position.x += cameraOffset.x * 0.32;
-    camera.position.y += cameraOffset.y * 0.10;
+  if (sceneMotion) {
+    const progress = sceneMotion.animation?.effect.getComputedTiming().progress ?? 0;
+    const p = THREE.MathUtils.clamp(progress, 0, 1);
+    if (sceneMotion.from && sceneMotion.to) {
+      const width = THREE.MathUtils.lerp(sceneMotion.from.width, sceneMotion.to.width, p);
+      const height = THREE.MathUtils.lerp(sceneMotion.from.height, sceneMotion.to.height, p);
+      camera.aspect = width / height;
+    }
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(sceneMotion.horizontalTangent / camera.aspect));
+    camera.filmOffset = THREE.MathUtils.lerp(sceneMotion.filmOffset, 0, p);
+    cameraHome.lerpVectors(sceneMotion.position, sceneMotion.targetPosition, p);
+    lookAt.lerpVectors(sceneMotion.lookAt, sceneMotion.targetLookAt, p);
+    camera.position.copy(cameraHome);
+    camera.updateProjectionMatrix();
+  } else {
+    cameraOffset.lerp(pointer, motionPreference.matches || loginUI?.started ? 1 : 0.025);
+    camera.position.copy(cameraHome);
+    if (!loginUI?.started) {
+      camera.position.x += cameraOffset.x * 0.32;
+      camera.position.y += cameraOffset.y * 0.10;
+    }
   }
   camera.lookAt(lookAt);
   const gl = renderer.getContext();
@@ -421,8 +452,32 @@ try {
 } catch (error) { setFailure(error); }
 
 loginUI = createWelcomeLogin({ canvas,
+  onTransition(phase, details) {
+    if (phase === 'start' && renderer && !state.error && !state.disposed) {
+      sceneMotion = { position: camera.position.clone(), lookAt: lookAt.clone(),
+        horizontalTangent: Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect,
+        filmOffset: camera.filmOffset,
+        targetPosition: new THREE.Vector3(3.25, 3.7, 26),
+        targetLookAt: new THREE.Vector3(3.25, 3.5, -4) };
+      canvas.dataset.transitionRenderer = 'live';
+      canvas.dataset.transitionFramesStart = String(state.frames);
+      canvas.dataset.transitionBufferStart = `${canvas.width}x${canvas.height}`;
+      canvas.dataset.transitionHorizontalFovStart = canvas.dataset.cameraHorizontalFov;
+    } else if (phase === 'animate' && sceneMotion) {
+      Object.assign(sceneMotion, details);
+    } else if (phase === 'finish' || phase === 'cancel') {
+      if (sceneMotion) {
+        canvas.dataset.transitionFramesEnd = String(state.frames);
+        canvas.dataset.transitionBufferEnd = `${canvas.width}x${canvas.height}`;
+        canvas.dataset.transitionHorizontalFovEnd = THREE.MathUtils.radToDeg(2 * Math.atan(
+          Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect)).toFixed(3);
+      }
+      sceneMotion = null;
+    }
+  },
   onPhaseChange() {
     resetPointer();
+    if (sceneMotion) return;
     visibilityChanged();
     if (renderer && !state.error) resize();
   }

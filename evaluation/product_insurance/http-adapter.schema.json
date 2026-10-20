@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PI-ACCEPT isolated HTTP adapter",
+  "type": "object",
+  "required": ["schema", "api_contract_path", "api_contract_sha256", "base_url_env", "isolation_manifest_env", "flows"],
+  "properties": {
+    "schema": {"const": "navren.pi.http-adapter/1"},
+    "api_contract_path": {"type": "string"},
+    "api_contract_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "base_url_env": {"type": "string"},
+    "isolation_manifest_env": {"type": "string"},
+    "test_cookie_env": {"type": "string"},
+    "test_csrf_env": {"type": "string"},
+    "upload_key_env": {"type": "string"},
+    "flows": {"type": "array", "minItems": 1}
+  },
+  "flow_step_safety": {
+    "default": "read-only",
+    "mutating_methods": "require --allow-isolated-writes and NAVREN_PI_ALLOW_ISOLATED_WRITES=1 plus a valid PI isolated-instance manifest",
+    "financial_prepare": "also requires --allow-prepare, NAVREN_PI_ALLOW_PREPARE=1 and manifest.operation_gates_enabled=true",
+    "redirects": "never followed",
+    "cookies": "only short-lived PI test cookie from the named environment variable; never load desktop/browser state"
+  }
+}

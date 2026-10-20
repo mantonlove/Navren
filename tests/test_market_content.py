@@ -4,13 +4,31 @@ from pathlib import Path
 from unittest.mock import patch
 from market_sources import REGISTRY,safe_url,parse_date,discover,read_article,cluster_key
 from market_content import MarketStore,week_periods,observation_change,CN
-from market_editor import MarketEditor,numbers
+from market_editor import MarketEditor,numbers,restore_source_quote_whitespace
 from market_pipeline import refresh,due
 
 class Client:
     model_id='test-independent'
     def __init__(self,result):self.result=result
     def complete_json(self,**kwargs):return copy.deepcopy(self.result)
+
+class SourceQuoteWhitespaceTests(unittest.TestCase):
+    def test_unique_chinese_statistics_restores_exact_original_spaces(self):
+        source='2026 年 9 月下旬与 9 月中旬相比，22 种产品价格上涨，23 种下降，5 种持平。'
+        quote='2026年9月下旬与9月中旬相比，22种产品价格上涨，23种下降，5种持平。'
+        self.assertEqual(restore_source_quote_whitespace(quote,source),source)
+    def test_unique_table_span_restores_line_breaks_and_separate_numbers(self):
+        source='电解铜（1#）\n吨\n111742.5\t2972.5\n2.7'
+        quote='电解铜（1#） 吨 111742.5 2972.5 2.7'
+        self.assertEqual(restore_source_quote_whitespace(quote,source),source)
+    def test_different_numeric_word_or_outer_token_boundaries_are_rejected(self):
+        for quote,source in [('12','1 2'),('1.02','1.0 2'),('ratecut','rate cut'),
+            ('rate cut','ratecut'),('12.3','112.3'),('-0.4','- 0.4')]:
+            with self.subTest(quote=quote,source=source):self.assertIsNone(restore_source_quote_whitespace(quote,source))
+    def test_ambiguous_overlapping_punctuation_and_overlong_spans_are_rejected(self):
+        for quote,source in [('价格上涨。','价格 上涨。以及价格上涨。'),('aaa','aaaa'),
+            ('价格上涨。','价格上涨!'),('价格上涨','价格'+' '*201+'上涨')]:
+            with self.subTest(quote=quote):self.assertIsNone(restore_source_quote_whitespace(quote,source))
 
 class MarketTests(unittest.TestCase):
     def setUp(self):

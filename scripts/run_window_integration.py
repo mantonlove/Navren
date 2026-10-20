@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Navren 独立集成验收：冻结副本、限时执行、逐案证据和发布核对。
 
-不修改业务实现、既有题意或现场数据。云调用须显式 --stage cloud 和模块交接清单。
+不修改业务实现、既有题意或现场数据。云调用须显式 --stage cloud、模块交接清单和付费预检清单。
 """
 from __future__ import annotations
 
@@ -26,11 +26,15 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_ROOT = ROOT / 'outputs/window-progress/integration'
+PAID_PREFLIGHT_RELATIVE = Path('outputs/window-progress/agent/baseline-remediation-20261014/preflight')
+PAID_PREFLIGHT_SCRIPT_SHA256 = 'efcec9a222f38019090057c5b2306b289f426f68e69314728015cd98b4ef6e17'
 EXCLUDED = {'.git', '.venv', 'venv', 'node_modules', '__pycache__', '.pytest_cache',
             '.playwright-cli', 'output', 'outputs', 'archive', 'archives', 'backups',
             'upstream', '设计文档', 'logs'}
 SOURCE_DIRS = ('agent_runtime', 'base_runtime', 'simulated_bank', 'local_knowledge', 'financial_methods',
+               'financial_mcp', 'financial_data_service',
                'knowledge', 'skills', 'js', 'css', 'assets', 'tests', 'evaluation', 'scripts')
+EXACT_SOURCE_FILES = ('dependency-resources/deepseek-v4/tokenizer.json',)
 LOCAL_TEST_GROUPS = (
     ('test_cross_module.py', 24), ('test_market_voice_negotiation.py', 12),
     ('test_financial_metrics.py', 10), ('test_four_profiles.py', 6),
@@ -61,6 +65,19 @@ def now():
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def strict_json(path):
+    def unique(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError('duplicate_json_key:' + key)
+            result[key] = value
+        return result
+    return json.loads(Path(path).read_text(encoding='utf-8'), object_pairs_hook=unique,
+                      parse_constant=lambda value: (_ for _ in ()).throw(
+                          ValueError('invalid_json_constant:' + value)))
 
 
 def atomic_json(path, value):
@@ -95,6 +112,15 @@ def source_files(root):
             dirs[:] = [d for d in dirs if d not in EXCLUDED]
             paths.update(Path(current) / f for f in files if not f.startswith('.') and
                          Path(f).suffix.lower() not in ('.pyc', '.sqlite3', '.sqlite', '.db', '.log'))
+    for name in EXACT_SOURCE_FILES:
+        path = root / name
+        if not path.exists() and not path.is_symlink():
+            if (root / 'agent_runtime/request_budget.py').is_file():
+                raise ValueError('required_source_file_missing:' + name)
+            continue
+        if path.is_symlink() or not path.is_file() or path.resolve() != path.absolute() or not path.resolve().is_relative_to(root):
+            raise ValueError('source_file_redirected:' + name)
+        paths.add(path)
     return sorted(p for p in paths if p.name not in ('voice.local.json', 'config.local.json') and not p.is_symlink())
 
 
@@ -642,6 +668,142 @@ def handoff_gate(path, manifest, dataset_manifest=None):
     return {'ready': all(checks.values()), 'checks': checks, 'handoff_sha256': sha(path)}
 
 
+def paid_preflight_gate(root, manifest_path, frozen_source_manifest, output_dir, timeout_seconds=30):
+    """Run the delivered read-only gate and fail closed before any cloud runner starts."""
+    root = Path(root).resolve()
+    output_dir = Path(output_dir).resolve()
+    script = root / PAID_PREFLIGHT_RELATIVE / 'preflight.py'
+    delivery = root / PAID_PREFLIGHT_RELATIVE / 'delivery.json'
+    result_path = output_dir / 'paid-preflight-result.json'
+    script_snapshot = output_dir / 'paid-preflight-program.py'
+    execution_path = output_dir / 'paid-preflight-execution.json'
+    record = {'required': True, 'ready': False, 'stage': 'paid',
+              'provider_start_attempts_before_gate': 0, 'returncode': None,
+              'manifest_path': str(manifest_path) if manifest_path else None}
+
+    def finish(reason):
+        record['reason'] = reason
+        record['status'] = 'blocked'
+        atomic_json(execution_path, record)
+        return record
+
+    try:
+        if manifest_path is None:
+            return finish('paid_preflight_manifest_required')
+        manifest_path = Path(manifest_path)
+        if (manifest_path.is_symlink() or not manifest_path.is_file()
+                or not manifest_path.resolve().is_relative_to(root)):
+            return finish('paid_preflight_manifest_missing_or_outside_source_root')
+        manifest_path = manifest_path.resolve()
+        if script.is_symlink() or not script.is_file() or not script.resolve().is_relative_to(root):
+            return finish('paid_preflight_component_hash_mismatch')
+        script_bytes = script.read_bytes()
+        script_sha256 = hashlib.sha256(script_bytes).hexdigest()
+        if script_sha256 != PAID_PREFLIGHT_SCRIPT_SHA256:
+            return finish('paid_preflight_component_hash_mismatch')
+        if (delivery.is_symlink() or not delivery.is_file() or not delivery.resolve().is_relative_to(root)):
+            return finish('paid_preflight_delivery_receipt_missing')
+        delivery_record = strict_json(delivery)
+        if (delivery_record.get('schema') != 'navren.baseline-preflight-delivery.v1'
+                or delivery_record.get('status') != 'component_verified_pending_integration_adoption'
+                or delivery_record.get('files', {}).get('preflight.py') != PAID_PREFLIGHT_SCRIPT_SHA256
+                or delivery_record.get('models_called') != 0
+                or delivery_record.get('external_reviews') != 0
+                or delivery_record.get('resource_preparation_only') is not True):
+            return finish('paid_preflight_delivery_contract_invalid')
+        if result_path.exists() or result_path.is_symlink():
+            return finish('paid_preflight_output_already_exists')
+
+        delivery_sha256 = sha(delivery)
+        manifest_sha256 = sha(manifest_path)
+        if script_snapshot.exists() or script_snapshot.is_symlink():
+            return finish('paid_preflight_program_snapshot_already_exists')
+        with script_snapshot.open('xb') as stream:
+            stream.write(script_bytes)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if sha(script_snapshot) != script_sha256:
+            return finish('paid_preflight_program_snapshot_hash_mismatch')
+        record.update(status='running', script_sha256=script_sha256,
+                      delivery_sha256=delivery_sha256, manifest_sha256=manifest_sha256,
+                      script_snapshot=str(script_snapshot), result_path=str(result_path))
+        atomic_json(execution_path, record)
+        command = [sys.executable, '-B', str(script_snapshot), '--root', str(root),
+                   '--manifest', str(manifest_path), '--out', str(result_path)]
+        started = time.monotonic()
+        try:
+            completed = subprocess.run(command, cwd=root,
+                env={'PATH': os.defpath, 'PYTHONNOUSERSITE': '1', 'PYTHONDONTWRITEBYTECODE': '1'},
+                capture_output=True, text=True, timeout=max(1, int(timeout_seconds)), check=False)
+        except subprocess.TimeoutExpired as error:
+            def output_bytes(value):
+                if isinstance(value, str):
+                    return value.encode()
+                return value or b''
+            record.update(returncode=None, status='timed_out',
+                          duration_seconds=round(time.monotonic() - started, 3),
+                          stdout_sha256=hashlib.sha256(output_bytes(error.stdout)).hexdigest(),
+                          stderr_sha256=hashlib.sha256(output_bytes(error.stderr)).hexdigest())
+            return finish('paid_preflight_timed_out')
+        record.update(returncode=completed.returncode,
+                      duration_seconds=round(time.monotonic() - started, 3),
+                      stdout_sha256=hashlib.sha256(completed.stdout.encode()).hexdigest(),
+                      stderr_sha256=hashlib.sha256(completed.stderr.encode()).hexdigest())
+        if sha(delivery) != delivery_sha256:
+            return finish('paid_preflight_component_changed_during_execution')
+        if sha(manifest_path) != manifest_sha256:
+            return finish('paid_preflight_manifest_changed_during_execution')
+        if (result_path.is_symlink() or not result_path.is_file()
+                or not result_path.resolve().is_relative_to(output_dir)):
+            return finish('paid_preflight_result_missing_or_invalid_path')
+        result = strict_json(result_path)
+        record.update(result_sha256=sha(result_path), result_schema=result.get('schema'),
+                      result_status=result.get('status'), result_stage=result.get('stage'),
+                      paid_start_allowed=result.get('paid_start_allowed'),
+                      result_manifest_sha256=result.get('manifest_sha256'),
+                      blockers=result.get('blockers', []),
+                      models_called=result.get('models_called'),
+                      external_reviews=result.get('external_reviews'))
+
+        if completed.returncode != 0:
+            return finish('paid_preflight_nonzero_exit')
+        if (result.get('schema') != 'navren.baseline-preflight.v1'
+                or result.get('stage') != 'paid'
+                or result.get('paid_start_allowed') is not True
+                or result.get('manifest_sha256') != manifest_sha256
+                or result.get('status') != 'PRECHECK_PENDING'
+                or result.get('models_called') != 0
+                or result.get('external_reviews') != 0
+                or result.get('overall_accepted') is not False
+                or result.get('release_allowed') is not False):
+            return finish('paid_preflight_result_did_not_authorize_start')
+
+        paid_manifest = strict_json(manifest_path)
+        if paid_manifest.get('source_root') != str(root):
+            return finish('paid_preflight_source_root_mismatch')
+        source_ref = paid_manifest['source_manifest']
+        frozen_path = Path(source_ref['path'])
+        if not frozen_path.is_absolute():
+            frozen_path = root / frozen_path
+        if (frozen_path.is_symlink() or not frozen_path.is_file()
+                or not frozen_path.resolve().is_relative_to(root)
+                or sha(frozen_path) != source_ref['sha256']):
+            return finish('paid_preflight_source_manifest_missing_or_changed')
+        frozen_manifest = strict_json(frozen_path)
+        if frozen_manifest != frozen_source_manifest:
+            return finish('paid_preflight_source_differs_from_executor_snapshot')
+        entrypoint = paid_manifest['entrypoint']
+        if frozen_manifest.get(entrypoint['path']) != entrypoint['sha256']:
+            return finish('paid_preflight_entrypoint_differs_from_executor_snapshot')
+
+        record.update(status='ready', ready=True, source_manifest_sha256=source_ref['sha256'],
+                      reason=None)
+        atomic_json(execution_path, record)
+        return record
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        return finish(type(error).__name__ + ':' + str(error)[:240])
+
+
 def semantic_summary(path):
     if not path.exists():
         return {'status': 'artifact_missing'}
@@ -681,6 +843,8 @@ def main():
     parser.add_argument('--service-url', default='http://127.0.0.1:18767')
     parser.add_argument('--receive-results', type=Path)
     parser.add_argument('--handoff', type=Path)
+    parser.add_argument('--paid-preflight-manifest', type=Path,
+                        help='付费 cloud 阶段必需；传入 Agent 已交付的付费事前清单')
     parser.add_argument('--rounds', type=int, default=3)
     parser.add_argument('--case-ids', default='')
     parser.add_argument('--budget-seconds', type=int)
@@ -702,6 +866,7 @@ def main():
               'status': 'running', 'budget_seconds': args.budget_seconds, 'concurrency': 1,
               'rounds_planned': args.rounds if args.stage == 'cloud' else 0, 'rounds_executed': 0,
               'executions': [], 'collection_summaries': [], 'cloud_models_called': False,
+              'cloud_runner_launch_attempts': 0,
               'semantic_final_judgment': 'not_completed', 'total_model_cost': None,
               'runtime': runtime_summary(),
               'limitations': ['固定合成条件的工程结果不代表真实客户表现或比赛评分。',
@@ -792,9 +957,20 @@ def main():
                     report['status'] = 'waiting_for_module_handoff'
                     exit_code = 2
                 else:
-                    for number in range(1, args.rounds + 1):
-                        commands.append((f'cloud-round-{number}', [sys.executable, str(semantic_runner),
-                            '--dataset', str(dataset), '--out-dir', str(out / f'cloud-results-{number}')]))
+                    remaining = args.budget_seconds - (time.monotonic() - started)
+                    report['paid_preflight_gate'] = paid_preflight_gate(
+                        root, args.paid_preflight_manifest, manifest, out,
+                        timeout_seconds=max(1, min(30, int(remaining))))
+                    atomic_json(out / 'run.json', report)
+                    if not report['paid_preflight_gate']['ready']:
+                        report['status'] = 'paid_preflight_blocked'
+                        exit_code = 2
+                    else:
+                        for number in range(1, args.rounds + 1):
+                            commands.append((f'cloud-round-{number}', [sys.executable, str(semantic_runner),
+                                '--dataset', str(dataset), '--out-dir', str(out / f'cloud-results-{number}'),
+                                '--paid-campaign-manifest', str(args.paid_preflight_manifest),
+                                '--paid-campaign-round', str(number)]))
             for name, argv in commands:
                 remaining = args.budget_seconds - (time.monotonic() - started)
                 if remaining <= 1:
@@ -808,6 +984,9 @@ def main():
                     # 只对这个入口移除兜底变量；其他进程仍使用完整隔离环境。
                     dispatch_environment = environment.copy()
                     dispatch_environment.pop('NAVREN_KNOWLEDGE_DB', None)
+                if name.startswith('cloud-round-'):
+                    report['cloud_runner_launch_attempts'] += 1
+                    atomic_json(out / 'run.json', report)
                 execution = execute(argv, candidate, out / name, min(remaining, args.stage_timeout_seconds), dispatch_environment)
                 execution['name'] = name
                 if name in {p.removeprefix('test_').removesuffix('.py') for p, _ in LOCAL_TEST_GROUPS}:
@@ -864,7 +1043,7 @@ def main():
                 exit_code = 0
             elif args.stage == 'browser':
                 pass
-            elif report['status'] == 'waiting_for_module_handoff':
+            elif report['status'] in ('waiting_for_module_handoff', 'paid_preflight_blocked'):
                 pass
             elif len(report['executions']) == len(commands) and all(execution_passed(e) for e in report['executions']):
                 report['status'] = 'engineering_stage_passed' if args.stage != 'cloud' else 'collected_pending_independent_judgment'

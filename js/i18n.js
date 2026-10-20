@@ -2,6 +2,19 @@
 window.NavrenI18n = (() => {
   const en = {
     '对话':'Chat', '推荐':'Discover', '发现':'Discover', '账户':'Accounts', '我的':'Profile', '工作台':'Workbench',
+    '保险':'Insurance', '全部保险 ›':'All insurance ›', '保险资料':'Insurance information',
+    '核对并确认':'Review and confirm', '拒绝':'Decline', '待核对，尚未执行':'Awaiting your review; not executed',
+    '这张草案属于其他模拟账户，请重新提问。':'This draft belongs to another demo account. Please ask again.',
+    '资料授权已变化，请重新查询草案。':'Your data permissions have changed. Please request the draft again.',
+    '草案没有操作编号，不能取消。请先核对。':'This draft has no operation ID. Please review it before cancelling.',
+    '尚未取得同一操作的取消回执。':'Cancellation of this operation has not yet been confirmed.',
+    '操作回执对象不一致。':'The receipt refers to a different operation.',
+    '操作版本已变化，不能继续取消旧草案。':'The operation has changed. The old draft can no longer be cancelled.',
+    '已查到这项草案仍待确认，尚未取消。可再次拒绝同一操作。':'This draft is still awaiting confirmation and has not been cancelled. You can decline this operation again.',
+    '正在读取保险资料…':'Loading insurance information…',
+    '保险组件暂时无法载入，请刷新页面。':'The insurance component could not load. Refresh the page.',
+    '保险官方资料暂时无法读取，请重新读取。':'Official insurance information is unavailable. Please reload.',
+    '目录已更新，以下为新快照。':'The catalogue has changed. The updated snapshot is shown below.',
     '返回Navren对话':'Return to Navren chat',
     '切换至 English':'Switch to English', '切换至中文':'Switch to Chinese',
     '设置':'Settings', '个人设置':'Personal settings', '对当前信息有什么想了解的？':'What would you like to know about this information?',
@@ -51,7 +64,7 @@ window.NavrenI18n = (() => {
     '宏观数据':'Macro data', '利率政策':'Interest rates', '民生金融':'Household finance', '国际市场':'Global markets',
     '综合':'General', '宏观':'Macro', '利率':'Rates', '民生':'Households', '国际':'Global',
     '公告':'Release', '数据':'Data', '观点':'Opinion', '公开材料':'Public material', '已修订':'Revised',
-    'Navren 解读':'Navren insights', 'Navren 分析':'Navren analysis', '已核验事实':'Verified facts',
+    'Navren 解读':'Navren insights', 'Navren解读':'Navren insights', '查看原文':'View original', 'Navren 分析':'Navren analysis', '已核验事实':'Verified facts',
     '条件与不确定性':'Conditions & uncertainties', '原始资料':'Original sources', '问 Navren':'Ask Navren',
     '阅读原文 ↗':'Read original ↗', '阅读原文':'Read original', '阅读完整周报':'Read full report',
     '历史周报':'Past reports', '选择历史期号':'Select a past report', '传导与分歧':'Transmission & differences',
@@ -552,6 +565,14 @@ window.NavrenI18n = (() => {
   "相关": "Related",
   "解除": "Remove link",
   "关联另一条记忆": "Link another memory",
+  "允许读取财务记忆？": "Allow access to financial memories?",
+  "在已接入的资金分析中读取匹配记忆，并整理对话中的本人陈述为待核实资料。": "Use matching memories in connected funding analyses and organize your statements in chat as details awaiting verification.",
+  "内容保存在你的账号中": "Saved to your account",
+  "可在“我的”随时修改或删除。": "Edit or delete saved content in Profile at any time.",
+  "关闭后仍保留已保存内容": "Saved content stays when access is off",
+  "旧对话上下文会立即失效。": "Previous chat context is invalidated immediately.",
+  "暂不开启": "Not now",
+  "允许读取": "Allow access",
   "允许 Navren 在已接入的资金分析中读取匹配记忆，并整理对话中的本人陈述为待核实资料？内容保存在本机工作区；关闭后保留保存内容，可在“我的”修改或删除，旧对话上下文立即失效。": "Allow Navren to read relevant memories in connected funding analyses and organize your statements in chat as details awaiting verification? Content stays in this local workspace. Turning this off preserves saved content for you to edit or delete in Profile, and immediately invalidates previous chat context.",
   "已允许在已接入的资金分析中参考记忆": "Memories can now be used in connected funding analyses",
   "已撤销读取授权，保存内容仍可管理": "Access revoked. You can still manage saved content.",
@@ -570,7 +591,7 @@ window.NavrenI18n = (() => {
   "仅保存": "Save only",
   "请填写记忆内容": "Enter the memory content",
   "记忆已修改，旧上下文已失效": "Memory updated. Previous context is no longer valid.",
-  "记忆已保存到本机工作区": "Memory saved to the local workspace",
+  "记忆已保存到你的账号": "Memory saved to your account",
   "删除这条财务记忆？删除后 Navren 不会再在分析中参考它。": "Delete this financial memory? Navren will no longer use it in analyses.",
   "记忆及其派生关系已删除，银行交易仍保留": "Memory and derived connections deleted. Bank transactions are retained.",
   "未命名": "Unnamed",
@@ -1074,6 +1095,10 @@ window.NavrenI18n = (() => {
     '结构化任务依据与动作需重新查询核验。':'Query again to verify the structured task evidence and actions.',
     '保存的来源或历史版本不完整，请重新核对。':'The saved source or archive version is incomplete. Verify it again.',
     '返回原页面':'Return to the original page','移除提问引用':'Remove question reference',
+    '关联资料':'Reference material','随此消息发送的关联资料':'Reference material sent with this message',
+    '查看资料':'View material','返回关联资料':'Return to reference material','移除关联资料':'Remove reference material',
+    '本地账单':'Local statements','账户资料':'Account details','银行产品':'Bank product',
+    '公开产品资料':'Public product material','公开净值资料':'Public NAV material','研究资料':'Research material',
     '回放我的语音消息':'Play my voice message','查看文字':'View transcript','收起文字':'Hide transcript',
     '正在识别文字…':'Recognizing speech…','没有识别到文字，你仍可以回放音频或重新录音。':'No speech was recognized. You can replay the audio or record again.',
     '账户或页面已变化，已停止旧请求。':'The account or page changed. The previous request was stopped.',
@@ -1168,6 +1193,7 @@ window.NavrenI18n = (() => {
       ,[/^已结算现金 · ([A-Z]{3})$/, m=>`Settled cash · ${m[1]}`]
       ,[/^(\d{4}-\d{2}-\d{2}) · (确认安排|候选安排|已记录|计划|候选|候选日期已过，待核实|安排确定性待核实|逾期待核查)$/, m=>`${m[1]} · ${translated(m[2])??m[2]}`]
       ,[/^关联：(.*)$/,m=>`Reference: ${m[1]}`]
+      ,[/^第 ([^\s]+) 版$/,m=>`Edition ${m[1]}`]
       ,[/^语音消息 · (\d+) 秒$/,m=>`Voice message · ${m[1]} s`]
       ,[/^(信用卡|借记卡) · (.+ \d{4})$/, m=>`${m[1]==='信用卡'?'Credit card':'Debit card'} · ${m[2]}`]
     ];
@@ -1269,8 +1295,18 @@ window.NavrenI18n = (() => {
     document.documentElement.dataset.i18nReady = 'true';
   }
   function setLanguage(next, persist = true) {
+    if (persist) return (async () => {
+      try {
+        await Storage.set(STORAGE_KEYS.LANGUAGE, next === 'en' ? 'en' : 'zh-CN');
+        if (!Storage.accountReady()) return false;
+        setLanguage(savedLanguage(), false);
+        return true;
+      } catch (_) {
+        if (typeof showToast === 'function') showToast(t('语言设置未保存，请重试。'));
+        return false;
+      }
+    })();
     language = next === 'en' ? 'en' : 'zh-CN';
-    if (persist) Storage.set(STORAGE_KEYS.LANGUAGE, language);
     sync();
     window.dispatchEvent(new CustomEvent('navren:language', {detail:{language,locale:language==='en'?'en-US':'zh-CN'}}));
   }
@@ -1290,7 +1326,7 @@ window.NavrenI18n = (() => {
       }
     }).observe(document.body, {subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','placeholder','aria-label','data-label']});
   });
-  window.addEventListener('storage', event=> {if(event.key===STORAGE_KEYS.LANGUAGE)setLanguage(savedLanguage(),false);});
+  window.addEventListener('navren:account-state', () => setLanguage(savedLanguage(), false));
   window.addEventListener('pageshow', ()=> {
     const next=savedLanguage();
     if(next!==language)setLanguage(next,false); else sync();

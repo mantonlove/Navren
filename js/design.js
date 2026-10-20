@@ -8,20 +8,59 @@ window.NavrenDesign = (() => {
     // 旧版本的色彩偏好统一回到浅色，外观只保留浅色和深色两种。
     return themes.find(theme=>theme.id===value?.id)||themes[0];
   }
-  const savedTheme=Storage.get(STORAGE_KEYS.THEME);
-  let currentTheme=normalizeTheme(savedTheme);
-  function applyTheme(value, persist=true) {
+  const accountReady=()=>typeof Storage.accountReady==='function'&&Storage.accountReady()===true;
+  const paintThemeKey='navren:paint-theme:v1';
+  let currentTheme=normalizeTheme({id:document.documentElement.dataset.theme}),mode='classic',accountEpoch=0,themeWrite=null,modeWrite=null,presentationReady=false,controlObserver=null;
+  const usable=()=>presentationReady&&accountReady();
+  function showTheme(value,remember=false) {
     currentTheme=normalizeTheme(value);
     const root=document.documentElement;
     // 移除旧色板留下的行内样式，让 CSS 的完整明暗色板生效。
     for(const key of ['primary','primary-deep','primary-soft','primary-border','surface','surface-card','surface-raised','surface-hover','border','border-emphasis','accent-water'])root.style.removeProperty('--'+key);
     root.dataset.theme=currentTheme.id;
     root.style.colorScheme=currentTheme.id;
+    root.style.backgroundColor='var(--surface)';
+    // 仅缓存已核验的明暗色，供下一页预绘制；账号偏好仍由服务端快照决定。
+    if(remember)try{localStorage.setItem(paintThemeKey,currentTheme.id);}catch(_){}
     const color=getComputedStyle(root).getPropertyValue('--primary').trim()||currentTheme.color;
     currentTheme={...currentTheme,color};
-    if(persist)Storage.set(STORAGE_KEYS.THEME,{id:currentTheme.id});
     syncTools();
     window.dispatchEvent(new CustomEvent('navren:theme',{detail:{id:currentTheme.id,color}}));
+  }
+  function showMode(next,ready=accountReady()){
+    mode=Object.hasOwn(MODE_DEFAULT_FONT,next)?next:'classic';
+    document.body.classList.remove('mode-classic','mode-senior','mode-youth');document.body.classList.add('mode-'+mode);
+    applyFontSize(ready?getModeFont(mode):'medium');
+    const picker=document.getElementById('interfaceMode');if(picker)picker.value=mode;
+    document.querySelectorAll('.sidebar a, .brand').forEach(link=>{const url=new URL(link.getAttribute('href'),location.href);if(!url.pathname.endsWith('index.html'))url.searchParams.set('mode',mode);link.href=NavrenApp.href(url.pathname+url.search+url.hash);});
+  }
+  function syncAccountControls(){
+    for(const control of document.querySelectorAll('[data-theme-choice],#navrenThemeButton,#navrenLanguageButton,#interfaceMode')){
+      control.disabled=!usable()||!!themeWrite||!!modeWrite;
+    }
+    const picker=document.getElementById('interfaceMode');if(picker)picker.value=mode;
+    if(!usable()){const menu=document.getElementById('navrenThemeMenu');if(menu)menu.hidden=true;document.getElementById('navrenThemeButton')?.setAttribute('aria-expanded','false');}
+  }
+  function observeControls(){if(!document.body)return;controlObserver||=new MutationObserver(syncAccountControls);controlObserver.observe(document.body,{childList:true,subtree:true});}
+  function restoreAccount(){
+    if(!accountReady())return suspendAccount();
+    presentationReady=true;
+    showTheme(Storage.get(STORAGE_KEYS.THEME),true);showMode(Storage.get(STORAGE_KEYS.MODE));syncTools();
+  }
+  function suspendAccount(){accountEpoch++;presentationReady=false;themeWrite=modeWrite=null;showMode('classic',false);syncTools();}
+  function resetAccount(){suspendAccount();try{localStorage.removeItem(paintThemeKey);}catch(_){}showTheme(themes[0]);}
+  function saveFailed(label){if(typeof showToast==='function')showToast(window.NavrenI18n?.language==='en'?({外观:'Appearance',语言:'Language',阅读方式:'Reading mode'}[label]||label)+' could not be saved. Please try again.':label+'未保存，请重试。');}
+  async function applyTheme(value,persist=true){
+    if(!persist){showTheme(usable()?value:currentTheme);return true;}
+    if(!usable()||themeWrite||modeWrite){syncTools();return false;}
+    const wanted=normalizeTheme(value),write={epoch:accountEpoch};themeWrite=write;syncTools();
+    try{
+      await Storage.set(STORAGE_KEYS.THEME,{id:wanted.id});
+      if(write.epoch!==accountEpoch||!accountReady())return false;
+      if(normalizeTheme(Storage.get(STORAGE_KEYS.THEME)).id!==wanted.id)throw new Error('THEME_SAVE_NOT_CONFIRMED');
+      showTheme(Storage.get(STORAGE_KEYS.THEME));return true;
+    }catch(_){if(write.epoch===accountEpoch&&accountReady()){showTheme(Storage.get(STORAGE_KEYS.THEME));saveFailed('外观');}return false;}
+    finally{if(themeWrite===write){themeWrite=null;syncTools();}}
   }
   function syncTools() {
     const english=window.NavrenI18n?.language==='en';
@@ -29,7 +68,7 @@ window.NavrenDesign = (() => {
     document.querySelectorAll('[data-theme-choice]').forEach(button=>{
       const selected=button.dataset.themeChoice===currentTheme.id;
       button.setAttribute('aria-checked',String(selected));button.tabIndex=selected?0:-1;
-      button.querySelector('[data-theme-label]').textContent=labels[button.dataset.themeChoice];
+      const label=button.querySelector('[data-theme-label]');if(label)label.textContent=labels[button.dataset.themeChoice];
     });
     const themeButton=document.getElementById('navrenThemeButton');
     if(themeButton){themeButton.title=labels.choose;themeButton.setAttribute('aria-label',labels.choose);themeButton.querySelector('.shell-tool-label').textContent=labels.appearance;}
@@ -43,55 +82,83 @@ window.NavrenDesign = (() => {
       const label=english?'Switch to 中文':'切换至 English';
       languageButton.title=label;languageButton.setAttribute('aria-label',label);languageButton.dataset.language=english?'en':'zh-CN';
     }
+    syncAccountControls();
   }
   function mountSettings(target) {
     if(!target||target.dataset.mounted||document.getElementById('navrenThemeButton'))return;target.dataset.mounted='true';
     const tools=document.createElement('div');tools.className='shell-tools'+(target.matches('.header,.welcome-page')?'':' settings-tools');
     tools.dataset.i18nSkip='';
-    tools.innerHTML=`<button type="button" class="shell-tool" id="navrenThemeButton" title="选择外观模式" aria-label="选择外观模式" aria-expanded="false" aria-controls="navrenThemeMenu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 13.1A9 9 0 0 1 10.9 3.2a9 9 0 1 0 9.9 9.9Z"/></svg><span class="shell-tool-label">外观</span></button><button type="button" class="shell-tool shell-language" id="navrenLanguageButton" aria-label="切换至 English"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18-3-3-3-15 0-18Z"/></svg><span data-language-label translate="no">中文</span></button><section class="shell-theme-menu" id="navrenThemeMenu" hidden role="dialog" aria-label="选择外观模式"><div class="shell-theme-options" role="radiogroup" aria-label="选择外观模式"></div></section>`;
+    tools.innerHTML=`<div class="shell-theme-anchor"><button type="button" class="shell-tool" id="navrenThemeButton" title="选择外观模式" aria-label="选择外观模式" aria-expanded="false" aria-controls="navrenThemeMenu"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 1 0 0 18h1.5a2.5 2.5 0 0 0 1.2-4.7 1.2 1.2 0 0 1 .6-2.3H17a4 4 0 0 0 4-4c0-4.1-4-7-9-7Z"/><circle cx="7" cy="11" r=".9"/><circle cx="10" cy="7.5" r=".9"/><circle cx="14.5" cy="7.5" r=".9"/><circle cx="17" cy="11" r=".9"/></svg><span class="shell-tool-label">外观</span></button><section class="shell-theme-menu" id="navrenThemeMenu" hidden role="dialog" aria-label="选择外观模式"><div class="shell-theme-options" role="radiogroup" aria-label="选择外观模式"></div></section></div><button type="button" class="shell-tool shell-language" id="navrenLanguageButton" aria-label="切换至 English"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18-3-3-3-15 0-18Z"/></svg><span data-language-label translate="no">中文</span></button>`;
     target.append(tools);
     const themeButton=tools.querySelector('#navrenThemeButton'),menu=tools.querySelector('#navrenThemeMenu'),group=tools.querySelector('.shell-theme-options');
     for(const theme of themes){
       const choice=document.createElement('button');choice.type='button';choice.className='shell-theme-choice';choice.dataset.themeChoice=theme.id;choice.role='radio';
-      const label=document.createElement('span');label.dataset.themeLabel='';label.textContent=theme.name;choice.append(label);choice.onclick=()=>applyTheme(theme);group.append(choice);
+      const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.setAttribute('focusable','false');
+      icon.innerHTML=theme.id==='light'?'<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>':'<path d="M20.8 13.1A9 9 0 0 1 10.9 3.2a9 9 0 1 0 9.9 9.9Z"/>';
+      const label=document.createElement('span');label.dataset.themeLabel='';label.textContent=theme.name;choice.append(icon,label);choice.onclick=async()=>{if(await applyTheme(theme))closeMenu(true);};group.append(choice);
     }
     function closeMenu(restore=false){menu.hidden=true;themeButton.setAttribute('aria-expanded','false');if(restore)themeButton.focus({preventScroll:true});}
     themeButton.onclick=()=>{
+      if(!usable()||themeWrite||modeWrite)return;
       const open=menu.hidden;menu.hidden=!open;themeButton.setAttribute('aria-expanded',String(open));
       if(open)(group.querySelector('[aria-checked="true"]')||group.firstElementChild).focus({preventScroll:true});
     };
-    group.addEventListener('keydown',e=>{
+    group.addEventListener('keydown',async e=>{
       if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key))return;
       e.preventDefault();const items=[...group.children],index=items.indexOf(document.activeElement),next=e.key==='Home'?0:e.key==='End'?items.length-1:(index+(['ArrowLeft','ArrowUp'].includes(e.key)?-1:1)+items.length)%items.length;
-      applyTheme(themes[next]);items[next].focus();
+      if(await applyTheme(themes[next]))items[next].focus();
     });
     menu.addEventListener('keydown',e=>{
       if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeMenu(true);}
       if(e.key==='Tab')closeMenu(true);
     });
     document.addEventListener('pointerdown',e=>{if(!menu.hidden&&!menu.contains(e.target)&&!themeButton.contains(e.target))closeMenu();});
-    tools.querySelector('#navrenLanguageButton').onclick=()=>{closeMenu();NavrenI18n.setLanguage(NavrenI18n.language==='en'?'zh-CN':'en');};
+    tools.querySelector('#navrenLanguageButton').onclick=async()=>{if(!usable())return;closeMenu();try{await NavrenI18n.setLanguage(NavrenI18n.language==='en'?'zh-CN':'en');}catch(_){if(usable())saveFailed('语言');}};
     window.addEventListener('navren:language',syncTools);
     syncTools();
   }
-  applyTheme(currentTheme,false);
-  if(savedTheme&&(savedTheme.id!==currentTheme.id||Object.hasOwn(savedTheme,'color')))Storage.set(STORAGE_KEYS.THEME,{id:currentTheme.id});
+  showTheme(currentTheme);
+  suspendAccount();
   if(document.querySelector('.app'))document.documentElement.classList.add('navren-shell');
-  function switchMode(mode) {
-    try{const current=window.NavrenViews?.snapshot?.();if(current)sessionStorage.setItem('navren_return_view',JSON.stringify(current));}catch(_){}
-    if (!Object.hasOwn(MODE_DEFAULT_FONT, mode)) return;
-    Storage.set('qingzhou_mode', mode);
+  async function switchMode(next) {
+    if(!Object.hasOwn(MODE_DEFAULT_FONT,next)||!usable()||modeWrite||themeWrite){syncTools();return false;}
+    const write={epoch:accountEpoch};modeWrite=write;syncTools();
+    try{
+      const sizes=Storage.get(STORAGE_KEYS.MODE_FONT_SIZES)||{};
+      await Storage.setMany({qingzhou_mode:next,qingzhou_fontSize:getModeFont(next),qingzhou_modeFontSizes:{...sizes,[mode]:getModeFont(mode)}});
+      if(write.epoch!==accountEpoch||!accountReady())return false;
+      if(Storage.get(STORAGE_KEYS.MODE)!==next)throw new Error('MODE_SAVE_NOT_CONFIRMED');
+      try{const current=window.NavrenViews?.snapshot?.();if(current)sessionStorage.setItem('navren_return_view',JSON.stringify(current));}catch(_){}
+      showMode(next);
     const url = new URL(location.href);
-    url.searchParams.set('mode', mode);
+    url.searchParams.set('mode', next);
     // 页面动作只执行一次；切换外观不再次发送上一条提问。
     url.searchParams.delete('q');
     url.searchParams.delete('action');
     NavrenApp.navigate(url.pathname + url.search + url.hash);
+      return true;
+    }catch(_){if(write.epoch===accountEpoch&&accountReady()){showMode(Storage.get(STORAGE_KEYS.MODE));saveFailed('阅读方式');}return false;}
+    finally{if(modeWrite===write){modeWrite=null;syncTools();}}
   }
-  const mode = getInterfaceMode();
-  Storage.set('qingzhou_mode', mode);
-  document.body.classList.add('mode-' + mode);
-  applyFontSize(getModeFont(mode));
+  function readAccount(){
+    if(typeof Storage.ready!=='function'){suspendAccount();return;}
+    const epoch=accountEpoch;
+    Promise.resolve().then(()=>Storage.ready({refresh:false})).then(()=>{if(epoch===accountEpoch)restoreAccount();}).catch(()=>{
+      if(epoch!==accountEpoch)return;
+      suspendAccount();
+    });
+  }
+  window.addEventListener('navren:account-state',event=>{
+    const status=event.detail?.status;
+    if(status==='ready'&&accountReady())restoreAccount();
+    // 未就绪只锁住账号控件；显示颜色等已核验的偏好回来后再更新。
+    else suspendAccount();
+  });
+  window.addEventListener('navren:identity-revoked',resetAccount);
+  window.addEventListener('navren:account-switched',()=>{resetAccount();readAccount();});
+  window.addEventListener('pageshow',()=>{readAccount();observeControls();});
+  window.addEventListener('pagehide',()=>controlObserver?.disconnect());
+  readAccount();
   document.addEventListener('DOMContentLoaded', () => {
     const header=document.querySelector('.header');
     const sidebar=document.querySelector('.sidebar');
@@ -104,11 +171,8 @@ window.NavrenDesign = (() => {
     mountSettings(header||document.querySelector('.welcome-page'));
     const picker = document.getElementById('interfaceMode');
     if (picker) { picker.value = mode; picker.addEventListener('change', () => switchMode(picker.value)); }
-    document.querySelectorAll('.sidebar a, .brand').forEach(link => {
-      const url = new URL(link.getAttribute('href'), location.href);
-      if (!url.pathname.endsWith('index.html')) url.searchParams.set('mode', mode);
-      link.href = NavrenApp.href(url.pathname + url.search + url.hash);
-    });
+    restoreAccount();
+    observeControls();
     const input = document.getElementById('userInput');
     if (input) input.setAttribute('aria-label', '输入银行或生活财务问题');
     document.querySelectorAll('button[title]').forEach(button => {
@@ -156,7 +220,6 @@ window.NavrenDesign = (() => {
       new MutationObserver(sync).observe(control.classList.contains('col-head') ? control.parentElement : control, {attributes: true, attributeFilter: ['class']});
     });
   });
-  window.addEventListener('storage',event=>{if(event.key===STORAGE_KEYS.THEME)applyTheme(Storage.get(STORAGE_KEYS.THEME),false);});
   return {switchMode,applyTheme,mountSettings,get theme(){return {...currentTheme};}};
 })();
 

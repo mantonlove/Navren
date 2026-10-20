@@ -17,6 +17,9 @@ from pathlib import Path
 from .customer_archive import guard_version, migrate, seed_new_workspace, read_archive, coverage, verify_invariants
 from .customer_schema import SCHEMA_VERSION, contract
 from .agent_guard import SCHEMA as AGENT_SCHEMA, register as register_agent_draft, require_approved
+from .remittance import initialize as initialize_remittances
+from .aa_payments import initialize as initialize_aa
+from .remittance_contacts import initialize as initialize_remittance_contacts
 
 
 class BankError(Exception):
@@ -53,7 +56,8 @@ def add_month(day):
 
 
 class SimulatedBank:
-    def __init__(self, database, *, fixture=None, clock=time.time):
+    def __init__(self, database, *, fixture=None, clock=time.time,
+                 sms_provider=None, allow_test_sms_provider=False):
         self.database = Path(database).expanduser().resolve()
         self.database.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.clock = clock
@@ -65,6 +69,15 @@ class SimulatedBank:
         migrate(self)
         with closing(self.connect()) as db, db:
             db.executescript(AGENT_SCHEMA)
+            initialize_remittances(db)
+            initialize_aa(db)
+            initialize_remittance_contacts(db)
+            from .permission_policy import BankPermissions
+            self.permissions = BankPermissions(self, sms_provider=sms_provider,
+                                               allow_test_sms_provider=allow_test_sms_provider)
+            self.permissions.initialize(db)
+            from .security_credentials import SCHEMA as PASSWORD_SCHEMA
+            db.executescript(PASSWORD_SCHEMA)
         self.database.chmod(0o600)
 
     def connect(self):
@@ -207,6 +220,13 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
         row = db.execute('SELECT * FROM workspaces WHERE id=?', (workspace,)).fetchone()
         if not row:
             raise BankError('NOT_FOUND', '模拟工作区不存在。', 404)
+        connected = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='connected_asset_migrations'").fetchone()
+        if connected and db.execute('SELECT 1 FROM connected_asset_migrations WHERE workspace_id=?',(workspace,)).fetchone():
+            from zoneinfo import ZoneInfo
+            result = dict(row)
+            provider_day = datetime.fromtimestamp(self.clock(),ZoneInfo('Asia/Shanghai')).date().isoformat()
+            result['as_of'] = max(row['as_of'],provider_day)
+            return result
         return row
 
     def session(self, token):
@@ -300,6 +320,7 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             for table in ('transactions','mandates','holdings','orders'):
                 records[table] = [dict(r) for r in db.execute('SELECT * FROM '+table+' WHERE workspace_id=?',(workspace,))]
             records['operations'] = [self._public_operation(r) for r in db.execute('SELECT * FROM operations WHERE workspace_id=?',(workspace,))]
+            records['remittances'] = [dict(r) for r in db.execute('SELECT * FROM navren_remittances WHERE workspace_id=? ORDER BY created_at,operation_id',(workspace,))]
             records['audit'] = [dict(r,details=json.loads(r['details'])) for r in db.execute('SELECT * FROM audit WHERE workspace_id=?',(workspace,))]
             demos=getattr(self,'demo_accounts',None)
             demo=demos.current(workspace) if demos and demos.is_demo(workspace) else None
@@ -400,7 +421,12 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             sql += ' AND account_id=?'; params.append(account_id)
         if exclude_id:
             sql += ' AND id<>?'; params.append(exclude_id)
-        return db.execute(sql,params).fetchone()[0]
+        total=db.execute(sql,params).fetchone()[0]
+        remittance_sql="SELECT coalesce(sum(amount_minor),0) FROM navren_remittances WHERE workspace_id=? AND status='scheduled'"
+        remittance_params=[workspace]
+        if account_id:
+            remittance_sql+=' AND account_id=?';remittance_params.append(account_id)
+        return total+db.execute(remittance_sql,remittance_params).fetchone()[0]
 
     def _known_due_minor(self, db, workspace, account_id, day):
         end=(date.fromisoformat(day)+timedelta(days=30)).isoformat()
@@ -413,7 +439,8 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                           (workspace,account_id,end)).fetchone()[0]
         total+=db.execute("SELECT coalesce(sum(m.amount_minor),0) FROM mandates m WHERE m.workspace_id=? AND m.account_id=? AND m.status='active' AND m.next_charge_date<=? AND NOT EXISTS(SELECT 1 FROM subscriptions s WHERE s.workspace_id=m.workspace_id AND s.mandate_id=m.id)",
                           (workspace,account_id,end)).fetchone()[0]
-        total+=db.execute("SELECT coalesce(sum(amount_minor),0) FROM scheduled_payments WHERE workspace_id=? AND account_id=? AND status='active' AND next_due_on<=?",
+        total+=db.execute("SELECT coalesce(sum(amount_minor),0) FROM scheduled_payments s WHERE workspace_id=? AND account_id=? AND status='active' AND next_due_on<=? "
+                          "AND NOT EXISTS(SELECT 1 FROM navren_remittances r WHERE r.workspace_id=s.workspace_id AND r.scheduled_payment_id=s.id AND r.status='scheduled')",
                           (workspace,account_id,end)).fetchone()[0]
         return total
 
@@ -682,11 +709,50 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             return demo_reserve_floors([dict(a) for a in self._accounts(db,workspace)],reserve)[account_id]
         return reserve
 
+    def _ordinary_transfer_terms(self, payload, account):
+        # 固定规则只适用于普通本机SIM人民币收款人转账；客户字段不能提供费用。
+        if payload.get('action')!='transfer' or 'remittance' in payload or account['currency']!='CNY':
+            return None
+        return {'terms_version':'navren.sim-beneficiary-transfer.zero-fee/1','environment':'simulation',
+                'scope':'ordinary_beneficiary_transfer','account_id':account['id'],
+                'beneficiary_id':payload['beneficiary_id'],'amount_minor':payload['amount_minor'],
+                'currency':'CNY','fee_minor':0}
+
+    def ordinary_transfer_terms(self, db, workspace, operation):
+        row=self._operation(db,workspace,operation)
+        payload=json.loads(row['payload'])
+        terms=self._ordinary_transfer_terms(payload,self._account(db,workspace,payload['account_id']))
+        if terms is None or row['payload_hash']!=digest(encoded(payload)):
+            return None
+        expected={**terms,'workspace_id':workspace,'operation_id':row['id'],
+                  'operation_version':row['version'],'payload_hash':row['payload_hash']}
+        prepared=db.execute("SELECT details FROM audit WHERE workspace_id=? AND operation_id=? "
+                            "AND event='operation_prepared' ORDER BY id LIMIT 1",(workspace,operation)).fetchone()
+        try:
+            stored=json.loads(prepared['details']).get('transfer_terms') if prepared else None
+        except (TypeError,ValueError):
+            return None
+        # Canonical JSON保留bool/int/float差别；旧草案没有该字段时不得GET现算成已披露。
+        return stored if isinstance(stored,dict) and encoded(stored)==encoded(expected) else None
+
     def _validate_action(self, db, workspace, payload):
         action = payload['action']
         account = self._account(db, workspace, payload['account_id'])
         ws = self._workspace(db, workspace)
+        if action in ('aa_create','aa_pay','aa_decline','aa_cancel'):
+            from .aa_payments import validate
+            return validate(self,db,workspace,payload)
         if action in ('transfer','schedule_transfer'):
+            if 'remittance' in payload:
+                from .remittance import validate
+                details=validate(self,db,workspace,payload)
+                mode=details['remittance']['mode']
+                if ((action=='transfer')!=(mode=='realtime') or
+                    action=='schedule_transfer' and (payload['frequency']!='once' or payload.get('end_on') is not None
+                        or payload['next_due_on']!=(date.fromisoformat(ws['as_of'])+timedelta(days=1)).isoformat())):
+                    raise BankError('INVALID_REMITTANCE_MODE','汇款方式或处理日期与模拟业务规则不一致。')
+                self._transfer_limits(db,workspace,account['id'],ws['as_of'],details['amount_minor'],check_daily=action=='transfer')
+                return details
             amount = integer(payload['amount_minor'],'转账金额',1)
             beneficiary = self._archive_row(db,'beneficiaries',workspace,payload['beneficiary_id'])
             if beneficiary['status']!='active' or not beneficiary['verified']:
@@ -696,16 +762,16 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             self._transfer_limits(db,workspace,account['id'],ws['as_of'],amount,check_daily=action=='transfer')
             if action=='transfer':
                 held = self._active_holds(db,workspace,account['id'])
-                profile = self._profile(db,workspace)
-                due=self._known_due_minor(db,workspace,account['id'],ws['as_of'])
-                if account['balance_minor']-amount-held-due < self._reserve_floor(db,workspace,account['id']):
-                    raise BankError('INSUFFICIENT_AVAILABLE','转账后将低于模拟应急保留资金、近期到期款或已预留资金。',422)
+                if account['balance_minor']-amount-held < 0:
+                    raise BankError('INSUFFICIENT_AVAILABLE','转账金额超过扣除实际冻结资金后的可支配余额。',422)
             else:
                 if payload['next_due_on']<ws['as_of']:
                     raise BankError('INVALID_DUE_DATE','首次执行日期不能早于模拟业务日。',422)
                 if payload.get('end_on') and (payload['frequency']!='monthly' or payload['end_on']<payload['next_due_on']):
                     raise BankError('INVALID_END_DATE','结束日期仅适用于每月转账，且不能早于首次执行日期。',422)
-            return {'account':dict(account),'beneficiary':dict(beneficiary),'amount_minor':amount}
+            details={'account':dict(account),'beneficiary':dict(beneficiary),'amount_minor':amount}
+            if action=='transfer':details['transfer_terms']=self._ordinary_transfer_terms(payload,account)
+            return details
         if action=='cancel_scheduled_payment':
             schedule = self._archive_row(db,'scheduled_payments',workspace,payload['scheduled_payment_id'])
             if schedule['account_id']!=account['id']:
@@ -725,6 +791,8 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                 raise BankError('SPLIT_TOTAL_MISMATCH','AA分摊金额与参与人份额不一致。',422)
             return {'account':dict(account),'split':dict(split),'participants':[dict(r) for r in people]}
         if action=='collect_split_payment':
+            if db.execute('SELECT 1 FROM navren_aa_bills WHERE id=?',(payload['split_id'],)).fetchone():
+                raise BankError('AA_LEGACY_COLLECTION_FORBIDDEN','新AA账单必须由实际参与人本人确认双边支付。',409)
             split = self._archive_row(db,'split_bills',workspace,payload['split_id'])
             if split['account_id']!=account['id'] or split['status'] not in ('open','partially_paid'):
                 raise BankError('SPLIT_NOT_OPEN','该AA账单当前不能登记收款。',409)
@@ -799,31 +867,63 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             return {'mandate': dict(mandate), 'account': dict(account)}
         if action == 'apply_card':
             requested_type=payload['requested_type']
-            if requested_type not in ('debit','credit'):
+            if requested_type not in ('debit','credit','virtual'):
                 raise BankError('INVALID_CARD_TYPE','申请卡片类型无效。')
             requested=integer(payload['requested_limit_minor'],'申请信用额度',0,100000000)
             if requested_type=='credit' and requested<1:
                 raise BankError('INVALID_CARD_LIMIT','信用卡申请需填写正数的模拟额度。')
             if requested_type=='debit' and requested!=0:
                 raise BankError('INVALID_CARD_LIMIT','借记卡申请不设置信用额度。')
+            if requested_type=='virtual' and (requested<1 or payload.get('card_id')):
+                raise BankError('INVALID_CARD_LIMIT','模拟虚拟卡需要正数单笔限额，不使用实体补卡关联。')
+            purpose=payload.get('purpose','online_payment')
+            if ('purpose' in payload and requested_type!='virtual') or purpose not in ('online_payment','subscription','travel'):
+                raise BankError('INVALID_CARD_PURPOSE','模拟虚拟卡用途须为线上支付、订阅或旅行。')
             customer=db.execute('SELECT customer_id FROM account_details WHERE workspace_id=? AND account_id=?',
                                 (workspace,account['id'])).fetchone()
             if not customer:
                 raise BankError('NOT_FOUND','账户关联客户不存在。',404)
+            connected = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='connected_asset_migrations'").fetchone()
+            connected = connected and db.execute('SELECT 1 FROM connected_asset_migrations WHERE workspace_id=?',(workspace,)).fetchone()
             replacement=None
             if payload.get('card_id'):
                 replacement=self._card(db,workspace,payload['card_id'])
+                if connected and db.execute("SELECT 1 FROM card_applications WHERE workspace_id=? AND card_id=? AND status IN ('submitted','issued') LIMIT 1",
+                                            (workspace,replacement['id'])).fetchone():
+                    raise BankError('CARD_REPLACEMENT_ALREADY_REQUESTED','该卡已有补卡申请或已完成换卡，请勿重复申请。',409)
                 if replacement['account_id']!=account['id'] or replacement['status']!='lost':
                     raise BankError('INVALID_REPLACEMENT_CARD','补卡申请必须关联本账户下已挂失的卡片。',422)
                 if replacement['type']!=requested_type:
                     raise BankError('INVALID_REPLACEMENT_CARD','补发卡片类型必须与已挂失卡片一致。',422)
                 replacement=dict(replacement)
+            if connected:
+                link = db.execute('SELECT * FROM connected_account_links WHERE workspace_id=? AND account_id=?',
+                                  (workspace,account['id'])).fetchone()
+                expected_type = 'credit_card' if replacement and requested_type=='credit' else 'bank_settlement'
+                if not link or link['account_type']!=expected_type:
+                    raise BankError('INVALID_CARD_APPLICATION_ACCOUNT','新卡申请需选择已连接的银行结算账户；补卡必须使用原卡账务账户。',422)
+                if replacement and requested_type=='credit':
+                    card_link = db.execute('SELECT facility_id FROM connected_card_links WHERE workspace_id=? AND card_id=?',
+                                           (workspace,replacement['id'])).fetchone()
+                    if not card_link or not card_link['facility_id']:
+                        raise BankError('INVALID_REPLACEMENT_CARD','信用补卡缺少原卡的授信关联。',422)
             return {'account':dict(account),'customer_id':customer['customer_id'],
-                    'requested_type':requested_type,'requested_limit_minor':requested,'replacement':replacement}
-        if action in ('card_control','request_card_limit','report_card_lost'):
+                    'requested_type':requested_type,'requested_limit_minor':requested,'replacement':replacement,
+                    'virtual_terms':{'purpose':purpose,'fee_minor':0,'validity_days':365,
+                        'single_transaction_limit_minor':requested,'credit_limit_minor':0,
+                        'real_payment_capability':False,'terms_version':'navren.virtual-card.demo/1'} if requested_type=='virtual' else None}
+        if action=='password_change':
+            from .security_credentials import details as password_details
+            return {'account':dict(account), **password_details(self,db,workspace,payload['replacement_id'])}
+        if action in ('card_control','request_card_limit','report_card_lost','unblock_card'):
             card=self._card(db,workspace,payload['card_id'])
             if card['account_id']!=account['id']:
                 raise BankError('NOT_FOUND','卡片不属于所选账户。',404)
+            if action=='unblock_card':
+                if card['status']!='lost' or card['expires_on']<=ws['as_of']:
+                    raise BankError('CARD_UNBLOCK_UNAVAILABLE','只能解除本账户仍有效卡片的模拟挂失。',409)
+                return {'account':dict(account),'card':dict(card),
+                        'controls_after_unblock':'stay_disabled_until_separately_confirmed'}
             if action=='report_card_lost':
                 if card['status']!='active':
                     raise BankError('CARD_NOT_ACTIVE','只有正常状态的卡片可以挂失。',409)
@@ -893,7 +993,9 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
         supported=('purchase','redeem','close_mandate','card_control','report_card_lost',
                     'request_card_limit','apply_card','transfer','schedule_transfer',
                     'cancel_scheduled_payment','request_split','collect_split_payment',
-                    'cancel_subscription','reserve_funds','release_funds','book_services')
+                    'aa_create','aa_pay','aa_decline','aa_cancel',
+                    'cancel_subscription','reserve_funds','release_funds','book_services',
+                    'password_change','unblock_card')
         if action not in supported:
             raise BankError('ACTION_UNAVAILABLE', '该业务未接入模拟银行。', 422)
         fields={
@@ -902,13 +1004,19 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             'close_mandate':{'action','account_id','idempotency_key','mandate_id'},
             'card_control':{'action','account_id','idempotency_key','card_id','control_type','enabled','limit_minor'},
             'report_card_lost':{'action','account_id','idempotency_key','card_id'},
+            'unblock_card':{'action','account_id','idempotency_key','card_id'},
+            'password_change':{'action','account_id','idempotency_key','replacement_id'},
             'request_card_limit':{'action','account_id','idempotency_key','card_id','requested_limit_minor'},
-            'apply_card':{'action','account_id','idempotency_key','requested_type','requested_limit_minor','card_id'},
-            'transfer':{'action','account_id','idempotency_key','beneficiary_id','amount_minor','reference'},
-            'schedule_transfer':{'action','account_id','idempotency_key','beneficiary_id','amount_minor','frequency','next_due_on','end_on'},
+            'apply_card':{'action','account_id','idempotency_key','requested_type','requested_limit_minor','card_id','purpose'},
+            'transfer':{'action','account_id','idempotency_key','beneficiary_id','amount_minor','reference','remittance'},
+            'schedule_transfer':{'action','account_id','idempotency_key','beneficiary_id','amount_minor','frequency','next_due_on','end_on','remittance'},
             'cancel_scheduled_payment':{'action','account_id','idempotency_key','scheduled_payment_id'},
             'request_split':{'action','account_id','idempotency_key','split_id'},
             'collect_split_payment':{'action','account_id','idempotency_key','split_id','participant_id'},
+            'aa_create':{'action','account_id','idempotency_key','aa_bill'},
+            'aa_pay':{'action','account_id','idempotency_key','aa_share_id','card_id'},
+            'aa_decline':{'action','account_id','idempotency_key','aa_share_id'},
+            'aa_cancel':{'action','account_id','idempotency_key','aa_bill_id'},
             'cancel_subscription':{'action','account_id','idempotency_key','subscription_id'},
             'reserve_funds':{'action','account_id','idempotency_key','task_id','amount_minor','expires_on'},
             'release_funds':{'action','account_id','idempotency_key','hold_id'},
@@ -920,20 +1028,28 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             'close_mandate':fields,
             'card_control':fields-({'limit_minor'} if payload.get('control_type')!='single_limit' else set()),
             'report_card_lost':fields,
+            'unblock_card':fields,
+            'password_change':fields,
             'request_card_limit':fields,
-            'apply_card':fields-{'card_id'},
-            'transfer':fields-{'reference'},
-            'schedule_transfer':fields-{'end_on'},
+            'apply_card':fields-{'card_id','purpose'},
+            'transfer':fields-{'reference','remittance'},
+            'schedule_transfer':fields-{'end_on','remittance'},
             'cancel_scheduled_payment':fields,
             'request_split':fields,
             'collect_split_payment':fields,
+            'aa_create':fields,
+            'aa_pay':fields,
+            'aa_decline':fields,
+            'aa_cancel':fields,
             'cancel_subscription':fields,
             'reserve_funds':fields,
             'release_funds':fields,
             'book_services':fields,
         }[action]
+        if action in ('transfer','schedule_transfer') and 'remittance' in payload:
+            required=(required-{'beneficiary_id'})|{'remittance'}
         strict_fields(payload, fields, required)
-        non_strings={'amount_minor','requested_limit_minor','enabled','limit_minor','quote_ids'}
+        non_strings={'amount_minor','requested_limit_minor','enabled','limit_minor','quote_ids','remittance','aa_bill'}
         string_fields=(required-non_strings)-{'quote_ids'}
         if action=='apply_card' and 'card_id' in payload:string_fields.add('card_id')
         if any(not isinstance(payload[k], str) or not 1 <= len(payload[k]) <= 128 for k in string_fields):
@@ -956,9 +1072,16 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             try:
                 if date.fromisoformat(payload['expires_on']).isoformat()!=payload['expires_on']: raise ValueError()
             except ValueError: raise BankError('INVALID_DATE','expires_on必须为YYYY-MM-DD日期。')
-        key, payload_hash = payload['idempotency_key'], digest(encoded(payload))
+        key = payload['idempotency_key']
         with self.transaction() as db:
             ws = self._workspace(db, workspace)
+            if action=='aa_create':
+                from .aa_payments import canonical
+                payload=canonical(self,db,workspace,payload)
+            if action in ('transfer','schedule_transfer') and 'remittance' in payload:
+                from .remittance import canonical_payload
+                payload=canonical_payload(self,db,workspace,payload)
+            payload_hash=digest(encoded(payload))
             existing = db.execute('SELECT * FROM operations WHERE workspace_id=? AND idempotency_key=?', (workspace,key)).fetchone()
             if existing:
                 if existing['payload_hash'] != payload_hash:
@@ -969,18 +1092,25 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                 return self._public_operation(existing)
             details = self._validate_action(db, workspace, payload)
             operation, expires = uuid.uuid4().hex, self.clock()+300
-            permission = 'yellow' if action in ('close_mandate','card_control') else 'red'
-            confirmation = digest(encoded({'workspace': workspace, 'operation': operation, 'payload':payload,
-                                           'version':ws['version'], 'expires_at':expires, 'details':details}))
+            permission, confirmation, permission_record = self.permissions.prepare(
+                db, workspace, operation, payload, details, expires, ws['version'])
             db.execute('''INSERT INTO operations(id,workspace_id,idempotency_key,payload,payload_hash,action,
                        permission,state,confirmation_digest,version,expires_at,created_at)
                        VALUES(?,?,?,?,?,?,?,'pending_confirmation',?,?,?,?)''',
                        (operation,workspace,key,encoded(payload),payload_hash,action,permission,confirmation,ws['version'],expires,self.clock()))
+            self.permissions.bind(db, workspace, operation, confirmation, permission_record)
+            if action=='aa_create':
+                from .aa_evidence import bind_draft
+                bind_draft(self,db,workspace,operation,payload['aa_bill'])
             if metric_required:
                 register=getattr(self,'base_metrics_register',None)
                 if not register:raise BankError('METRIC_NOT_CONFIGURED','金融结果守卫未配置，草案未保存。',503)
                 register(db,workspace,operation)
-            self._audit(db, workspace, 'operation_prepared', {'action':action,'permission':permission,'version':ws['version']}, operation)
+            prepared_details={'action':action,'permission':permission,'version':ws['version']}
+            if isinstance(details.get('transfer_terms'),dict):
+                prepared_details['transfer_terms']={**details['transfer_terms'],'workspace_id':workspace,
+                    'operation_id':operation,'operation_version':ws['version'],'payload_hash':payload_hash}
+            self._audit(db, workspace, 'operation_prepared', prepared_details, operation)
             if agent_origin:
                 register_agent_draft(db, self, workspace, operation)
                 # 同一事务内替代旧卡，避免新草案准备与旧确认之间出现竞态窗口。
@@ -1008,41 +1138,32 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
         raise BankError(code,message,409,persist=True)
 
     def verify(self, workspace, operation, payload):
-        strict_fields(payload, ['verification_code'], ['verification_code'])
-        pin = payload['verification_code']
-        if not isinstance(pin,str) or not re.fullmatch(r'\d{6}',pin):
-            raise BankError('INVALID_VERIFICATION', '模拟验证码为六位数字。')
+        return self.permissions.verify_sms(workspace, operation, payload)
+
+    def start_sms_verification(self, workspace, operation):
         with ExitStack() as evidence_locks, self.transaction() as db:
             row = self._operation(db, workspace, operation)
+            self.permissions.recheck(db, workspace, row)
             self._check_pending(db,workspace,row)
             require_approved(db, self, workspace, row)
             guard=getattr(self,'base_metrics_guard',None)
             if guard:guard(db,workspace,row)
             evidence_guard=getattr(self,'base_evidence_guard',None)
             if evidence_guard:evidence_locks.enter_context(evidence_guard(db,workspace,row))
-            if row['permission'] != 'red':
-                raise BankError('VERIFICATION_UNNECESSARY','此操作只需明确确认。',409)
-            ws = self._workspace(db,workspace)
-            if self.clock() < ws['locked_until']:
-                raise BankError('VERIFICATION_LOCKED','模拟验证已暂时锁定，请稍后重试。',429)
-            verifier=getattr(self,'request_pin_verifier',None)
-            matches=verifier(db,workspace,pin) if verifier else None
-            if matches is None:matches=hmac.compare_digest(ws['pin_hash'], digest(workspace+':'+pin))
-            if not matches:
-                attempts = ws['failed_attempts']+1 if ws['locked_until']==0 else 1
-                locked_until = self.clock()+60 if attempts>=3 else 0
-                db.execute('UPDATE workspaces SET failed_attempts=?,locked_until=? WHERE id=?', (attempts,locked_until,workspace))
-                self._audit(db,workspace,'verification_rejected',{'attempts':attempts,'locked':bool(locked_until)},operation)
-                raise BankError('VERIFICATION_FAILED','模拟验证码错误。',403,persist=True)
-            token = secrets.token_urlsafe(32)
-            db.execute('UPDATE workspaces SET failed_attempts=0,locked_until=0 WHERE id=?', (workspace,))
-            expiry = min(row['expires_at'], self.clock()+120)
-            db.execute('UPDATE operations SET verification_hash=?,verification_expires_at=? WHERE id=?', (digest(token),expiry,operation))
-            self._audit(db,workspace,'verification_passed',{'expires_at':expiry},operation)
-            return {'verification_token':token, 'operation_id':operation, 'expires_at':expiry,
-                    'notice':'模拟额外验证，不代表银行身份认证。'}
+        return self.permissions.start_sms(workspace, operation)
 
     def confirm(self, workspace, operation, payload):
+        try:
+            return self._confirm_authorized(workspace,operation,payload)
+        except Exception as error:
+            code=error.code if isinstance(error,BankError) else 'EXECUTION_FAILED'
+            # 原事务失败/拒绝已经退出；只有明确未记认证失败的早期篡改才加锁计数。
+            suspicious=(code in ('CONFIRMATION_MISMATCH','INVALID_CONFIRMATION','INVALID_FIELDS','NOT_FOUND')
+                        and not (isinstance(error,BankError) and error.persist))
+            self.permissions.failed_attempt(workspace,operation,code,suspicious=suspicious)
+            raise
+
+    def _confirm_authorized(self, workspace, operation, payload):
         strict_fields(payload,['confirmed','confirmation_digest','verification_token'],['confirmed','confirmation_digest'])
         if payload['confirmed'] is not True:
             raise BankError('CONFIRMATION_REQUIRED','必须明确确认具体操作。')
@@ -1053,40 +1174,60 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             if not hmac.compare_digest(row['confirmation_digest'],payload['confirmation_digest']):
                 self._reject(db,workspace,row,'CONFIRMATION_MISMATCH','确认内容与操作不一致。')
             # 相同已授权操作重放仅返回保存的回执，绝不重复改余额。
-            if row['state'] in ('succeeded','pending_settlement','settled'):
+            if row['state'] in ('succeeded','pending_settlement','settled') or (
+                    row['state'] in ('scheduled','failed') and 'remittance' in json.loads(row['payload'])):
                 return self._public_operation(row)
+            self.permissions.recheck(db, workspace, row)
             self._check_pending(db,workspace,row)
             require_approved(db, self, workspace, row)
             guard=getattr(self,'base_metrics_guard',None)
             if guard:guard(db,workspace,row)
             evidence_guard=getattr(self,'base_evidence_guard',None)
             if evidence_guard:evidence_locks.enter_context(evidence_guard(db,workspace,row))
-            if row['permission']=='red':
-                if self.clock() < self._workspace(db,workspace)['locked_until']:
-                    self._reject(db,workspace,row,'VERIFICATION_LOCKED','模拟验证已暂时锁定，请稍后重试。')
-                token = payload.get('verification_token')
-                if not isinstance(token,str) or not row['verification_hash'] or not hmac.compare_digest(row['verification_hash'],digest(token)) or self.clock() >= row['verification_expires_at']:
-                    self._reject(db,workspace,row,'VERIFICATION_REQUIRED','请完成绑定此操作的模拟额外验证。')
             original = json.loads(row['payload'])
             details = self._validate_action(db,workspace,original)
+            if row['action']=='transfer' and 'remittance' not in original and self.ordinary_transfer_terms(db,workspace,row['id']) is None:
+                self._reject(db,workspace,row,'STALE_CONFIRMATION','本机模拟手续费条款尚未核对，请重新准备并确认。','invalidated')
+            proof = self.permissions.execution_proof(db, workspace, row, payload.get('verification_token'), details)
+            # 证明消费与原金融执行、账本和回执共用事务；后续故障全部回滚。
+            self.permissions.consume(db, workspace, row, proof)
             before = details['account']['balance_minor']
-            if row['action']=='transfer':
+            if row['action'] in ('aa_create','aa_pay','aa_decline','aa_cancel'):
+                from .aa_payments import execute
+                result=execute(self,db,workspace,operation,original,details)
+                state='succeeded'
+            elif row['action']=='transfer':
                 amount=details['amount_minor']; beneficiary=details['beneficiary']
+                if 'remittance' in original:
+                    from .remittance import beneficiary as create_beneficiary
+                    beneficiary={**beneficiary,'id':create_beneficiary(self,db,workspace,original['remittance'])}
                 as_of=date.fromisoformat(self._workspace(db,workspace)['as_of'])
                 db.execute('UPDATE accounts SET balance_minor=balance_minor-? WHERE id=? AND workspace_id=?',
                            (amount,original['account_id'],workspace))
-                self._ledger(db,workspace,original['account_id'],as_of,beneficiary['display_name'],amount,-amount,
-                             'transfer',operation,category='转账',note='用户确认的模拟转账')
+                reference=(original['remittance']['purpose']+(' · '+original['remittance']['message'] if original['remittance']['message'] else '')) if 'remittance' in original else (original.get('reference') or '用户确认的模拟转账')
+                transaction_id=self._ledger(db,workspace,original['account_id'],as_of,beneficiary['display_name'],amount,-amount,
+                             'transfer',operation,category='汇款' if 'remittance' in original else '转账',note=reference)
                 payment_id=self._record_payment(db,workspace,original['account_id'],beneficiary['id'],amount,
-                                                as_of.isoformat(),'succeeded',original.get('reference') or '用户确认的模拟转账')
+                                                as_of.isoformat(),'succeeded',reference)
                 after=self._account(db,workspace,original['account_id'])['balance_minor']
                 state='succeeded'
                 result={'payment_id':payment_id,'beneficiary':beneficiary['display_name'],'amount_minor':amount,
                         'status':'succeeded','balance_before_minor':before,'balance_after_minor':after,
                         'notice':'仅在本机模拟账本记账；未向真实收款账户转账。'}
+                if 'remittance' in original:
+                    from .remittance import execution_time
+                    execute_at,execute_on=execution_time(self,original['remittance']['mode'])
+                    result.update(transaction_id=transaction_id,execute_on=execute_on,held_minor=0,
+                        available_after_minor=max(0,after-self._active_holds(db,workspace,original['account_id'])),
+                        mode=original['remittance']['mode'],execute_at=execute_at,processed_at=self.clock(),
+                        business_on=as_of.isoformat(),environment='simulation')
             elif row['action']=='schedule_transfer':
+                beneficiary_id=details['beneficiary']['id']
+                if 'remittance' in original:
+                    from .remittance import beneficiary as create_beneficiary
+                    beneficiary_id=create_beneficiary(self,db,workspace,original['remittance'])
                 schedule_id=self._insert_archive_row(db,'scheduled_payments',workspace,{
-                    'account_id':original['account_id'],'beneficiary_id':details['beneficiary']['id'],
+                    'account_id':original['account_id'],'beneficiary_id':beneficiary_id,
                     'amount_minor':details['amount_minor'],'frequency':original['frequency'],
                     'next_due_on':original['next_due_on'],'status':'active','end_on':original.get('end_on'),
                 })
@@ -1094,6 +1235,16 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                 result={'scheduled_payment_id':schedule_id,'status':'active','frequency':original['frequency'],
                         'next_due_on':original['next_due_on'],'amount_minor':details['amount_minor'],
                         'notice':'模拟定时转账已启用；到期执行仅发生在本机模拟账本。'}
+                if 'remittance' in original:
+                    from .remittance import execution_time
+                    execute_at,execute_on=execution_time(self,original['remittance']['mode'])
+                    state='scheduled'
+                    result.update(status='scheduled',execute_on=execute_on,execute_at=execute_at,
+                        execute_business_on=original['next_due_on'],held_minor=details['amount_minor'],
+                        balance_before_minor=before,balance_after_minor=before,transaction_id=None,payment_id=None,
+                        available_after_minor=max(0,before-self._active_holds(db,workspace,original['account_id'])-details['amount_minor']),
+                        mode=original['remittance']['mode'],environment='simulation',
+                        notice='模拟汇款已受理并冻结资金；到期在本机处理，尚未向真实银行转账。')
             elif row['action']=='cancel_scheduled_payment':
                 schedule=details['schedule']
                 db.execute("UPDATE scheduled_payments SET status='cancelled' WHERE workspace_id=? AND id=?",
@@ -1101,6 +1252,14 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                 state='succeeded'
                 result={'scheduled_payment_id':schedule['id'],'status':'cancelled',
                         'notice':'后续模拟转账已取消；不会影响其他账户或真实银行安排。'}
+                remittance=db.execute("SELECT * FROM navren_remittances WHERE workspace_id=? AND scheduled_payment_id=? AND status='scheduled'",(workspace,schedule['id'])).fetchone()
+                if remittance:
+                    from .remittance import finish
+                    finish(self,db,remittance,{'status':'cancelled','amount_minor':remittance['amount_minor'],
+                        'scheduled_payment_id':schedule['id'],'execute_on':remittance['execute_on'],'held_minor':0,
+                        'balance_before_minor':before,'balance_after_minor':before,'mode':remittance['mode'],
+                        'available_after_minor':max(0,before-self._active_holds(db,workspace,original['account_id'])+remittance['amount_minor']),
+                        'notice':'模拟汇款已取消，冻结资金已释放；未发生扣款。','environment':'simulation'})
             elif row['action']=='request_split':
                 split=details['split']
                 db.execute("UPDATE split_bills SET status='open' WHERE workspace_id=? AND id=?",
@@ -1223,6 +1382,18 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                 state='succeeded'
                 result={'card_id':card['id'],'status':'lost',
                         'notice':'模拟卡片已挂失，交易控制已全部关闭；不代表已通知真实银行。'}
+            elif row['action']=='unblock_card':
+                card=details['card'];as_of=self._workspace(db,workspace)['as_of']
+                db.execute("UPDATE cards SET status='active' WHERE workspace_id=? AND id=?",(workspace,card['id']))
+                self._insert_archive_row(db,'card_events',workspace,{'card_id':card['id'],'event_type':'unblocked',
+                    'occurred_on':as_of,'status':'recorded','reason':'本人确认并完成短信证明的模拟解挂'})
+                state='succeeded'
+                result={'card_id':card['id'],'status':'active','controls_reenabled':False,
+                        'notice':'已解除模拟挂失；交易开关仍保持关闭，需单独确认开启。'}
+            elif row['action']=='password_change':
+                from .security_credentials import execute as execute_password
+                result=execute_password(self,db,workspace,operation,original['replacement_id'])
+                state='succeeded'
             elif row['action']=='request_card_limit':
                 card=details['card']; as_of=self._workspace(db,workspace)['as_of']
                 request_id=uuid.uuid4().hex
@@ -1237,18 +1408,39 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                         'notice':'模拟额度申请已提交并等待审核；当前信用额度没有变化。'}
             elif row['action']=='apply_card':
                 as_of=self._workspace(db,workspace)['as_of']; application_id=uuid.uuid4().hex
+                virtual_card=None
+                if details['requested_type']=='virtual':
+                    virtual_card=self._insert_archive_row(db,'cards',workspace,{
+                        'customer_id':details['customer_id'],'account_id':original['account_id'],'type':'virtual',
+                        'network':'SIM','last_four':f'{secrets.randbelow(10000):04d}','status':'active',
+                        'issued_on':as_of,'expires_on':(date.fromisoformat(as_of)+timedelta(days=365)).isoformat(),
+                        'credit_limit_minor':0,'outstanding_minor':0})
+                    for kind in ('online','overseas','contactless','single_limit'):
+                        self._insert_archive_row(db,'card_controls',workspace,{'card_id':virtual_card,'control_type':kind,
+                            'enabled':int(kind in ('online','single_limit')),'limit_minor':details['requested_limit_minor'] if kind=='single_limit' else 0,
+                            'updated_on':as_of})
+                    self._insert_archive_row(db,'card_events',workspace,{'card_id':virtual_card,'event_type':'issued',
+                        'occurred_on':as_of,'status':'recorded','reason':'本人确认的本地模拟虚拟卡；无真实卡号和支付能力'})
+                    if db.execute("SELECT 1 FROM sqlite_master WHERE name='connected_asset_migrations'").fetchone() and db.execute(
+                            'SELECT 1 FROM connected_asset_migrations WHERE workspace_id=?',(workspace,)).fetchone():
+                        db.execute('INSERT INTO connected_card_links VALUES(?,?,?,?,?)',
+                                   (workspace,virtual_card,'runtime:card:'+virtual_card,None,'payment'))
                 db.execute('INSERT INTO card_applications(id,workspace_id,source_id,data_origin,details,customer_id,card_id,requested_type,requested_limit_minor,status,requested_on,decision_reason) '
                            'VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-                           (application_id,workspace,'qingzhou','qingzhou_synthetic','{}',details['customer_id'],
-                            details['replacement']['id'] if details['replacement'] else None,
-                            details['requested_type'],details['requested_limit_minor'],'submitted',as_of,
-                            '仅受理模拟申请；未生成卡片或授信结果。'))
+                           (application_id,workspace,'qingzhou','qingzhou_synthetic',encoded({'account_id':details['account']['id']}),details['customer_id'],
+                            virtual_card or (details['replacement']['id'] if details['replacement'] else None),
+                            details['requested_type'],details['requested_limit_minor'],'issued' if virtual_card else 'submitted',as_of,
+                            '本地模拟虚拟卡已生成；无真实卡号、授信或对外支付能力。' if virtual_card else '仅受理模拟申请；未生成卡片或授信结果。'))
                 state='succeeded'
                 result={'application_id':application_id,'status':'submitted','requested_type':details['requested_type'],
                         'requested_limit_minor':details['requested_limit_minor'],
                         'replacement_card_id':details['replacement']['id'] if details['replacement'] else None,
                         'notice':'模拟补卡申请已提交；尚未审批，不代表已核发或授信。' if details['replacement'] else
                                 '模拟卡片申请已提交；尚未审批，不代表已核发或授信。'}
+                if virtual_card:
+                    result.update(card_id=virtual_card,status='issued',fee_minor=0,validity_days=365,
+                        single_transaction_limit_minor=details['requested_limit_minor'],credit_limit_minor=0,
+                        notice='本地模拟虚拟卡已生成；无真实卡号、授信或对外支付能力。')
             else:
                 product, amount, account = details['product'], original['amount_minor'], original['account_id']
                 db.execute('PRAGMA defer_foreign_keys=ON')
@@ -1291,15 +1483,58 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                 result = {'order_id':order,'status':order_status,'amount_minor':amount,'settlement_date':settlement,
                           'balance_before_minor':before,'balance_after_minor':after,
                           'notice':'赎回待结算不计入可用现金。' if state=='pending_settlement' else '模拟业务已记账。'}
+            if 'remittance' in original:
+                from .remittance import save
+                save(self,db,workspace,operation,original,result)
             db.execute('UPDATE operations SET state=?,result=?,verification_hash=NULL WHERE id=?', (state,encoded(result),operation))
+            self._audit(db,workspace,'permission_executed',{'policy':self.permissions.status(db,workspace,operation)['policy'],
+                'grade':row['permission'],'mfa_source':proof['source'] if proof else None,
+                'real_SMS_acceptance':False},operation)
             self._bump(db,workspace)
             self._audit(db,workspace,'operation_executed',{'state':state,'result':result},operation)
             return self._public_operation(self._operation(db,workspace,operation))
 
     def _ledger(self, db, workspace, account, day, merchant, amount, delta, kind, operation,
                 category='投资流转',note='模拟订单记账'):
+        # 分账户接入后的新流水使用提供者时钟；封存旧样本仍保持原日期语义。
+        connected = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='connected_asset_migrations'").fetchone()
+        connected = connected and db.execute('SELECT 1 FROM connected_asset_migrations WHERE workspace_id=?',(workspace,)).fetchone()
+        if connected:
+            from datetime import timezone
+            from zoneinfo import ZoneInfo
+            current = datetime.fromtimestamp(self.clock(),timezone.utc).astimezone(ZoneInfo('Asia/Shanghai'))
+            occurred_at = current.isoformat(timespec='seconds') if day==current.date() else day.isoformat()+'T12:00:00+08:00'
+        else:
+            occurred_at = day.isoformat()+'T12:00:00+08:00'
+        transaction_id=uuid.uuid4().hex
         db.execute('INSERT INTO transactions VALUES(?,?,?,?,?,?,?,?,?,?,NULL,?)',
-                   (uuid.uuid4().hex,workspace,account,day.isoformat()+'T12:00:00+08:00',merchant,amount,delta,kind,category,note,operation))
+                   (transaction_id,workspace,account,occurred_at,merchant,amount,delta,kind,category,note,operation))
+        return transaction_id
+
+    def remittances(self,workspace,operation=None,*,process_due=True):
+        from .remittance import preview
+        if process_due:self.process_due_remittances(workspace)
+        with closing(self.connect()) as db:
+            ws=self._workspace(db,workspace)
+            if operation:return preview(self,db,workspace,operation)
+            rows=db.execute("SELECT id,payload FROM operations WHERE workspace_id=? AND action IN ('transfer','schedule_transfer') ORDER BY created_at DESC,id",(workspace,)).fetchall()
+            return {'environment':'simulation','as_of':ws['as_of'],
+                    'remittances':[preview(self,db,workspace,r['id']) for r in rows if 'remittance' in json.loads(r['payload'])]}
+
+    def process_due_remittances(self,workspace):
+        """读取时仅处理先前本人已授权的到期汇款，不推进其他金融业务。"""
+        with self.transaction() as db:
+            ws=self._workspace(db,workspace)
+            due=[r['scheduled_payment_id'] for r in db.execute(
+                "SELECT r.scheduled_payment_id FROM navren_remittances r JOIN scheduled_payments s "
+                "ON s.workspace_id=r.workspace_id AND s.id=r.scheduled_payment_id "
+                "WHERE r.workspace_id=? AND r.status='scheduled' AND s.status='active' "
+                "AND r.execute_at<=?",(workspace,self.clock()))]
+            if not due:return {'processed':0,'failed':0,'environment':'simulation'}
+            self.permissions.write_allowed(db,workspace)
+            completed,failed=self._process_scheduled_transfers(db,workspace,date.fromisoformat(ws['as_of']),schedule_ids=due)
+            self._bump(db,workspace)
+            return {'processed':completed,'failed':failed,'environment':'simulation'}
 
     def cancel(self, workspace, operation):
         with self.transaction() as db:
@@ -1322,14 +1557,29 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             self._workspace(db,workspace)
             return [dict(row,details=json.loads(row['details'])) for row in db.execute('SELECT * FROM audit WHERE workspace_id=? ORDER BY id',(workspace,))]
 
-    def _process_scheduled_transfers(self, db, workspace, day):
+    def _process_scheduled_transfers(self, db, workspace, day, *, schedule_ids=None):
         completed=failed=0
-        schedules=list(db.execute("SELECT * FROM scheduled_payments WHERE workspace_id=? AND status='active' AND next_due_on<=? ORDER BY next_due_on,id",
-                                  (workspace,day.isoformat())))
+        if schedule_ids is None:
+            schedules=list(db.execute("SELECT * FROM scheduled_payments WHERE workspace_id=? AND status='active' AND next_due_on<=? ORDER BY next_due_on,id",
+                                      (workspace,day.isoformat())))
+        else:
+            schedules=list(db.execute("SELECT * FROM scheduled_payments WHERE workspace_id=? AND status='active' AND id IN ("+
+                ','.join('?' for _ in schedule_ids)+") ORDER BY next_due_on,id",(workspace,*schedule_ids)))
         for schedule in schedules:
             account=self._account(db,workspace,schedule['account_id'])
             beneficiary=self._archive_row(db,'beneficiaries',workspace,schedule['beneficiary_id'])
+            remittance=db.execute("SELECT * FROM navren_remittances WHERE workspace_id=? AND scheduled_payment_id=? AND status='scheduled'",(workspace,schedule['id'])).fetchone()
+            before=account['balance_minor']
             reason=None
+            if remittance:
+                from .remittance import validate
+                original=json.loads(self._operation(db,workspace,remittance['operation_id'])['payload'])
+                try:
+                    if (original['amount_minor']!=schedule['amount_minor'] or remittance['amount_minor']!=schedule['amount_minor']
+                            or original['account_id']!=schedule['account_id'] or remittance['account_id']!=schedule['account_id']):
+                        raise BankError('REMITTANCE_CHANGED','已授权汇款的金额或账户关联已变化。',409)
+                    validate(self,db,workspace,original,exclude_operation=remittance['operation_id'])
+                except BankError as error:reason=error.message
             if beneficiary['status']!='active' or not beneficiary['verified']:
                 reason='模拟收款人未通过核验或已被拦截。'
             else:
@@ -1343,7 +1593,7 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             # once while protecting all other near-term commitments from it.
             due=self._known_due_minor(db,workspace,account['id'],day.isoformat())
             other_due=max(0,due-schedule['amount_minor'])
-            if not reason and account['balance_minor']-schedule['amount_minor']-held-other_due<self._reserve_floor(db,workspace,account['id']):
+            if not remittance and not reason and account['balance_minor']-schedule['amount_minor']-held-other_due<self._reserve_floor(db,workspace,account['id']):
                 reason='模拟账户可用余额不足，未执行定时转账。'
             if reason:
                 payment_id=self._record_payment(db,workspace,account['id'],beneficiary['id'],
@@ -1352,14 +1602,25 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                            (workspace,schedule['id']))
                 self._audit(db,workspace,'scheduled_transfer_failed',{'schedule_id':schedule['id'],
                     'payment_id':payment_id,'reason':reason,'date':day.isoformat()})
+                if remittance:
+                    from .remittance import finish
+                    finish(self,db,remittance,{'status':'failed','payment_id':payment_id,'transaction_id':None,
+                        'scheduled_payment_id':schedule['id'],'amount_minor':schedule['amount_minor'],
+                        'balance_before_minor':before,'balance_after_minor':before,'held_minor':0,
+                        'execute_on':remittance['execute_on'],'execute_at':remittance['execute_at'],
+                        'processed_at':self.clock(),'business_on':day.isoformat(),'failure_reason':reason,
+                        'available_after_minor':max(0,before-held+remittance['amount_minor']),
+                        'mode':remittance['mode'],'environment':'simulation','notice':'模拟汇款未扣款，冻结资金已释放。'})
                 failed+=1
                 continue
             db.execute('UPDATE accounts SET balance_minor=balance_minor-? WHERE workspace_id=? AND id=?',
                        (schedule['amount_minor'],workspace,account['id']))
-            self._ledger(db,workspace,account['id'],day,beneficiary['display_name'],schedule['amount_minor'],
-                         -schedule['amount_minor'],'transfer',None,category='定时转账',note='已确认的模拟定时转账')
+            reference=(original['remittance']['purpose']+(' · '+original['remittance']['message'] if original['remittance']['message'] else '')) if remittance else '已确认的模拟定时转账'
+            transaction_id=self._ledger(db,workspace,account['id'],day,beneficiary['display_name'],schedule['amount_minor'],
+                         -schedule['amount_minor'],'transfer',remittance['operation_id'] if remittance else None,
+                         category='汇款' if remittance else '定时转账',note=reference)
             payment_id=self._record_payment(db,workspace,account['id'],beneficiary['id'],
-                schedule['amount_minor'],day.isoformat(),'succeeded','已确认的模拟定时转账')
+                schedule['amount_minor'],day.isoformat(),'succeeded',reference)
             next_due=add_month(date.fromisoformat(schedule['next_due_on'])) if schedule['frequency']=='monthly' else None
             complete=(schedule['frequency']=='once' or (schedule['end_on'] and next_due.isoformat()>schedule['end_on']))
             db.execute('UPDATE scheduled_payments SET status=?,next_due_on=? WHERE workspace_id=? AND id=?',
@@ -1367,16 +1628,28 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                         workspace,schedule['id']))
             self._audit(db,workspace,'scheduled_transfer_executed',{'schedule_id':schedule['id'],
                 'payment_id':payment_id,'amount_minor':schedule['amount_minor'],'date':day.isoformat()})
+            if remittance:
+                from .remittance import finish
+                after=self._account(db,workspace,account['id'])['balance_minor']
+                finish(self,db,remittance,{'status':'succeeded','payment_id':payment_id,'transaction_id':transaction_id,
+                    'scheduled_payment_id':schedule['id'],'amount_minor':schedule['amount_minor'],
+                    'balance_before_minor':before,'balance_after_minor':after,'held_minor':0,
+                    'execute_on':remittance['execute_on'],'execute_at':remittance['execute_at'],
+                    'processed_at':self.clock(),'business_on':day.isoformat(),
+                    'available_after_minor':max(0,after-held+schedule['amount_minor']),
+                    'mode':remittance['mode'],'environment':'simulation','notice':'模拟汇款已记账，未向真实银行发送资金。'})
             completed+=1
         return completed,failed
 
-    def _process_card_reviews(self, db, workspace, day):
+    def _process_card_reviews(self, db, workspace, day, *, limit=None):
         applications=limits=0
+        if limit is not None:integer(limit,'审核队列批量',1,2000)
+        limit_sql='' if limit is None else ' LIMIT '+str(limit)
         kyc=db.execute("SELECT * FROM kyc_reviews WHERE workspace_id=? AND status='passed' AND expires_on>=? AND sanctions_match=0 ORDER BY reviewed_on DESC LIMIT 1",
                        (workspace,day.isoformat())).fetchone()
         employment=db.execute('SELECT annual_income_minor FROM employment WHERE workspace_id=? ORDER BY id LIMIT 1',(workspace,)).fetchone()
         cap=max(0,(employment['annual_income_minor']//4) if employment else 0)
-        for application in list(db.execute("SELECT * FROM card_applications WHERE workspace_id=? AND status='submitted' AND requested_on<? ORDER BY requested_on,id",
+        for application in list(db.execute("SELECT * FROM card_applications WHERE workspace_id=? AND status='submitted' AND requested_on<? ORDER BY requested_on,id"+limit_sql,
                                            (workspace,day.isoformat()))):
             allowed=bool(kyc) and (application['requested_type']=='debit' or application['requested_limit_minor']<=cap)
             if not allowed:
@@ -1399,12 +1672,77 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                 if not account_row:
                     raise RuntimeError('模拟卡片申请没有关联账户')
                 issued_account=account_row['account_id']
+            connected = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='connected_asset_migrations'").fetchone()
+            connected = connected and db.execute('SELECT 1 FROM connected_asset_migrations WHERE workspace_id=?',(workspace,)).fetchone()
+            connected_facility = None
+            connected_role = 'primary'
+            connected_details = {}
+            if connected:
+                from .connected_assets import _id
+                if not application['card_id']:
+                    # 使用用户申请时已经校验的结算账户，不替换发行机构。
+                    selected_account = json.loads(application['details']).get('account_id')
+                    account_row = db.execute("SELECT l.account_id,l.connection_id FROM connected_account_links l "
+                        "JOIN account_details d ON d.workspace_id=l.workspace_id AND d.account_id=l.account_id "
+                        "WHERE l.workspace_id=? AND l.account_id=? AND d.customer_id=? AND l.account_type='bank_settlement'",
+                        (workspace,selected_account,application['customer_id'])).fetchone()
+                    if not account_row:
+                        raise RuntimeError('模拟卡片申请没有已连接的银行结算账户')
+                    issued_account = account_row['account_id']
+                link = db.execute('SELECT * FROM connected_account_links WHERE workspace_id=? AND account_id=?',
+                                  (workspace,issued_account)).fetchone()
+                if not link:
+                    raise RuntimeError('模拟发卡账户缺少银行连接')
+                if application['requested_type']=='credit':
+                    if application['card_id']:
+                        old_link = db.execute('SELECT * FROM connected_card_links WHERE workspace_id=? AND card_id=?',
+                                              (workspace,application['card_id'])).fetchone()
+                        if not old_link or not old_link['facility_id'] or link['account_type']!='credit_card':
+                            raise RuntimeError('模拟信用补卡缺少信用账户或授信关联')
+                        connected_facility,connected_role = old_link['facility_id'],old_link['role']
+                    else:
+                        funding_account = issued_account
+                        detail = db.execute('SELECT branch_id FROM account_details WHERE workspace_id=? AND account_id=?',
+                                            (workspace,funding_account)).fetchone()
+                        issued_account = _id(workspace,'credit-account',application['id'])
+                        db.execute('INSERT INTO accounts VALUES(?,?,?,?,?,?)',
+                                   (issued_account,workspace,'新信用卡账务账户','CNY',0,0))
+                        db.execute('INSERT INTO connected_account_links VALUES(?,?,?,?,?)',
+                                   (workspace,issued_account,'runtime:credit:'+application['id'],link['connection_id'],'credit_card'))
+                        self._insert_archive_row(db,'account_details',workspace,{'customer_id':application['customer_id'],
+                            'account_id':issued_account,'branch_id':detail['branch_id'],'masked_number':'账户尾号 '+suffix,
+                            'type':'current','status':'active','opened_on':day.isoformat(),'interest_bps':0,'overdraft_minor':0})
+                        connected_facility = _id(workspace,'facility',application['id'])
+                        connected_details['funding_account_id'] = funding_account
+                elif link['account_type']=='credit_card':
+                    raise RuntimeError('模拟借记卡不能挂信用账户')
+                connected_details.update(source='navren_simulated_bank',origin='runtime_card_issuance',application_id=application['id'])
             db.execute('INSERT INTO cards(id,workspace_id,source_id,data_origin,details,customer_id,account_id,type,network,last_four,status,issued_on,expires_on,credit_limit_minor,outstanding_minor) '
                        'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                       (card_id,workspace,'qingzhou','qingzhou_synthetic','{}',application['customer_id'],issued_account,
+                       (card_id,workspace,'qingzhou','qingzhou_synthetic',encoded(connected_details),application['customer_id'],issued_account,
                         application['requested_type'],existing['network'] if existing else 'SIM-UnionPay',suffix,
                         'active',day.isoformat(),day.replace(year=day.year+5).isoformat(),
                         application['requested_limit_minor'] if application['requested_type']=='credit' else 0,0))
+            if connected:
+                db.execute('INSERT INTO connected_card_links VALUES(?,?,?,?,?)',
+                           (workspace,card_id,'runtime:card:'+card_id,connected_facility,connected_role))
+                if application['card_id']:
+                    original_card = self._card(db,workspace,application['card_id'])
+                    old_details = json.loads(original_card['details'])
+                    old_details.update(lifecycle_state='replaced',replaced_by_card_id=card_id,replaced_on=day.isoformat())
+                    db.execute("UPDATE cards SET status='expired',outstanding_minor=0,details=? WHERE workspace_id=? AND id=?",
+                               (encoded(old_details),workspace,original_card['id']))
+                    db.execute('UPDATE cards SET outstanding_minor=? WHERE workspace_id=? AND id=?',
+                               (original_card['outstanding_minor'],workspace,card_id))
+                    for statement in list(db.execute('SELECT id,details FROM credit_statements WHERE workspace_id=? AND card_id=?',
+                                                     (workspace,original_card['id']))):
+                        statement_details = json.loads(statement['details'])
+                        statement_details.update(replaced_card_id=original_card['id'],replacement_card_id=card_id)
+                        db.execute('UPDATE credit_statements SET card_id=?,details=? WHERE workspace_id=? AND id=?',
+                                   (card_id,encoded(statement_details),workspace,statement['id']))
+                    self._insert_archive_row(db,'card_events',workspace,{'card_id':original_card['id'],'event_type':'blocked',
+                        'occurred_on':day.isoformat(),'status':'recorded','reason':'补卡核发，原卡已替换并停止使用',
+                        'details':encoded({'replacement_card_id':card_id,'application_id':application['id']})})
             for kind,enabled,limit in (('online',1,0),('overseas',0,0),('contactless',1,0),('single_limit',1,min(200000,application['requested_limit_minor'] or 200000))):
                 self._insert_archive_row(db,'card_controls',workspace,{'card_id':card_id,'control_type':kind,
                     'enabled':enabled,'limit_minor':limit,'updated_on':day.isoformat()})
@@ -1415,7 +1753,7 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                        (reason,workspace,application['id']))
             self._audit(db,workspace,'card_application_issued',{'application_id':application['id'],'card_id':card_id,'simulation_only':True})
             applications+=1
-        for request in list(db.execute("SELECT r.*,c.account_id,c.credit_limit_minor FROM card_limit_requests r JOIN cards c ON c.workspace_id=r.workspace_id AND c.id=r.card_id WHERE r.workspace_id=? AND r.status='submitted' AND r.requested_on<? ORDER BY r.requested_on,r.id",
+        for request in list(db.execute("SELECT r.*,c.account_id,c.credit_limit_minor FROM card_limit_requests r JOIN cards c ON c.workspace_id=r.workspace_id AND c.id=r.card_id WHERE r.workspace_id=? AND r.status='submitted' AND r.requested_on<? ORDER BY r.requested_on,r.id"+limit_sql,
                                        (workspace,day.isoformat()))):
             allowed=bool(kyc) and request['requested_limit_minor']<=cap and request['requested_limit_minor']>request['credit_limit_minor']
             if allowed:
@@ -1435,43 +1773,59 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
             limits+=1
         return applications,limits
 
+    def _process_authorized_day(self, db, workspace, day, *, schedule_ids=None, limit=None):
+        """调用方已持银行事务；只推进既有已授权任务，不生成新授权。"""
+        settled=transfers=failed_transfers=applications=limits=expired_holds=0
+        if limit is not None:integer(limit,'已授权队列批量',1,2000)
+        limit_sql='' if limit is None else ' ORDER BY settlement_date,id LIMIT '+str(limit)
+        orders=list(db.execute("SELECT * FROM orders WHERE workspace_id=? AND status='pending_settlement' AND settlement_date<=?"+limit_sql,
+                               (workspace,day.isoformat())))
+        for order in orders:
+            amount=order['amount_minor']
+            db.execute('UPDATE accounts SET balance_minor=balance_minor+? WHERE id=?',(amount,order['account_id']))
+            self._ledger(db,workspace,order['account_id'],day,'模拟赎回结算',amount,amount,'investment_redemption',order['operation_id'])
+            db.execute("UPDATE orders SET status='settled' WHERE id=?",(order['id'],))
+            op=self._operation(db,workspace,order['operation_id'])
+            result=json.loads(op['result'])
+            result.update(status='settled',settled_on=day.isoformat(),balance_after_minor=self._account(db,workspace,order['account_id'])['balance_minor'])
+            db.execute("UPDATE operations SET state='settled',result=? WHERE id=?",(encoded(result),op['id']))
+            self._audit(db,workspace,'redemption_settled',{'order_id':order['id'],'amount_minor':amount},op['id'])
+        settled+=len(orders)
+        done,bad=self._process_scheduled_transfers(db,workspace,day,schedule_ids=schedule_ids)
+        transfers+=done;failed_transfers+=bad
+        reviewed_apps,reviewed_limits=self._process_card_reviews(db,workspace,day,limit=limit)
+        applications+=reviewed_apps;limits+=reviewed_limits
+        limit_sql='' if limit is None else ' ORDER BY expires_on,id LIMIT '+str(limit)
+        expired=list(db.execute("SELECT * FROM fund_holds WHERE workspace_id=? AND status='held' AND expires_on<?"+limit_sql,
+                                (workspace,day.isoformat())))
+        for hold in expired:
+            db.execute("UPDATE fund_holds SET status='expired' WHERE workspace_id=? AND id=?",(workspace,hold['id']))
+            db.execute("UPDATE orchestration_tasks SET status='failed' WHERE workspace_id=? AND id=? AND status='in_progress'",
+                       (workspace,hold['task_id']))
+            db.execute("UPDATE task_steps SET status='failed' WHERE workspace_id=? AND task_id=? AND action='reserve_funds'",
+                       (workspace,hold['task_id']))
+            self._audit(db,workspace,'fund_hold_expired',{'hold_id':hold['id'],'amount_minor':hold['amount_minor']})
+        expired_holds+=len(expired)
+        return {'settled_orders':settled,'scheduled_transfers':transfers,'failed_transfers':failed_transfers,
+                'reviewed_card_applications':applications,'reviewed_card_limits':limits,'expired_holds':expired_holds}
+
     def advance_days(self, workspace, days):
         """仅推进本机模拟日期，并处理已授权的模拟结算、定时转账及审核队列。"""
         integer(days,'推进天数',1,365)
         with self.transaction() as db:
+            if (db.execute("SELECT 1 FROM sqlite_master WHERE name='registered_user_instances'").fetchone()
+                    and db.execute('SELECT 1 FROM registered_user_instances WHERE workspace_id=?',(workspace,)).fetchone()):
+                raise BankError('LIVING_CLOCK_MANAGED','注册实例由服务器时间推进，不能手动生成未来交易。',409)
             ws = self._workspace(db,workspace)
             start=date.fromisoformat(ws['as_of'])
             settled=transfers=failed_transfers=applications=limits=expired_holds=0
             for offset in range(1,days+1):
                 day=start+timedelta(days=offset)
                 db.execute('UPDATE workspaces SET as_of=? WHERE id=?',(day.isoformat(),workspace))
-                orders=list(db.execute("SELECT * FROM orders WHERE workspace_id=? AND status='pending_settlement' AND settlement_date<=?",
-                                       (workspace,day.isoformat())))
-                for order in orders:
-                    amount=order['amount_minor']
-                    db.execute('UPDATE accounts SET balance_minor=balance_minor+? WHERE id=?',(amount,order['account_id']))
-                    self._ledger(db,workspace,order['account_id'],day,'模拟赎回结算',amount,amount,'investment_redemption',order['operation_id'])
-                    db.execute("UPDATE orders SET status='settled' WHERE id=?",(order['id'],))
-                    op=self._operation(db,workspace,order['operation_id'])
-                    result=json.loads(op['result'])
-                    result.update(status='settled',settled_on=day.isoformat(),balance_after_minor=self._account(db,workspace,order['account_id'])['balance_minor'])
-                    db.execute("UPDATE operations SET state='settled',result=? WHERE id=?",(encoded(result),op['id']))
-                    self._audit(db,workspace,'redemption_settled',{'order_id':order['id'],'amount_minor':amount},op['id'])
-                settled+=len(orders)
-                done,bad=self._process_scheduled_transfers(db,workspace,day)
-                transfers+=done;failed_transfers+=bad
-                reviewed_apps,reviewed_limits=self._process_card_reviews(db,workspace,day)
-                applications+=reviewed_apps;limits+=reviewed_limits
-                expired=list(db.execute("SELECT * FROM fund_holds WHERE workspace_id=? AND status='held' AND expires_on<?",
-                                        (workspace,day.isoformat())))
-                for hold in expired:
-                    db.execute("UPDATE fund_holds SET status='expired' WHERE workspace_id=? AND id=?",(workspace,hold['id']))
-                    db.execute("UPDATE orchestration_tasks SET status='failed' WHERE workspace_id=? AND id=? AND status='in_progress'",
-                               (workspace,hold['task_id']))
-                    db.execute("UPDATE task_steps SET status='failed' WHERE workspace_id=? AND task_id=? AND action='reserve_funds'",
-                               (workspace,hold['task_id']))
-                    self._audit(db,workspace,'fund_hold_expired',{'hold_id':hold['id'],'amount_minor':hold['amount_minor']})
-                expired_holds+=len(expired)
+                outcome=self._process_authorized_day(db,workspace,day)
+                settled+=outcome['settled_orders'];transfers+=outcome['scheduled_transfers']
+                failed_transfers+=outcome['failed_transfers'];applications+=outcome['reviewed_card_applications']
+                limits+=outcome['reviewed_card_limits'];expired_holds+=outcome['expired_holds']
             self._bump(db,workspace)
             final_day=start+timedelta(days=days)
             self._audit(db,workspace,'simulation_date_advanced',{'from':ws['as_of'],'to':final_day.isoformat(),

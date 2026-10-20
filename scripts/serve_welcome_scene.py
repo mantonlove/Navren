@@ -7,6 +7,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from welcome_auth import create_welcome_server
+from sms_aliyun import load_sms_transport
 
 
 def main():
@@ -14,7 +15,7 @@ def main():
     parser.add_argument('--port', type=int, default=18768)
     parser.add_argument('--database', type=Path, help='隔离验收用认证数据库；默认使用本机持久认证库')
     args = parser.parse_args()
-    instance = create_welcome_server(args.port, args.database)
+    instance = create_welcome_server(args.port, args.database, sms_transport=load_sms_transport())
     print(f'Navren 欢迎与本地登录：http://127.0.0.1:{instance.server_port}', flush=True)
     try:
         instance.serve_forever()

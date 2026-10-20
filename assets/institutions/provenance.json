@@ -1,0 +1,58 @@
+{
+  "retrieved_at": "2026-10-07T08:53:13.629802+00:00",
+  "purpose": "本地演示账户入口的机构标识",
+  "assets": [
+    {
+      "name": "citic-securities",
+      "file": "assets/institutions/citic-securities.png",
+      "source_asset": "https://www.cs.ecitic.com/newsite/ggmk/wztb/wzlogo/201803/W020180711560116478457.png",
+      "source_page": "https://www.cs.ecitic.com/newsite/",
+      "sha256": "ab7d50bfe01f14294e572eb433aee54775420a02e83d1f2a26bd36ba45411643",
+      "bytes": 6610,
+      "theme_color": "#D20A10",
+      "color_basis": "原始图像的不透明彩色像素，不冒称品牌规范色值"
+    },
+    {
+      "name": "alipay",
+      "file": "assets/institutions/alipay.png",
+      "source_asset": "https://t.alipayobjects.com/images/T11rdgXbFkXXXXXXXX.png",
+      "source_page": "https://www.alipay.cn/",
+      "sha256": "37a0d864e2ef72c385771c8d482d0f0fd5790d1c2e89fdbbb726def9ec5c3a7a",
+      "bytes": 2740,
+      "theme_color": "#1677FF",
+      "color_basis": "原始图像的不透明彩色像素，不冒称品牌规范色值"
+    },
+    {
+      "name": "wechat-pay",
+      "file": "assets/institutions/wechat-pay.png",
+      "source_asset": "https://wx.gtimg.com/outwxgtimg/imgs/logo/wxpaylogo_xxxhdpi.png",
+      "source_page": "https://pay.wechatpay.cn/wiki/doc/wxfacepay/develop/sdk-logo.html",
+      "sha256": "048345295da3308ed1d61860c611fbaa74762bdffec6412af6f3c78d023e7d99",
+      "bytes": 17926,
+      "theme_color": "#07C160",
+      "color_basis": "原始图像的不透明彩色像素，不冒称品牌规范色值"
+    },
+    {
+      "name": "wechat-pay-symbol",
+      "file": "assets/institutions/wechat-pay-symbol.svg",
+      "source_asset": "https://td.cdn-go.cn/enterprise_payment/v0.1.2/logo.svg",
+      "source_page": "https://pay.wechatpay.cn/",
+      "source_sha256": "6aebeffa9dd2b23fe985f57d1c83579294e8387e6518e5e372d8c4b353df549d",
+      "sha256": "c37e9d0db0e8df487fc80882d735c7ad4e8b213c7b32e50172aa72b8bdd96626",
+      "transformation": "保留官方SVG的XMLID_81_符号路径，使用对应边界viewBox；未重绘",
+      "theme_color": "#22AC38"
+    },
+    {
+      "name": "huatai-securities",
+      "retrieved_at": "2026-10-09T22:20:41.895039+00:00",
+      "file": "assets/institutions/huatai-securities.png",
+      "source_asset": "https://www.htsc.com/static/img/logo.a97d3e9.png",
+      "source_page": "https://www.htsc.com/",
+      "sha256": "3f665bfa080944f954e38a5d991df34d877c83b6a1074e4d64fd0da095609b2d",
+      "bytes": 13464,
+      "theme_color": "#BA2C1F",
+      "color_basis": "原始PNG中 alpha>=240 彩色像素的最常见RGB值(186,44,31)，3950像素；设计参考，不冒称官方品牌规范色值。",
+      "transformation": "None; original downloaded bytes retained, full logo not cropped or redrawn."
+    }
+  ]
+}

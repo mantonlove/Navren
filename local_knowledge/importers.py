@@ -22,43 +22,35 @@ def _register_once(provider,source_id, **configuration):
 
 
 def import_market_store(provider,market_store, *, publish=True,limit=200):
-    """只读取 MarketStore 数据文件，不实例化/改变它的写入接口。"""
-    from market_sources import REGISTRY, safe_url
-    imported=[];rejected=[];seen=0
-    path=Path(market_store.path)
-    if not path.exists():
-        return {'imported':0,'rejected':0,'ready':provider.status()['ready'],'count':0,'version_ids':[],
-                'coverage_gaps':[{'code':'source_unavailable'}]}
-    with sqlite3.connect(path.resolve().as_uri()+'?mode=ro',uri=True) as db:
-        db.row_factory=sqlite3.Row
-        rows=db.execute('''SELECT a.* FROM market_articles a JOIN (SELECT id,MAX(version) v FROM market_articles GROUP BY id) b
-                          ON a.id=b.id AND a.version=b.v ORDER BY a.checked_at DESC LIMIT ?''',(max(1,min(limit,1000)),)).fetchall()
-    for row in rows:
-        seen+=1
-        try:
-            a=json.loads(row['body']);source=REGISTRY.get(a.get('source_id'))
-            if source is None or not source.enabled or source.scope!='official_facts':raise KnowledgeError('source_permission_missing')
-            if row['status']!='active' or a.get('link_status')!='verified':
-                for previous in provider.history(a.get('url','')):
-                    provider.withdraw(previous['id'])
-                raise KnowledgeError('withdrawn_evidence')
-            if a.get('read_scope')!='full_text' or a.get('evidence_truncated') or not a.get('evidence_text'):
-                raise KnowledgeError('incomplete_full_text')
-            url=safe_url(source,a['url'])
-            published=datetime.fromisoformat(a['published_at'].replace('Z','+00:00')).date().isoformat()
-            retrieved=datetime.fromisoformat(row['checked_at'].replace('Z','+00:00')).date().isoformat()
-            # 许可范围是该已登记官方发布的必要短引文；不迁入媒体授权未核实正文。
-            _register_once(provider,'market-'+source.id,publisher=source.publisher,endpoints=['https://'+source.domain+'/'],
-                parser_id=PARSER,shape='market-official-full-text-v1',freshness={'general':30},
-                permission_basis='existing_registered_official_public_release_short_quotes')
-            version=provider.stage_document(source_id='market-'+source.id,source_url=url,title=a['title'],text=a['evidence_text'],
-                published_on=published,retrieved_on=retrieved,facets=['general'],parser_id=PARSER,shape='market-official-full-text-v1')
-            provider.approve_version(version,verification_basis='market_store_verified_link_complete_official_body_v1')
-            imported.append(version)
-        except (KnowledgeError,KeyError,ValueError,TypeError) as error:
-            rejected.append({'article_id':row['id'],'code':error.code if isinstance(error,KnowledgeError) else 'source_structure_drift'})
-    release=None
-    if publish and imported:release=provider.publish(version_ids=imported,preserve_current=True)
+    """Explicit trusted authority injection; no paths are recovered from KG metadata.
+
+    Hold the upstream IMMEDIATE barrier through all KG admission/commit. Existing
+    copied quotes additionally recheck the live authority at each public call.
+    """
+    from market_sources import REGISTRY
+    provider.bind_market_authority(market_store)
+    imported=[];rejected=[];seen=0;release=None
+    with provider.market_read_snapshot(write=True) as authority:
+        if authority is None or not authority.ready:
+            return {'imported':0,'rejected':0,'ready':provider.status()['ready'],'count':0,
+                    'version_ids':[],'coverage_gaps':[{'code':'source_permission_missing'}]}
+        for article_id in authority.latest_ids(max(1,min(limit,1000))):
+            seen+=1
+            try:
+                capture=authority.capture(article_id);a=capture.article;source=REGISTRY[a['source_id']]
+                published=datetime.fromisoformat(a['published_at'].replace('Z','+00:00')).date().isoformat()
+                retrieved=datetime.fromisoformat(a['checked_at'].replace('Z','+00:00')).date().isoformat()
+                _register_once(provider,'market-'+source.id,publisher=source.publisher,endpoints=['https://'+source.domain+'/'],
+                    parser_id=PARSER,shape='market-official-full-text-v1',freshness={'general':30},
+                    permission_basis='exact_market_permission_article_lineage_v2')
+                version=provider.stage_document(source_id='market-'+source.id,source_url=a['url'],title=a['title'],text=a['evidence_text'],
+                    published_on=published,retrieved_on=retrieved,facets=['general'],parser_id=PARSER,shape='market-official-full-text-v1',
+                    document_key='market-'+sha(packed(capture.binding))[:40],_market_capture=capture)
+                provider.approve_version(version,verification_basis='exact_market_permission_article_lineage_v2')
+                imported.append(version)
+            except (KnowledgeError,KeyError,ValueError,TypeError) as error:
+                rejected.append({'article_id':article_id,'code':error.code if isinstance(error,KnowledgeError) else 'source_structure_drift'})
+        if publish and imported:release=provider.publish(version_ids=imported,preserve_current=True)
     status=provider.status()
     return {'imported':len(imported),'rejected':len(rejected),'ready':status['ready'],
             'count':status['published_chunk_count'],'version_ids':imported,'rejections':rejected,

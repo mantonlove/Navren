@@ -2,6 +2,17 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script data-navren-theme-bootstrap>
+(() => {
+  try {
+    const theme=localStorage.getItem('navren:paint-theme:v1');
+    if(theme!=='light'&&theme!=='dark')return;
+    const root=document.documentElement;
+    root.dataset.theme=theme;root.style.colorScheme=theme;
+    root.style.backgroundColor=theme==='dark'?'#0d1725':'#edf3fa';
+  } catch(_) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -9,9 +20,16 @@
 <title>Navren · 我的</title>
 <link rel="icon" type="image/png" href="assets/brand/navren-icon.png">
 <link rel="stylesheet" href="css/style.css?v=ui-20261003-3">
-<link rel="stylesheet" href="css/design.css?ui=0833fdeb0038">
-<link rel="stylesheet" href="css/mine_workspace.css">
+<link rel="stylesheet" href="css/design.css?ui=849ed9447642">
+<link rel="stylesheet" href="css/mine_workspace.css?dq=b7297bbbfd01">
+<link rel="stylesheet" href="css/insurance_preferences.css?dq=9ad604cd9ee7">
+<link rel="stylesheet" href="css/aa_payments.css?dq=dfca1eacd7bc">
 <link rel="stylesheet" href="css/account_switcher.css">
+  <link rel="stylesheet" href="css/navigation_gestures.css?ui=dc4db77b8cb5">
+<link rel="stylesheet" href="css/payment_contacts.css?dq=3d0552fd4949">
+<link rel="stylesheet" href="css/form_controls.css?dq=546db5bc506d">
+<link rel="stylesheet" href="css/personal_profile.css?v=20261014-avatar-1">
+<link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
 </head>
 <body data-page="mine">
 <a class="skip-link" href="#mainContent">跳到主要内容</a>
@@ -36,21 +54,85 @@
       <div class="mine-page mine-workspace" id="mineWorkspace">
         <div class="mine-view-heading"><a class="mine-back" href="mine.html" data-mine-back hidden>‹ 返回我的</a></div>
         <section id="mineHome" data-mine-view="home">
-<section id="mineAccountSection" class="mine-home-section" aria-labelledby="mineAccountSectionTitle"><div class="mine-section-heading"><h2 id="mineAccountSectionTitle" data-home-section-title="账户资料">账户资料</h2></div><div class="mine-identity"><span class="mine-identity-mark" aria-hidden="true">N</span><div><strong id="mineHomeName">我的安排</strong><p>把目标、责任和本人确认的条件放在一起。</p></div><button type="button" class="p-btn" onclick="editProfile()">编辑资料</button></div><div id="mineFinancialProfile" aria-live="polite"></div></section>
+<section id="mineAccountSection" class="mine-home-section" aria-labelledby="mineAccountSectionTitle">
+  <div class="mine-section-heading mine-account-heading">
+    <h2 id="mineAccountSectionTitle" data-home-section-title="账户资料">账户资料</h2>
+    <details class="mine-profile-help" id="mineProfileHelp">
+      <summary aria-label="账户资料说明">?</summary>
+      <div class="mine-profile-help-content">
+        <p>个人资料按当前账户保存。联系方式用于个人资料，登录凭据与银行卡实名信息分别管理。</p>
+        <p id="mineProfileHistory" class="mine-source" data-i18n-skip></p>
+      </div>
+    </details>
+  </div>
+  <div class="mine-account-card">
+    <div class="profile-card mine-local-profile">
+      <button type="button" class="p-avatar" id="profileAvatar" onclick="editProfile()" aria-label="编辑头像与个人资料" disabled></button>
+      <div class="mine-profile-identity"><div class="p-name" id="profileName" data-i18n-skip>我的账户</div><p id="profileSubtitle" class="pp-profile-subtitle" data-i18n-skip></p></div>
+      <div class="p-actions mine-profile-actions">
+        <button type="button" class="p-btn" id="editPersonalProfile" onclick="editProfile()" disabled>编辑资料</button>
+      </div>
+    </div>
+    <div id="personalProfileSummary" data-i18n-skip></div>
+    <div id="mineFinancialProfile" aria-live="polite"></div>
+  </div>
+</section>
 <section id="mineRelationsSection" class="mine-home-section" aria-labelledby="mineRelationsTitle"><div class="mine-section-heading"><h2 id="mineRelationsTitle" data-i18n-skip>财务关系</h2><a href="mine.html?view=graph" data-mine-open="graph">进入关系概览 ›</a></div><div class="mine-domain-grid" id="mineDomainOverview"></div></section>
 <section id="mineRiskSection" class="mine-home-section" aria-labelledby="mineRiskSectionTitle"><div class="mine-section-heading"><h2 id="mineRiskSectionTitle" data-home-section-title="资金与风险">资金与风险</h2></div><div class="mine-risk-grid"><article class="card" id="riskCard"><h3>聊天中的风险态度</h3><div id="riskDetail"></div></article><article class="card" id="mineBusinessRisk"><h3>模拟业务风险配置</h3><p>正在核对来源…</p></article><article class="card"><h3>正式风险测评</h3><p>未取得可核验的正式测评结果，状态与有效期未知。</p></article></div></section>
-<section id="minePreferencesSection" class="mine-home-section" aria-labelledby="minePreferencesSectionTitle"><div class="mine-section-heading"><h2 id="minePreferencesSectionTitle" data-home-section-title="偏好与授权">偏好与授权</h2></div><a class="mine-view-link" href="mine.html?view=settings" data-mine-open="settings">管理数据授权 ›</a><section class="mine-section"><div class="mine-section-heading"><h2>聊天陈述与待核实资料</h2></div><div id="mineObservationList" class="mine-observation-list" aria-live="polite"></div></section><section class="mine-section finance-memory-section" aria-labelledby="financeMemoryTitle"><div class="mine-section-heading"><h2 id="financeMemoryTitle">本人保存的记忆</h2><button type="button" class="p-btn" id="addMemoryButton" onclick="openFinancialMemoryEditor()">添加记忆</button></div><div class="card finance-memory-card"><p class="memory-intro">可仅保存目标或偏好，随时修改或删除。业务目标在上方目标工作区维护，这里的文字陈述不会自动新建或覆盖目标。</p><p id="memoryStatus" role="status" aria-live="polite">正在读取记忆设置…</p><div id="financialMemoryList" class="financial-memory-list" aria-live="polite"></div></div></section><details class="mine-legacy-profile"><summary>历史本机资料</summary><p>旧浏览器资料按原来源保留，不当作当前银行事实、正式风险测评或新记忆。</p><div id="archiveContent"></div></details><details class="profile-disclosure"><summary>需要我核实</summary><div id="mineReviewList" class="mine-review-list" aria-live="polite"></div></details></section>
-<section id="mineSavedSection" class="mine-home-section" aria-labelledby="mineSavedSectionTitle"><div class="mine-section-heading"><h2 id="mineSavedSectionTitle" data-home-section-title="收藏阅读">收藏阅读</h2></div><div id="bookmarksList" class="mine-saved-list"></div><section class="mine-section mine-continue-section"><h2>继续阅读</h2><div id="mineContinueReading"></div></section></section>
+<section id="minePreferencesSection" class="mine-home-section" aria-labelledby="minePreferencesSectionTitle">
+  <div class="mine-section-heading"><h2 id="minePreferencesSectionTitle" data-home-section-title="偏好与记忆">偏好与记忆</h2><button type="button" class="p-btn mine-preferences-add" id="addMemoryButton" onclick="openFinancialMemoryEditor()">添加记忆</button></div>
+  <div class="mine-preferences-board">
+    <article class="insurance-preferences" id="mineInsurancePreferences" aria-labelledby="mineInsurancePreferencesTitle"></article>
+    <div class="mine-memory-groups">
+      <section class="mine-memory-group finance-memory-section" aria-labelledby="financeMemoryTitle">
+        <h3 id="financeMemoryTitle">已保存记忆</h3>
+        <p class="mine-preference-caption">本人填写或确认保存，可修改、删除。</p>
+        <div id="financialMemoryList" class="financial-memory-list" aria-live="polite"></div>
+      </section>
+      <section class="mine-memory-group" aria-labelledby="mineStatementsTitle">
+        <h3 id="mineStatementsTitle">聊天陈述</h3>
+        <p class="mine-preference-caption">待核实与本人确认的资料逐项标明。</p>
+        <div id="mineObservationList" class="mine-observation-list" aria-live="polite"></div>
+      </section>
+    </div>
+    <div class="mine-preferences-consent">
+      <span class="mine-preferences-consent-label">记忆读取</span>
+      <p id="memoryStatus" role="status" aria-live="polite">正在核对授权…</p>
+      <a class="mine-view-link" href="mine.html?view=settings&amp;focustarget=settingsMemoryConsentTitle" data-mine-open="settings" data-mine-focustarget="settingsMemoryConsentTitle">管理授权 ›</a>
+    </div>
+  </div>
 </section>
+<section id="mineSavedSection" class="mine-home-section" aria-labelledby="mineSavedSectionTitle"><div class="mine-section-heading"><h2 id="mineSavedSectionTitle" data-home-section-title="我的收藏">我的收藏</h2></div><div id="bookmarksList" class="mine-saved-list"></div></section>
+</section>
+        <section id="minePaymentContacts" data-mine-view="payment-contacts" hidden aria-label="收付款联系人"><div id="minePaymentContactsHost" aria-live="polite"></div></section>
         <section id="mineGoals" data-mine-view="goals" hidden><div class="mine-section-heading"><p>同一目标在关系图和日历中引用，保存不会冻结或划转资金。</p><button type="button" class="mine-primary" data-goal-create>创建目标</button></div><div id="mineGoalList" class="mine-goal-grid" aria-live="polite"></div></section>
         <section id="mineGoalDetail" data-mine-view="goal" hidden aria-live="polite"></section>
         <section class="mine-section mine-graph-view" id="graph" data-mine-view="graph" hidden><div id="mineGraphHost"></div></section>
         
         <section id="appearance" data-mine-view="settings" hidden>
-          <section class="mine-section"><h2>外观与阅读</h2><div class="card"><h3>阅读模式</h3><div class="mode-row" id="modeSelector"></div><h3>字体大小</h3><div class="font-row" id="fontSizeRow"></div></div></section><section class="settings-group settings-sound" aria-labelledby="settingsSoundTitle"><div class="settings-group-heading"><h2 id="settingsSoundTitle">声音与提醒</h2><span>本设备 · 聊天语音共用</span></div><div class="settings-sound-grid"><article class="settings-sound-card"><div class="settings-sound-card-heading"><h3>自动朗读</h3><button type="button" class="toggle" id="voiceToggle" onclick="toggleVoice()" role="switch" aria-label="自动朗读文字回复" aria-checked="false"></button></div><p>文字回复自动朗读；语音提问沿用语音回答。</p></article><article class="settings-sound-card"><div class="settings-sound-card-heading"><h3>语音音色</h3></div><p id="settingsVoiceStatus" class="settings-status" role="status">点击试听才生成声音，进入页面不会播放。</p><div id="voicePresetRow" class="settings-voice-control"></div></article></div><details class="settings-details settings-sound-disclosure"><summary>发现页展示偏好</summary><div id="prefsBody"></div><p class="settings-status">展示开关不订阅推送。市场提醒服务尚未接入。</p></details></section>
-          <section class="mine-section"><h2>数据与记忆授权</h2><div class="card"><div class="trow memory-toggle-row"><div><div class="tl">允许 Navren 读取已保存的财务记忆</div><div class="td">开启后可在已接入的资金分析中参考，并可整理本人陈述的待核实资料。关闭后保留已保存内容，立即使旧上下文失效。</div></div><button type="button" class="toggle" id="memoryToggle" onclick="toggleFinancialMemory()" aria-label="允许 Navren 读取已保存的财务记忆" aria-checked="false" role="switch"></button></div><p id="mineConsentStatus" class="mine-source" role="status"></p><a href="mine.html?view=home&amp;focustarget=minePreferencesSection" data-mine-open="profile">管理已保存内容 ›</a></div></section>
-          
-          <section class="mine-section"><h2>本机身份与视角</h2><div class="profile-card"><button type="button" class="p-avatar" id="profileAvatar" onclick="document.getElementById('avatarInput').click()" aria-label="更换头像">👤</button><input type="file" id="avatarInput" accept="image/*" onchange="handleAvatarUpload(event)" hidden><div class="mine-profile-identity"><div class="p-name" id="profileName">我的账户</div><div class="p-actions"><button type="button" class="p-btn" onclick="editProfile()">编辑昵称</button><button type="button" class="p-btn" onclick="switchAccount()">创建独立演示账户</button></div></div></div><p class="mine-source">头像与昵称仅保存在当前浏览器，不改变银行客户身份。</p><a class="mine-advisor-link" href="copilot.html">顾问演示视角 ›</a></section>
+          <section class="mine-section settings-appearance" aria-labelledby="settingsAppearanceTitle"><h2 id="settingsAppearanceTitle">外观与阅读</h2><div class="card settings-appearance-card"><div class="settings-appearance-grid"><div><h3>主题色调节</h3><div id="settingsThemeSelector" class="settings-theme-options" role="radiogroup" aria-label="主题色调节"></div></div><div><h3>字体大小</h3><div class="font-row" id="fontSizeRow"></div></div></div></div></section><section class="settings-group settings-sound" aria-labelledby="settingsSoundTitle">
+            <div class="settings-group-heading"><h2 id="settingsSoundTitle">声音与提醒</h2></div>
+            <article class="settings-sound-card settings-sound-unified" aria-labelledby="settingsSoundTitle">
+              <div class="settings-sound-row sound-voice-row"><h3>语音音色</h3><div id="voicePresetRow" class="settings-voice-control"></div></div>
+              <div class="settings-sound-row sound-auto-row"><h3>自动朗读</h3><button type="button" class="toggle" id="voiceToggle" onclick="toggleVoice()" role="switch" aria-label="自动朗读文字回复" aria-checked="false"></button></div>
+            </article>
+          </section>
+          <section class="mine-section settings-discovery" aria-labelledby="settingsDiscoveryTitle">
+            <h2 id="settingsDiscoveryTitle">发现页展示偏好</h2>
+            <div class="card settings-discovery-card"><div id="prefsBody"></div></div>
+          </section>
+          <section class="mine-section settings-memory-consent" aria-labelledby="settingsMemoryConsentTitle">
+            <div class="mine-section-heading settings-memory-heading"><div><h2 id="settingsMemoryConsentTitle">数据与记忆授权</h2><span id="memoryConsentHelpHost"></span></div></div>
+            <div class="card settings-memory-card">
+              <div class="trow memory-toggle-row"><div class="tl">允许 Navren 读取已保存的财务记忆</div><button type="button" class="toggle" id="memoryToggle" onclick="toggleFinancialMemory()" aria-label="允许 Navren 读取已保存的财务记忆" aria-checked="false" role="switch"></button></div>
+              <div class="settings-memory-footer"><a href="mine.html?view=home&amp;focustarget=minePreferencesSection" data-mine-open="home" data-mine-focustarget="minePreferencesSection">管理已保存内容 ›</a><p id="mineConsentStatus" class="mine-source settings-memory-status" role="status" aria-live="polite"></p></div>
+            </div>
+          </section>
+          <section class="mine-section settings-account-access" aria-labelledby="settingsAccountAccessTitle">
+            <h2 id="settingsAccountAccessTitle">退出登录 / 切换账号</h2>
+            <div class="settings-account-actions"><button type="button" class="p-btn settings-switch-account" id="switchLoginAccount" onclick="NavrenAccountSwitcher.openSelection(this)">切换账号</button><button type="button" class="p-btn settings-logout" id="logoutAccount" data-navren-logout onclick="logout(this)">退出登录</button></div>
+            <p id="accountAccessStatus" class="mine-source settings-account-status" role="status" aria-live="polite"></p>
+          </section>
         </section>
         
       </div>
@@ -69,20 +151,28 @@
 <script src="js/storage.js?v=ui-20261003-3"></script>
 <script src="js/market_ui.js"></script>
 <script src="js/bank_client.js"></script>
-<script src="js/financial_data.js?dq=9b3c0fd6c9b4"></script>
+<script src="assets/vendor/navren-avatars.min.js?v=navren-personal-flow-3"></script>
+<script src="js/personal_profile.js?v=20261014-avatar-1"></script>
+<script src="js/financial_data.js?dq=f2aab85f4620"></script>
 <script src="js/account_switcher.js"></script>
-<script src="js/view_context.js"></script>
+<script src="js/view_context.js?ui=584da61469b8"></script>
 <script src="js/speech.js"></script>
-<script src="js/i18n.js"></script>
-<script src="js/design.js?ui=a7ba89e189e9"></script>
+<script src="js/i18n.js?dq=9071cafe148f"></script>
+<script src="js/design.js?ui=da98490f38d1"></script>
 <script src="js/help.js"></script>
-<script src="js/mine.js?dq=1159dff020b4"></script>
+<script src="js/mine.js?dq=profile-20261014"></script>
 <script src="assets/vendor/3d-force-graph.min.js"></script>
 <script src="assets/vendor/node-text.min.js"></script>
 <script src="js/calendar_client.js?dq=afda29dc9d12"></script>
 <script src="js/calendar_ui.js"></script>
-<script src="js/personal_graph.js"></script>
-<script src="js/mine_workspace.js?dq=e1e1232f1634"></script>
+<script src="js/personal_graph.js?dq=1c773d3e659d"></script>
+<script src="js/money_input.js?dq=c78b0b27c459"></script>
+<script src="js/payment_contacts.js?dq=40a3f0dababe"></script>
+<script src="js/aa_payments.js?dq=c6fa7e32f5b4"></script>
+<script src="js/mine_workspace.js?dq=profile-20261014"></script>
+<script src="js/insurance_preferences.js?dq=6d8e3f53eba8"></script>
 <script src="js/lifecycle.js"></script>
+  <script src="js/navigation_gestures.js?ui=acce6603cf27"></script>
+<script src="js/form_controls.js?dq=b4539a70b618"></script>
 </body>
 </html>

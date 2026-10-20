@@ -2,6 +2,17 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script data-navren-theme-bootstrap>
+(() => {
+  try {
+    const theme=localStorage.getItem('navren:paint-theme:v1');
+    if(theme!=='light'&&theme!=='dark')return;
+    const root=document.documentElement;
+    root.dataset.theme=theme;root.style.colorScheme=theme;
+    root.style.backgroundColor=theme==='dark'?'#0d1725':'#edf3fa';
+  } catch(_) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -10,10 +21,20 @@
 <link rel="icon" type="image/png" href="assets/brand/navren-icon.png">
 <link rel="stylesheet" href="css/style.css?v=ui-20261003-3">
 <link rel="stylesheet" href="css/bank.css?v=ui-20261003-3">
-<link rel="stylesheet" href="css/design.css?ui=0833fdeb0038">
+<link rel="stylesheet" href="css/design.css?ui=849ed9447642">
 <link rel="stylesheet" href="css/account_workspace.css">
 <link rel="stylesheet" href="css/account_switcher.css">
-<link rel="stylesheet" href="css/account_home.css?dq=b6cd54d715e6">
+<link rel="stylesheet" href="css/account_home.css?dq=a6a6bd58a5a5">
+<link rel="stylesheet" href="css/remittance_cards.css?dq=2b52c0764637">
+<link rel="stylesheet" href="css/remittance_flow.css?dq=5c5c58d56091">
+<link rel="stylesheet" href="css/aa_payments.css?dq=dfca1eacd7bc">
+<link rel="stylesheet" href="css/month_report.css?dq=b4c2e0decf0b">
+<link rel="stylesheet" href="css/month_picker.css">
+<link rel="stylesheet" href="css/card_detail.css?dq=1f408d756b22">
+  <link rel="stylesheet" href="css/navigation_gestures.css?ui=dc4db77b8cb5">
+<link rel="stylesheet" href="css/payment_contacts.css?dq=3d0552fd4949">
+<link rel="stylesheet" href="css/form_controls.css?dq=546db5bc506d">
+  <link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
 </head>
 <body data-page="account">
 <a class="skip-link" href="#mainContent">跳到主要内容</a>
@@ -40,7 +61,8 @@
       <div id="accountHome">
         <section class="ah-section" aria-labelledby="accountAssetsHeading">
           <div class="ah-section-heading"><h2 id="accountAssetsHeading" data-ah-text="我的资产">我的资产</h2></div>
-          <div class="ah-assets-grid"><div id="assetOverview"></div><div class="ah-cards"><div class="ah-cards-heading"><h3 data-ah-text="银行卡">银行卡</h3><a href="account.html?view=cards" data-account-view="cards" data-ah-text="银行卡档案">银行卡档案 ›</a></div><div id="accountCardsPreview"></div></div></div>
+          <div class="ah-assets-grid"><div id="assetOverview"></div><div class="ah-cards" aria-label="银行卡"><div id="accountCardsPreview"></div></div></div>
+          <div id="accountAssetsSupplement"></div>
         </section>
         <section class="ah-section" aria-labelledby="accountTransferHeading">
           <details class="ah-action-card" id="accountRemittanceCard">
@@ -72,20 +94,27 @@
 </div>
 
 <script src="js/storage.js?v=ui-20261003-3"></script>
-<script src="js/i18n.js"></script>
-<script src="js/design.js?ui=a7ba89e189e9"></script>
+<script src="js/i18n.js?dq=9071cafe148f"></script>
+<script src="js/design.js?ui=da98490f38d1"></script>
 <script src="js/help.js"></script>
 <script src="js/profile_engine.js?v=7"></script>
 <script src="js/bank_client.js?v=bank2"></script>
-<script src="js/financial_data.js?dq=9b3c0fd6c9b4"></script>
+<script src="js/month_picker.js"></script>
+<script src="js/financial_data.js?dq=f2aab85f4620"></script>
 <script src="js/account_switcher.js"></script>
-<script src="js/view_context.js"></script>
+<script src="js/view_context.js?ui=584da61469b8"></script>
 <script src="js/calendar_client.js?dq=afda29dc9d12"></script>
 <script src="js/calendar_ui.js"></script>
-<script src="js/bank_ui.js?v=ui-20261003-3"></script>
+<script src="js/bank_ui.js?dq=ada03283af4a"></script>
+<script src="js/connected_assets.js?dq=cddfa87ca15b"></script>
 <script src="js/account.js?dq=e7488b5bb977"></script>
-<script src="js/account_home.js?dq=a050a90074f0"></script>
-<script src="js/account_workspace.js?dq=c36aa7c02afd"></script>
+<script src="js/money_input.js?dq=c78b0b27c459"></script>
+<script src="js/payment_contacts.js?dq=40a3f0dababe"></script>
+<script src="js/aa_payments.js?dq=c6fa7e32f5b4"></script>
+<script src="js/account_home.js?dq=c5550fbc898d"></script>
+<script src="js/account_workspace.js?dq=52f70432be21"></script>
 <script src="js/lifecycle.js"></script>
+  <script src="js/navigation_gestures.js?ui=acce6603cf27"></script>
+<script src="js/form_controls.js?dq=b4539a70b618"></script>
 </body>
 </html>

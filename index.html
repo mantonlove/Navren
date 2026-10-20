@@ -2,6 +2,17 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script data-navren-theme-bootstrap>
+(() => {
+  try {
+    const theme=localStorage.getItem('navren:paint-theme:v1');
+    if(theme!=='light'&&theme!=='dark')return;
+    const root=document.documentElement;
+    root.dataset.theme=theme;root.style.colorScheme=theme;
+    root.style.backgroundColor=theme==='dark'?'#0d1725':'#edf3fa';
+  } catch(_) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -11,8 +22,11 @@
 <style>
   body { background: var(--surface); }
 </style>
-<link rel="stylesheet" href="css/design.css?v=navren-brand-20261005-1">
+<link rel="stylesheet" href="css/design.css?ui=849ed9447642">
 <link rel="icon" type="image/png" href="assets/brand/navren-icon.png">
+  <link rel="stylesheet" href="css/navigation_gestures.css?ui=dc4db77b8cb5">
+<link rel="stylesheet" href="css/form_controls.css?dq=546db5bc506d">
+  <link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
 </head>
 <body data-page="index">
 
@@ -72,14 +86,21 @@
 </div>
 
 <script src="js/storage.js?v=ui-20261003-3"></script>
-<script src="js/i18n.js"></script>
-<script src="js/design.js"></script>
+<script src="js/bank_client.js"></script>
+<script src="js/i18n.js?dq=9071cafe148f"></script>
+<script src="js/design.js?ui=da98490f38d1"></script>
 <script>
-function enter(mode) {
-  localStorage.setItem('navren_onboarded','true');
-  Storage.set('qingzhou_mode', mode);
-  NavrenApp.navigate('chat.html', mode);
+async function enter(mode) {
+  try {
+    await Storage.ready();
+    const previous = getInterfaceMode();
+    await Storage.setMany({qingzhou_mode:mode,qingzhou_fontSize:getModeFont(mode),qingzhou_modeFontSizes:{...(Storage.get(STORAGE_KEYS.MODE_FONT_SIZES)||{}),[previous]:getModeFont(previous)}});
+    await Storage.set('navren_onboarded', true);
+    NavrenApp.navigate('chat.html', mode);
+  } catch (_) { showToast('请先登录并选择体验账户。'); }
 }
 </script>
+  <script src="js/navigation_gestures.js?ui=acce6603cf27"></script>
+<script src="js/form_controls.js?dq=b4539a70b618"></script>
 </body>
 </html>

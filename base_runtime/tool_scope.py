@@ -6,7 +6,7 @@ from .evidence import EvidenceGuardedClient
 
 
 STATEMENT_TOOLS = frozenset({
-    'monthly_statement', 'annual_statement', 'statement_details', 'load_skill', 'money_calculation',
+    'statement_source', 'monthly_statement', 'annual_statement', 'statement_details', 'load_skill', 'money_calculation',
     'answer_facts', 'answer_reviewed',
 })
 
@@ -70,7 +70,7 @@ class ScopedEvidenceClient(EvidenceGuardedClient):
         super().__init__(client, observer, preparation)
         self.allowed_tools = frozenset(allowed_tools) if allowed_tools else None
         if self.allowed_tools == STATEMENT_TOOLS:
-            self.notice=(self.notice or '')+'\n账单汇总或明细读取成功后用answer_facts选择相关fact_ids。汇总最多6项；明细须选择完整笔数、合计及当前页每笔金额，最多14项。金额直接引用已核验事实，不重写整份金额签名。追问几笔/明细时必须调用statement_details，不能只重复月度分类汇总或要求用户换问法。'
+            self.append_notice('\n账单汇总或明细读取成功后用answer_facts选择相关fact_ids。汇总最多6项；明细须选择完整笔数、合计及当前页每笔金额，最多14项。金额直接引用已核验事实，不重写整份金额签名。追问几笔/明细时必须调用statement_details，不能只重复月度分类汇总或要求用户换问法。')
 
     def _request_args(self, args):
         guarded = super()._request_args(args)

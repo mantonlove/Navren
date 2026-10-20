@@ -137,6 +137,7 @@ class OpenAICompatibleJsonClient:
         outcome = "failed"
         error_code = "provider_error"
         exception_type = None
+        review_usage = None
         try:
             key = self.key_loader()
             if not key:
@@ -170,6 +171,12 @@ class OpenAICompatibleJsonClient:
                         http_status = getattr(response, "status", 200)
                         raw = response.read(256_000)
                     envelope = json.loads(raw.decode("utf-8"))
+                    if stage == "reviewer.conversation" and self.max_retries == 0 and isinstance(envelope, dict):
+                        supplied_usage = envelope.get("usage")
+                        if isinstance(supplied_usage, dict):
+                            review_usage = {k: v for k, v in supplied_usage.items()
+                                if k in ("prompt_tokens", "completion_tokens", "total_tokens")
+                                and type(v) is int and v >= 0}
                     if (not isinstance(envelope, dict)
                             or not isinstance(envelope.get("choices"), list)
                             or not envelope["choices"]
@@ -242,6 +249,7 @@ class OpenAICompatibleJsonClient:
                 "finish_reason": finish_reason,
                 "error_code": error_code,
                 "exception_type": exception_type,
+                **({"usage": review_usage} if review_usage is not None else {}),
             }, self.log_path)
 
 

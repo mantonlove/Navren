@@ -28,7 +28,8 @@ def plan(store, now=None):
     if now < weekly_release:
         start -= timedelta(days=7); end -= timedelta(days=7); weekly_release -= timedelta(days=7)
     targets = {'hotspots': slot.isoformat(), 'weekly': start.date().isoformat()}
-    published = {w['period']: w for w in store.versions('market_weeklies') if w['status'] == 'published'}
+    weeklies = {w['period']: w for w in store.weekly_publications()}
+    published = {period: w for period, w in weeklies.items() if w['status'] == 'published'}
     for kind in ('hotspots', 'weekly'):
         records = [(r, r.get('streams', {}).get(kind, {})) for r in runs if kind in r.get('streams', {})]
         recent = [(r, s) for r, s in records if r.get('targets', {}).get(kind) == targets[kind]]
@@ -36,7 +37,12 @@ def plan(store, now=None):
         # 周报失败每天重新给予有限次数；热点到下一个时段重置次数。
         if kind == 'weekly':
             attempts = [(r, s) for r, s in attempts if datetime.fromisoformat(r['started_at']).astimezone(CN).date() == now.date()]
-        success = next((r for r, s in records if s.get('status') == 'ok'), None)
+        def successful(record, stream):
+            if stream.get('status') != 'ok':return False
+            if kind != 'weekly':return True
+            weekly = published.get(record.get('targets', {}).get('weekly'))
+            return weekly is not None and stream.get('version') == weekly['version']
+        success = next((r for r, s in records if successful(r, s)), None)
         latest = records[0] if records else None
         complete = (bool(recent and recent[0][1].get('status') == 'ok') if kind == 'hotspots' else targets[kind] in published)
         normal_next = next_hot_slot(now) if kind == 'hotspots' else weekly_release + timedelta(days=7)
@@ -62,6 +68,12 @@ def plan(store, now=None):
             'last_attempt_at': latest[0]['started_at'] if latest else None,
             'last_result': latest[1].get('status') if latest else 'not_checked',
             'last_success_at': success.get('ended_at') if success else None}
+        if kind == 'weekly':
+            current = weeklies.get(targets[kind])
+            needs_rebuild = current is not None and current['status'] != 'published'
+            state[kind].update(publication_status=current['status'] if current else 'missing',
+                rebuild_required=needs_rebuild)
+            if needs_rebuild:state[kind]['last_result'] = 'rebuild_required'
     return {'jobs': jobs, 'targets': targets, 'streams': state}
 
 def snapshot(store, now=None):

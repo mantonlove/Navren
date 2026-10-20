@@ -3,6 +3,7 @@ from contextlib import closing
 from calendar import monthrange
 from copy import copy, deepcopy
 from datetime import date, timedelta
+from decimal import Decimal
 import hashlib
 import hmac
 import json
@@ -14,13 +15,33 @@ import threading
 
 from simulated_bank import BankError
 from simulated_bank.agent_guard import context_hash
-from financial_methods import MetricContext, money_metric, CONTRACT_VERSION
+from financial_methods import MetricContext, CONTRACT_VERSION
+from base_runtime.money_range import wire_money_metric as money_metric, project_report_money, ensure_money_ranges, policy_code_version
 from financial_methods.funding import CashSnapshot, FundingEvent, Hold, evaluate_funding
 from base_runtime.finance_methods import FinanceMethodAdapter, METHOD_TOOLS, code_fingerprint
+from base_runtime.position_currency import position_currency
 
 
 def fingerprint(value):
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+
+
+def task_records_view(state, capabilities, provider_records):
+    """One current owned read join, shared by the tool and metric issuer."""
+    fields=('orchestration_tasks','fund_holds','service_quotes','service_reservations')
+    result={name:deepcopy(state[name])for name in fields}
+    result['currency']=(capabilities.get('currency')
+        if capabilities.get('environment')=='simulation'else None)
+    result['accounts']=[{key:row[key]for key in ('id','name','currency')}
+                        for row in state['accounts']]
+    providers={row['id']:row for row in provider_records}
+    for quote in result['service_quotes']:
+        provider=providers.get(quote.get('provider_id'),{})
+        kind=provider.get('service_type')
+        quote['type']=kind if kind in ('flowers','cake')else None
+        quote['amount_minor']=quote['price_minor']
+        quote['expires_on']=quote['valid_until']
+    return result
 
 
 def methods_fingerprint():
@@ -32,17 +53,27 @@ def methods_fingerprint():
 
 LOADED_METHODS_CODE=methods_fingerprint()
 TOOL_METRICS_CONTRACT = 'navren.financial-tool-metrics/1'
-LOADED_TOOL_METRICS_CODE = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+def tool_metrics_fingerprint():
+    digest = hashlib.sha256(Path(__file__).read_bytes())
+    digest.update((Path(__file__).parent/'base_runtime/position_currency.py').read_bytes())
+    return digest.hexdigest()
+
+
+LOADED_TOOL_METRICS_CODE = tool_metrics_fingerprint()
 LOADED_ADAPTER_CODE = code_fingerprint()
 
 # 表名由服务固定，不接受客户端选择数据库表或可信 kind。
 _BUDGET_TABLES = ('accounts','profiles','loans','loan_installments','cards','credit_statements',
                   'subscriptions','mandates','scheduled_payments','fund_holds')
 _TOOL_TABLES = {
+    'presentation_view': (),
     'accounting_report': ('accounts','holdings','loans','cards','transactions','navren_demo_accounts'),
     'returns_report': ('accounts','holdings','orders','transactions','products','navren_demo_accounts'),
     'allocation_preview': (*_BUDGET_TABLES,'wealth_goals','navren_goal_drafts','goal_allocations','navren_goal_occupancy_links','orchestration_tasks','navren_demo_accounts'),
     'account_summary': ('accounts','profiles','holdings','orders','products'),
+    'products': ('products','profiles'),
+    'business_records': ('accounts','subscriptions','mandates','orchestration_tasks',
+                         'fund_holds','service_quotes','service_reservations','service_providers'),
     'budget': _BUDGET_TABLES,
     'cashflow': (*_BUDGET_TABLES,'orders','beneficiaries','operations'),
     'monthly_statement': ('accounts','statement_periods','archived_transactions','transactions',
@@ -111,6 +142,22 @@ class FinancialMetrics:
         self.bank.base_metrics_guard = self.execution_guard
         self.bank.base_metrics_register = self.register_required
 
+    def personal_revision(self, workspace, db=None):
+        """已有银行连接内核主体/私库路径，再只读私库版本，不重入银行连接。"""
+        if db is None:return self.g.personal_data.revision(workspace)
+        main=next((r[2] for r in db.execute('PRAGMA database_list') if r[1]=='main'),None)
+        if not main or Path(main).resolve()!=Path(self.bank.database).resolve():
+            raise BankError('METRIC_SUBJECT_MISMATCH','金融版本连接不属于当前银行。',403)
+        self.bank._workspace(db,workspace)
+        store=self.g.personal_data
+        binding=db.execute('SELECT database_path FROM personal_data_binding WHERE id=1').fetchone()
+        if (store.bank is not self.bank or not binding
+                or Path(binding[0]).resolve()!=Path(store.database).resolve()):
+            raise BankError('METRIC_SUBJECT_MISMATCH','个人资料库绑定与金融来源不一致。',403)
+        with closing(store.connect()) as private:
+            row=private.execute('SELECT revision FROM personal_versions WHERE workspace_id=?',(workspace,)).fetchone()
+        return row[0] if row else 0
+
     def versions(self, workspace, db=None):
         if db is None:
             with closing(self.bank.connect()) as connection:
@@ -118,13 +165,15 @@ class FinancialMetrics:
         ws = self.bank._workspace(db,workspace)
         result = {'bank':str(ws['version']), 'business_date':ws['as_of'],
                   'private_context':context_hash(db,workspace),
-                  'personal':str(self.g.personal_data.revision(workspace)),
+                  'personal':str(self.personal_revision(workspace,db)),
                   'financial_methods_contract':CONTRACT_VERSION}
         if methods_fingerprint()!=LOADED_METHODS_CODE:
             raise BankError('METHODS_RESTART_REQUIRED','金融方法代码已更新，服务需加载新版本后再计算。',503)
         result['financial_methods_code'] = LOADED_METHODS_CODE
-        if self.g.demo_accounts.is_demo(workspace):
-            result['demo_dataset'] = self.g.demo_accounts.current(workspace)['source_version']
+        result['money_range_policy_code'] = policy_code_version()
+        if db.execute("SELECT 1 FROM sqlite_master WHERE name='navren_demo_accounts'").fetchone():
+            demo=db.execute("SELECT source_version FROM navren_demo_accounts WHERE workspace_id=? AND status='ready'",(workspace,)).fetchone()
+            if demo:result['demo_dataset']=demo[0]
         return result
 
     def snapshot(self, workspace, days=60):
@@ -164,7 +213,7 @@ class FinancialMetrics:
             holds.append(Hold(row['id'],workspace,'CNY',row['amount_minor'],'fund_holds/'+row['id'],versions['bank'],
                               release_on=(date.fromisoformat(row['expires_on'])+timedelta(days=1)).isoformat()))
             baseline_refs.append('fund_holds/'+row['id'])
-        funding = evaluate_funding(ctx,cash,tuple(events),tuple(holds),assumptions=tuple(assumptions)).to_dict()
+        funding = project_report_money(evaluate_funding(ctx,cash,tuple(events),tuple(holds),assumptions=tuple(assumptions)).to_dict())
         gaps = list(archive.get('integrity',{}).get('coverage_gaps',[]))
         result = {'workspace_id':workspace,'bank_business_date':begin,'horizon_days':days,
                   'source_versions':versions,'funding':funding,'metrics':list(funding['metrics'].values()),
@@ -189,6 +238,7 @@ class FinancialMetrics:
             result['coverage_gaps'] += ['真实基金份额/净值/分红拆分和当前交易资格没有来源映射。']
         if versions != self.versions(workspace):
             raise BankError('METRIC_VERSION_CONFLICT','计算期间输入已变化，请重新读取。',409)
+        ensure_money_ranges(result)
         result['snapshot_id'] = 'base-metrics-'+fingerprint(result)
         # 保存实际发行原件；客户端不能只拼一个数字或重算公开摘要变成预算。
         funding_tables = self._funding_table_versions(workspace)
@@ -255,6 +305,7 @@ class FinancialMetrics:
             if (source!=current or versions!=self._funding_source_versions(workspace,current,db)
                     or tables!=self._funding_table_versions(workspace,db)):
                 raise BankError('METRIC_VERSION_CONFLICT','预算发行期间受信原件已变化。',409)
+            ensure_money_ranges(result)
             result['snapshot_id']='base-metrics-'+fingerprint(result)
         with self._tool_lock:
             self._funding_issuances[result['snapshot_id']]=(deepcopy(result),tables)
@@ -349,6 +400,7 @@ class FinancialMetrics:
         before=self._tool_versions(workspace,name,binding,db)
         self._check_expected_versions(args,before)
         expected,metrics,kinds,metadata=self._describe_tool(workspace,name,args,binding,before,db=db)
+        ensure_money_ranges(expected); ensure_money_ranges(metrics); ensure_money_ranges(metadata)
         _assert_observed(_public(expected),data)
         if before!=self._tool_versions(workspace,name,binding,db):
             raise BankError('METRIC_VERSION_CONFLICT','金融方法计算期间来源变化。',409)
@@ -401,10 +453,19 @@ class FinancialMetrics:
             with closing(self.bank.connect()) as connection:
                 return self._tool_versions(workspace,name,binding,connection)
         result = self.versions(workspace,db)
-        if hashlib.sha256(Path(__file__).read_bytes()).hexdigest()!=LOADED_TOOL_METRICS_CODE:
+        if tool_metrics_fingerprint()!=LOADED_TOOL_METRICS_CODE:
             raise BankError('TOOL_METRICS_RESTART_REQUIRED','逐工具指标代码已更新，服务需重新加载。',503)
         result.update(financial_tool_metrics_contract=TOOL_METRICS_CONTRACT,
                       financial_tool_metrics_code=LOADED_TOOL_METRICS_CODE)
+        if name=='presentation_view':
+            service=self.g.presentations
+            stored=service._stored(workspace,binding['view_id'],db)
+            p=stored['presentation']
+            if any(p[k]!=binding[k] for k in ('request_id','message_id')):
+                raise BankError('PRESENTATION_BINDING','展示不属于该服务响应。',403)
+            result.update(service.source_versions(workspace,db))
+            result['presentation_view/'+p['view_id']]=fingerprint(stored)
+            return result
         if name in METHOD_TOOLS:
             if code_fingerprint()!=LOADED_ADAPTER_CODE:
                 raise BankError('METHODS_RESTART_REQUIRED','金融适配代码已变化，需重新加载。',503)
@@ -579,24 +640,31 @@ class FinancialMetrics:
         if batch['source_versions'] != current:
             raise BankError('METRIC_VERSION_CONFLICT','逐工具指标的对象、来源或代码版本已变化。',409)
 
-    def metrics_for_tool(self, workspace, tool_name, arguments, data):
+    def metrics_for_tool(self, workspace, tool_name, arguments, data, *, db=None):
         """发行完整 FinancialMetric；data 只用于核对，绝不成为可信金额输入。
 
         正式服务重读/复算发生在发行阶段。最终发布可以在已有银行写锁中
         validate(db=...)：只回查固定来源版本/表摘要及草案状态，不开第二个写锁。
         """
         if tool_name not in _TOOL_TABLES: return None
-        if not isinstance(arguments,dict) or not isinstance(data,dict):
+        if db is not None and tool_name!='presentation_view':
+            raise TypeError('已有发布连接仅用于受控展示批次发行。')
+        if not isinstance(arguments,dict) or not (isinstance(data,dict)
+                or tool_name=='products' and isinstance(data,list)):
             raise BankError('METRIC_ARGUMENTS_INVALID','逐工具指标需要明确参数和正式结果。',422)
         try:
             args=json.loads(json.dumps(arguments,ensure_ascii=False,allow_nan=False))
         except (ValueError,TypeError):
             raise BankError('METRIC_ARGUMENTS_INVALID','逐工具参数必须是有效JSON。',422) from None
+        if tool_name=='business_records' and args.get('kind')not in ('subscriptions','tasks'):
+            return None
         if tool_name in METHOD_TOOLS:
             with self.bank.transaction() as db:
                 args=FinanceMethodAdapter(self).arguments(workspace,tool_name,args,db)
                 return self._issue_method_batch(workspace,tool_name,args,{'method_arguments':args},data,db)
         binding={}
+        if tool_name=='presentation_view':
+            binding=self.g.presentations.binding(workspace,args)
         if tool_name in ('monthly_statement','annual_statement'):
             scoped=getattr(self.g,'_request_report_source',None)
             if scoped:
@@ -611,10 +679,11 @@ class FinancialMetrics:
             # ID仅定位服务库原件；金额、条款、状态与期限全部回读。
             if data.get('status')!='previewed' or not data.get('draft_id'): return None
             binding['draft_id']=data['draft_id']
-        before=self._tool_versions(workspace,tool_name,binding)
-        expected,metrics,kinds,metadata=self._describe_tool(workspace,tool_name,args,binding,before)
+        before=self._tool_versions(workspace,tool_name,binding,db)
+        expected,metrics,kinds,metadata=self._describe_tool(workspace,tool_name,args,binding,before,db=db)
+        ensure_money_ranges(expected); ensure_money_ranges(metrics); ensure_money_ranges(metadata)
         _assert_observed(_public(expected),data)
-        after=self._tool_versions(workspace,tool_name,binding)
+        after=self._tool_versions(workspace,tool_name,binding,db)
         if before!=after:
             raise BankError('METRIC_VERSION_CONFLICT','计算期间正式来源变化，请重新读取。',409)
         if tool_name=='budget' and not args.get('reserves'):
@@ -632,6 +701,8 @@ class FinancialMetrics:
         return batch
 
     def _describe_tool(self, workspace, name, args, binding, versions, db=None):
+        if name=='presentation_view':
+            return self.g.presentations.describe(workspace,args,binding,versions,db)
         if name in METHOD_TOOLS:
             if db is None:
                 with closing(self.bank.connect()) as connection:
@@ -659,19 +730,23 @@ class FinancialMetrics:
             return metric['metric_id']
 
         if name=='account_summary':
-            state=self.g.overview(workspace);totals={};principal={}
-            products={p['id']:p['currency'] for p in self.bank.products(workspace)}
+            state=self.g.overview(workspace);totals={};principal={};positions={}
+            products={p['id']:p for p in self.bank.products(workspace)}
+            accounts={a['id']:a for a in state['accounts']}
             for account in state['accounts']:
                 currency=account['currency'];totals[currency]=totals.get(currency,0)+account['balance_minor']
                 emit(account['id'],'settled_cash_balance',account['balance_minor'],currency,'ledger_cash_balance',
                      'tools.account_balance/1',('accounts/'+account['id'],),on=state['as_of'])
             for row in state['holdings']:
-                currency=products[row['product_id']]
+                currency=position_currency(workspace,row,accounts,products)
                 bucket=principal.setdefault(currency,{'currency':currency,'holding_principal_minor':0,'pending_redemption_minor':0})
                 bucket['holding_principal_minor']+=row['amount_minor']
+                product_bucket=positions.setdefault((row['product_id'],currency),{'value':0,'refs':[]})
+                product_bucket['value']+=row['amount_minor']
+                product_bucket['refs'].append('holdings/'+workspace+'/'+row['account_id']+'/'+row['product_id'])
             for row in state['orders']:
                 if row['status']=='pending_settlement':
-                    currency=products[row['product_id']]
+                    currency=position_currency(workspace,row,accounts,products)
                     bucket=principal.setdefault(currency,{'currency':currency,'holding_principal_minor':0,'pending_redemption_minor':0})
                     bucket['pending_redemption_minor']+=row['amount_minor']
             expected={k:state[k] for k in ('as_of','version','accounts','profile','holdings')}
@@ -687,6 +762,92 @@ class FinancialMetrics:
                     emit(workspace,field.removesuffix('_minor'),row[field],row['currency'],basis,
                          'tools.account_principal/1',('holdings/'+workspace,'orders/'+workspace),on=state['as_of'],
                          excluded=('not_total_wealth','not_available_cash','historical_valuation_not_added'))
+            for (product_id,currency),bucket in positions.items():
+                emit(product_id,'product_holding_principal',bucket['value'],currency,
+                     'aggregate_book_principal_per_product_not_cash','tools.product_holding_principal/1',
+                     tuple(bucket['refs']),on=state['as_of'],
+                     excluded=('not_individual_lot','not_market_value','not_available_cash','not_redemption_receipt'))
+        elif name=='products':
+            expected=self.g.bank.products(workspace)
+            for product in expected:
+                currency=product.get('currency')
+                if not isinstance(currency,str) or not re.fullmatch(r'[A-Z]{3}',currency):
+                    continue
+                subject=product['id'];refs=('products/'+subject,)
+                if 'min_purchase_minor' in product:
+                    emit(subject,'minimum_purchase',product['min_purchase_minor'],currency,
+                         'simulated_product_minimum_not_cash_or_investment_advice',
+                         'tools.simulated_product_minimum/1',refs,on=versions['business_date'],
+                         excluded=('not_current_sale_quote','not_execution_permission'))
+                nominal=re.fullmatch(r'固定([0-9]+(?:\.[0-9]{1,2})?)元，仅演示本金流转',
+                                     product.get('nav_model',''))
+                if nominal and product.get('source')=='simulation' and currency=='CNY':
+                    emit(subject,'simulated_unit_principal',int(Decimal(nominal.group(1))*100),currency,
+                         'declared_fixed_principal_unit_not_market_nav',
+                         'tools.simulated_unit_principal/1',refs,on=versions['business_date'],
+                         excluded=('not_real_nav','not_return_quote','not_real_issuer'))
+        elif name=='business_records':
+            # Re-read the actual records and their owning accounts. A matching
+            # amount or another account's currency is never evidence.
+            state=self.g.overview(workspace)
+            expected=({key:state[key] for key in ('mandates','subscriptions')}
+                      if args['kind']=='subscriptions'else
+                      task_records_view(state,self.bank.capabilities(),
+                          self.bank.customer_archive(workspace)['records']['service_providers']))
+            accounts={row['id']:row for row in state['accounts']}
+            for table,label in (('subscriptions','subscription_amount'),('mandates','mandate_amount')):
+                for row in expected.get(table,[]):
+                    account=accounts.get(row.get('account_id'))
+                    currency=(account or {}).get('currency')
+                    if (not isinstance(currency,str) or not re.fullmatch(r'[A-Z]{3}',currency)
+                            or type(row.get('amount_minor')) is not int or row['amount_minor']<0):
+                        continue
+                    emit(row['id'],label,row['amount_minor'],currency,
+                         'recorded_periodic_amount_not_cash_savings_or_payment',
+                         'tools.current_subscription_record/1',
+                         (table+'/'+row['id'],'accounts/'+account['id']),
+                         on=versions['business_date'],
+                         excluded=('not_current_cash_balance','not_executed_payment','not_guaranteed_savings'))
+            if args['kind']=='tasks':
+                currency=expected.get('currency')
+                if (not isinstance(currency,str)or not re.fullmatch(r'[A-Z]{3}',currency)
+                        or {row.get('currency')for row in state['accounts']}!={currency}):
+                    raise BankError('TASK_CURRENCY_SOURCE_REQUIRED','任务币种与当前模拟银行合同不一致。',422)
+                def task_amount(row,field,label,ccy,refs,basis):
+                    value=row.get(field)
+                    if type(value)is int and value>=0 and isinstance(ccy,str)and re.fullmatch(r'[A-Z]{3}',ccy):
+                        emit(row['id'],label,value,ccy,basis,'tools.current_task_record/1',refs,
+                             on=versions['business_date'],excluded=('not_executed_payment','not_real_service_booking'))
+                for row in expected['orchestration_tasks']:
+                    task_amount(row,'budget_minor','task_budget',currency,
+                        ('orchestration_tasks/'+row['id'],'bank_capabilities/currency'),
+                        'registered_task_budget_in_declared_simulation_currency')
+                quotes={row['id']:row for row in expected['service_quotes']}
+                for row in quotes.values():
+                    task_amount(row,'price_minor','service_quote_amount',row.get('currency'),
+                        ('service_quotes/'+row['id'],'service_providers/'+row['provider_id']),
+                        'current_simulated_service_quote_not_real_market_price')
+                for row in expected['fund_holds']:
+                    account=accounts.get(row.get('account_id'))
+                    if account:
+                        task_amount(row,'amount_minor','task_hold_amount',account.get('currency'),
+                            ('fund_holds/'+row['id'],'accounts/'+account['id']),
+                            'registered_hold_record_status_must_be_read_separately')
+                for row in expected['service_reservations']:
+                    quote=quotes.get(row.get('quote_id'))
+                    if quote:
+                        task_amount(row,'amount_minor','service_reservation_amount',quote.get('currency'),
+                            ('service_reservations/'+row['id'],'service_quotes/'+quote['id']),
+                            'registered_service_record_not_confirmation_or_payment')
+                current=[q for q in quotes.values()if q.get('status')=='illustrative'
+                    and q.get('currency')==currency and isinstance(q.get('valid_until'),str)
+                    and q['valid_until']>=versions['business_date']
+                    and type(q.get('price_minor'))is int and q['price_minor']>=0]
+                if current and len(current)==len(quotes)and len(current)<=6:
+                    emit(workspace,'current_service_quote_total',sum(q['price_minor']for q in current),currency,
+                        'sum_of_exact_entire_current_simulated_quote_set','tools.current_service_quote_set/1',
+                        tuple('service_quotes/'+q['id']for q in current),on=versions['business_date'],
+                        excluded=('not_subset_total','not_executed_payment','not_real_service_booking'))
         elif name=='budget':
             expected,metadata=self._describe_budget(workspace,args,versions)
             account_id=args['account_id'];currency=expected['currency'];begin=expected['as_of']

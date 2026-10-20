@@ -285,7 +285,7 @@ def validate_child(execution, report, logs, ident, prompt, sources, datasets, ca
             'financial_observer_scope': list(immutable), 'provider_cost': None}
 
 
-def execute_case(candidate, case, inputs, out):
+def execute_case(candidate, case, inputs, out, campaign_manifest=None, campaign_attempt=None):
     out = Path(out)
     out.mkdir()
     semantic = out / 'semantic'
@@ -295,7 +295,12 @@ def execute_case(candidate, case, inputs, out):
         environment.pop('NAVREN_KNOWLEDGE_DB', None)
         environment.update(NAVREN_AGENT_TIMEOUT='105', NAVREN_ALLOW_CLOUD_ASR='0',
                            NAVREN_MODEL_CALL_LOG=str(semantic / 'model-calls.jsonl'))
-        execution = inputs['contract'].execute(case_command(candidate, case['id'], semantic),
+        command = case_command(candidate, case['id'], semantic)
+        if campaign_manifest is None or campaign_attempt is None:
+            raise ValueError('finance_paid_campaign_parent_attempt_required')
+        command += ['--paid-campaign-manifest', str(campaign_manifest),
+                    '--paid-campaign-delegated-attempt', campaign_attempt]
+        execution = inputs['contract'].execute(command,
                     candidate, out / 'process', CHILD_SECONDS, environment)
     path = semantic / 'semantic-results.json'
     log = semantic / 'model-calls.jsonl'
@@ -359,13 +364,17 @@ def run(args):
                 'actual_total_tokens': None, 'actual_model_requests_sent': None, 'semantic_judgment': None}
             public.atomic_json(out / 'results.json', report)
             try:
-                record = execute_case(candidate, case, inputs, out / case['id'])
+                from paid_campaign import execute
+                record = execute(args.paid_campaign, suite_id='integration-finance-original-S01-S02-S03-S10',
+                    case_id=case['id'], output=out/case['id'], call=lambda identity: execute_case(candidate, case, inputs,
+                    out/case['id'], args.paid_preflight_manifest, identity))
             except Exception as error:
                 record = {'id': case['id'], 'status': 'stopped',
                     'stop_reasons': ['child_launch_collection_or_receipt_failure'],
                     'error_type': type(error).__name__, 'actual_total_tokens': None,
                     'actual_model_requests_sent': None, 'semantic_judgment': None}
             report['records'][index] = record
+            if (out/case['id']).is_dir():public.atomic_json(out/case['id']/'record.json',record)
             if not unchanged(inputs, candidate, tracked):
                 record['stop_reasons'].append('same_candidate_input_drift_after_child')
                 record['status'] = 'stopped'
@@ -404,9 +413,20 @@ def main():
     parser.add_argument('--data-manifest', type=Path)
     parser.add_argument('--out-dir', type=Path, required=True)
     parser.add_argument('--cloud', action='store_true')
+    parser.add_argument('--paid-preflight-manifest', type=Path)
     parser.add_argument('--handoff', type=Path)
     parser.add_argument('--handoff-sha256')
-    return run(parser.parse_args())
+    args = parser.parse_args()
+    if args.cloud:
+        try:
+            from paid_entry_admission import admit_cli
+            args.paid_admission = admit_cli(args, root=args.candidate, suite_id='integration-finance-original-S01-S02-S03-S10', entrypoint=Path(__file__).resolve())
+            from paid_campaign import load_campaign
+            args.paid_campaign = load_campaign(args.candidate, args.paid_preflight_manifest)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print(json.dumps({'status':'paid_admission_blocked','reason':str(error),'provider_calls':0}))
+            return 2
+    return run(args)
 
 
 if __name__ == '__main__':

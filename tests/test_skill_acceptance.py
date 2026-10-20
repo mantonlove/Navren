@@ -1,5 +1,5 @@
 """冻结题集采集器的离线失败、追踪和隔离合同；不调用云模型。"""
-from contextlib import ExitStack
+from contextlib import ExitStack, closing
 from copy import deepcopy
 import hashlib
 import io
@@ -607,6 +607,15 @@ class ProcessIntegrationTest(unittest.TestCase):
             self.assertEqual(len(row['independent_reviews']), 1)
             self.assertTrue(row['result']['agent_runtime']['primary_model'].startswith('offline-'))
             self.assertTrue(row['result']['agent_review']['model_id'].startswith('offline-'))
+            runtime = row['result']['agent_runtime']
+            self.assertTrue(runtime['usage_complete'])
+            self.assertEqual(runtime['primary_requests_sent'], 0)
+            self.assertEqual(runtime['reviewer_requests_sent'], 0)
+            self.assertEqual({call['stage'] for call in runtime['model_calls']}, {'primary', 'reviewer'})
+            for call in runtime['model_calls']:
+                self.assertEqual(call['billing_mode'], 'unpaid_fixture')
+                self.assertFalse(call['request_sent'])
+                self.assertEqual(call['usage'], {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0})
             self.assertEqual(row['response_metadata'], {'primary': [], 'reviewer': []})
             self.assertEqual(dataset.read_bytes(), before)
 
@@ -644,6 +653,140 @@ class ProcessIntegrationTest(unittest.TestCase):
         self.assertEqual(set(catalog['identifiers']), {'eval-citation', 'eval-product'})
         self.assertNotIn('private-canary', json.dumps(catalog))
         self.assertNotIn('private-account-canary', json.dumps(catalog))
+
+
+class OracleCreditBindingTest(unittest.TestCase):
+    """以真实临时银行验证同账户唯一绑定；扩展案例不改原题金标。"""
+
+    def setUp(self):
+        self.context = ExitStack()
+        self.addCleanup(self.context.close)
+        self.context.enter_context(patch.dict(os.environ, {
+            'NAVREN_PERSONAL_DATA_KEY': Fernet.generate_key().decode(),
+            'NAVREN_KNOWLEDGE_DB': '',
+            'NAVREN_FINANCIAL_DB': '',
+        }))
+        for target in ('urllib.request.urlopen', 'socket.create_connection',
+                       'subprocess.run', 'subprocess.Popen'):
+            self.context.enter_context(patch(target, side_effect=AssertionError('oracle_test_external_io_forbidden')))
+        self.root = Path(self.context.enter_context(tempfile.TemporaryDirectory()))
+        self.gateway = FinanceGateway(self.root/'bank.sqlite3',
+                                      public_catalog=acceptance.EvalCatalog({
+                                          'public_catalog_result': {'products': [], 'items': [], 'ready': False},
+                                      }))
+        self.workspace, _ = self.gateway.create_session()
+        acceptance.assert_isolated_storage(self.gateway, self.root)
+        accounts = self.gateway.overview(self.workspace)['accounts']
+        self.main = next(row['id'] for row in accounts if row['id'].endswith('-main'))
+        self.other = next(row['id'] for row in accounts if row['id'].endswith('-savings'))
+        self.original_credit = next(row for row in self.gateway.budget(self.workspace, self.main)['commitments']
+                                    if row['kind'] == 'credit_card' and row['account_id'] == self.main)
+        dataset = json.loads((ROOT/'evaluation/navren_skill_semantic_cases.json').read_text())
+        self.original_case = next(row for row in dataset['cases'] if row['id'] == 'S10_linked_reserve_dedup')
+
+    def _clone(self, table, original_id, new_id, **changes):
+        if table not in {'cards', 'credit_statements'}:
+            raise AssertionError('unexpected_test_table')
+        with closing(self.gateway.bank.connect()) as database:
+            row = dict(database.execute('SELECT * FROM '+table+' WHERE workspace_id=? AND id=?',
+                                        (self.workspace, original_id)).fetchone())
+            row.update(id=new_id, **changes)
+            database.execute('INSERT INTO '+table+'('+','.join(row)+') VALUES ('+
+                             ','.join('?' for _ in row)+')', tuple(row.values()))
+            database.commit()
+
+    def _add_credit(self, account, prefix, *, zero_due=False):
+        statement_id = self.original_credit['evidence_id']
+        with closing(self.gateway.bank.connect()) as database:
+            original_card = database.execute(
+                'SELECT card_id FROM credit_statements WHERE workspace_id=? AND id=?',
+                (self.workspace, statement_id)).fetchone()['card_id']
+        card_id, added_statement = prefix+'-card', prefix+'-statement'
+        card_changes = {'outstanding_minor': 0} if zero_due else {}
+        statement_changes = {'total_due_minor': 0, 'minimum_due_minor': 0, 'paid_minor': 0} if zero_due else {}
+        self._clone('cards', original_card, card_id, account_id=account, **card_changes)
+        self._clone('credit_statements', statement_id, added_statement, card_id=card_id, **statement_changes)
+        return card_id, added_statement
+
+    def _pay_main_credit(self):
+        with closing(self.gateway.bank.connect()) as database:
+            database.execute("UPDATE credit_statements SET status='paid', paid_minor=total_due_minor "
+                             'WHERE workspace_id=? AND id=?',
+                             (self.workspace, self.original_credit['evidence_id']))
+            database.execute('UPDATE cards SET outstanding_minor=0 WHERE workspace_id=? AND account_id=? AND type=?',
+                             (self.workspace, self.main, 'credit'))
+            database.commit()
+
+    def test_original_s10_facts_keep_original_amounts(self):
+        before = acceptance.snapshot(self.gateway, self.workspace)
+        checked = acceptance.oracle(self.gateway, self.workspace, self.original_case)
+        self.assertEqual(len(checked), 5)
+        self.assertTrue(all(row['passed'] for row in checked))
+        self.assertEqual([row['actual'] for row in checked[-2:]], [50000, 977600])
+        self.assertEqual(acceptance.snapshot(self.gateway, self.workspace), before)
+
+    def test_other_account_credit_before_or_after_main_does_not_change_binding(self):
+        for prefix in ('000-other', 'zzz-other'):
+            with self.subTest(order=prefix):
+                # 零额有效账单只改变候选顺序，保持原S10全部金额和金标。
+                card_id, statement_id = self._add_credit(self.other, prefix, zero_due=True)
+                try:
+                    self.assertFalse(self.gateway.demo_accounts.is_demo(self.workspace))
+                    credits = [row for row in self.gateway.budget(self.workspace, self.main)['commitments']
+                               if row['kind'] == 'credit_card']
+                    self.assertEqual(len(credits), 2)
+                    index = 0 if prefix.startswith('000') else 1
+                    self.assertEqual(credits[index]['evidence_id'], statement_id)
+                    before = acceptance.snapshot(self.gateway, self.workspace)
+                    checked = acceptance.oracle(self.gateway, self.workspace, self.original_case)
+                    self.assertEqual(len(checked), 5)
+                    self.assertTrue(all(row['passed'] for row in checked))
+                    self.assertEqual([row['actual'] for row in checked[-2:]], [50000, 977600])
+                    self.assertEqual(acceptance.snapshot(self.gateway, self.workspace), before)
+                finally:
+                    with closing(self.gateway.bank.connect()) as database:
+                        database.execute('DELETE FROM credit_statements WHERE workspace_id=? AND id=?',
+                                         (self.workspace, statement_id))
+                        database.execute('DELETE FROM cards WHERE workspace_id=? AND id=?',
+                                         (self.workspace, card_id))
+                        database.commit()
+
+    def test_only_other_account_credit_is_explicitly_refused(self):
+        self._add_credit(self.other, '000-other')
+        self._pay_main_credit()
+        with self.assertRaisesRegex(ValueError, 'ambiguous_or_missing_credit_commitment'):
+            acceptance.oracle(self.gateway, self.workspace, self.original_case)
+
+    def test_no_open_credit_commitment_is_explicitly_refused_when_referenced(self):
+        self._pay_main_credit()
+        self.assertFalse(any(row['kind'] == 'credit_card'
+                             for row in self.gateway.budget(self.workspace, self.main)['commitments']))
+        with self.assertRaisesRegex(ValueError, 'ambiguous_or_missing_credit_commitment'):
+            acceptance.oracle(self.gateway, self.workspace, self.original_case)
+
+    def test_multiple_main_account_credits_are_explicitly_refused(self):
+        self._add_credit(self.main, '000-second-main')
+        with self.assertRaisesRegex(ValueError, 'ambiguous_or_missing_credit_commitment'):
+            acceptance.oracle(self.gateway, self.workspace, self.original_case)
+
+    def test_cash_fact_without_credit_variable_survives_zero_or_multiple_credits(self):
+        amount = next(row['balance_minor'] for row in self.gateway.overview(self.workspace)['accounts']
+                      if row['id'] == self.main)
+        case = {'id': 'regression_no_credit_dependency', 'expected': {'facts': [{
+            'label': '当前主账户现金', 'tool': 'account_summary', 'arguments': {},
+            'path': 'data.accounts.balance_minor', 'select': {'id_suffix': '-main'}, 'expected': amount,
+        }]}}
+        self._add_credit(self.main, '000-second-main', zero_due=True)
+        checked = acceptance.oracle(self.gateway, self.workspace, case)
+        self.assertTrue(checked[0]['passed'])
+        with closing(self.gateway.bank.connect()) as database:
+            database.execute("UPDATE credit_statements SET status='paid', paid_minor=total_due_minor WHERE workspace_id=?",
+                             (self.workspace,))
+            database.execute("UPDATE cards SET outstanding_minor=0 WHERE workspace_id=? AND type='credit'",
+                             (self.workspace,))
+            database.commit()
+        checked = acceptance.oracle(self.gateway, self.workspace, case)
+        self.assertTrue(checked[0]['passed'])
 
 
 class StorageIsolationTest(unittest.TestCase):

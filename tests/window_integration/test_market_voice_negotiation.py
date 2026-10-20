@@ -19,6 +19,7 @@ import threading
 import time
 import traceback
 import unittest
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
@@ -29,7 +30,8 @@ import test_cross_module as _cross
 from agent_runtime.bank_tools import BankTools
 from agent_runtime.conversation import ConversationAgent
 from finance_gateway import COOKIE
-from market_content import CN, MarketStore
+from market_content import CN, MarketStore, event_input_hash
+from market_editor import MarketEditor
 from server import ProxyHandler, app_release
 from service_negotiation import ServiceNegotiationService
 from voice_gateway import SpeechTask, VoiceGateway, speech_text
@@ -88,6 +90,17 @@ class InMemoryAudioProvider:
         self.responses.put('')
 
 
+class UnpaidEventJsonClient:
+    """给真实MarketEditor注入固定的隔离JSON结果，不调用任何模型服务。"""
+    billing_mode = 'unpaid_fixture'
+
+    def __init__(self, result, model_id):
+        self.result, self.model_id = copy.deepcopy(result), model_id
+
+    def complete_json(self, **kwargs):
+        return copy.deepcopy(self.result)
+
+
 class MarketVoiceNegotiationIntegrationTests(unittest.TestCase):
     maxDiff = None
     # 共用同一隔离实现；只继承其辅助方法，不继承或修改既有测试。
@@ -132,19 +145,37 @@ class MarketVoiceNegotiationIntegrationTests(unittest.TestCase):
             'published_at': when, 'published_precision': 'minute',
             'checked_at': self.now.isoformat(), 'read_scope': 'full_text',
             'link_status': 'verified', 'evidence_text': '隔离测试合成事实，不能解释为真实发布。',
-            'identity': 'official_release', 'fingerprint': 'unseen-article-v1', 'version': 1}
-        event = {
+            'evidence_truncated': False, 'identity': 'official_release',
+            'fingerprint': 'unseen-article-v1', 'version': 1}
+        self.market.save_article(article)
+        article = next(row for row in self.market.articles() if row['id'] == article['id'])
+        event = self.issue_event(article, {
             'id': 'unseen-event', 'headline': '隔离合成事件', 'summary': '第一版合成摘要。',
             'analysis': '合成分析的影响仍取决于后续条件。', 'uncertainty': '没有真实行情端点。',
             'facts': [{'text': '隔离测试合成事实', 'article_id': article['id'],
-                       'quote': '隔离测试合成事实'}],
-            'article_ids': [article['id']], 'article_versions': {article['id']: 1},
-            'primary_article_id': article['id'], 'published_at': when,
-            'category': 'macro_policy', 'review': {'status': 'approved'}, 'score': 1,
-            'ranking_reason': {'importance': 1, 'new_fact': .8}}
-        self.market.save_article(article)
-        self.market.publish('market_events', event['id'], event, 'unseen-event-v1')
+                       'quote': '隔离测试合成事实'}]})
         return article, event
+
+    def issue_event(self, article, draft):
+        group = {'id': draft['id'], 'articles': [article]}
+        generation = self.market.capture_event_generation([group])
+        editor = MarketEditor(
+            primary=UnpaidEventJsonClient({'events': [draft]}, 'test-unseen-event-primary'),
+            reviewer=UnpaidEventJsonClient({'verdict': 'approve', 'reason': '隔离来源与草稿绑定核对通过。',
+                                             'issues': []}, 'test-unseen-event-reviewer'))
+        event = editor.events(generation['groups'], 'unseen-event-fixture',
+                              generations=generation['generations'])[0]
+        event['input_hash'] = event_input_hash(generation['groups'][0])
+        self.market._record_event_review(event)
+        self.market.publish('market_events', event['id'], event, event['input_hash'])
+        return event
+
+    def revise_event(self, event, summary):
+        article = next(row for row in self.market.articles() if row['id'] == event['primary_article_id'])
+        draft = {key: copy.deepcopy(event[key]) for key in (
+            'id', 'headline', 'summary', 'analysis', 'uncertainty', 'facts')}
+        draft['summary'] = summary
+        return self.issue_event(article, draft)
 
     def event_reference(self, *, historical=False):
         reference = {'kind': 'event', 'id': 'unseen-event', 'source_scope': 'market', 'version': 1}
@@ -162,7 +193,7 @@ class MarketVoiceNegotiationIntegrationTests(unittest.TestCase):
         return receipt
 
     @contextmanager
-    def local_server(self, *, hold=False):
+    def local_server(self, *, hold=False, assembled=False):
         try:
             import websocket
             import wsproto
@@ -235,14 +266,34 @@ class MarketVoiceNegotiationIntegrationTests(unittest.TestCase):
 
         voice = VoiceGateway(key='synthetic-not-a-live-credential', url='wss://synthetic.invalid/not-used',
                              task_factory=factory, allow_cloud_asr=False)
-        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), QuietHandler)
-        server.finance, server.voice, server.app_release = self.g, voice, app_release()
-        server.market = getattr(self.g, 'market', None)
+        if assembled:
+            import os
+            import server as server_module
+            from base_runtime.service_assembly import AssembledGateway
+            with patch.dict(os.environ, {
+                    'NAVREN_SIM_DB': str(self.g.bank.database),
+                    'NAVREN_KNOWLEDGE_DB': str(self.g.knowledge_provider.path),
+                    'NAVREN_FINANCIAL_DB': '',
+                    'NAVREN_PUBLIC_SYNC_ENABLED': '0',
+                    'NAVREN_MESSAGE_WORKER_ENABLED': '0'}), \
+                    patch.object(server_module, 'ProxyHandler', QuietHandler):
+                server = server_module.create_server(port=0, database=str(self.g.bank.database),
+                    voice=voice, market_database=str(self.directory / 'assembled-market.sqlite3'),
+                    public_sync_enabled=False)
+            if not isinstance(server.finance, AssembledGateway):
+                server.server_close()
+                raise AssertionError('assembled_service_factory_not_used')
+        else:
+            server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), QuietHandler)
+            server.finance, server.voice, server.app_release = self.g, voice, app_release()
+            server.market = getattr(self.g, 'market', None)
         # 正式/api/agent必须有EvidenceRuntime；仅临时公共库与拒绝网络的reader。
         from local_knowledge.runtime import EvidenceRuntime
         def forbidden_reader(*args, **kwargs):
             raise AssertionError('public_network_reader_forbidden')
-        runtime = EvidenceRuntime(self.g.knowledge_provider, background=False, reader=forbidden_reader)
+        if assembled:
+            server.evidence_runtime.close()
+        runtime = EvidenceRuntime(server.finance.knowledge_provider, background=False, reader=forbidden_reader)
         server.evidence_runtime = runtime
         server.fixture_handler_snapshot = handler_snapshot
         server.fixture_wait_handlers = wait_handlers
@@ -318,7 +369,7 @@ class MarketVoiceNegotiationIntegrationTests(unittest.TestCase):
                     self.w, {**reference, 'parameters': parameters})))
         self.assert_bank_error('INVALID_TOOL_ARGUMENTS', lambda: tools.invoke('market_event', {
             'event_id': event['id'], 'edition_date': reference['parameters']['edition_date']}))
-        market.publish('market_events', event['id'], {**event, 'summary': '第二版合成摘要。'}, 'unseen-event-v2')
+        self.revise_event(event, '第二版合成摘要。')
         old = market.history_event(reference['parameters']['edition_date'], event['id'], 1,
                                    now=self.now, expected_version=1)
         self.assertEqual(old['version'], 1)
@@ -358,7 +409,7 @@ class MarketVoiceNegotiationIntegrationTests(unittest.TestCase):
         snapshot = tools.market_snapshot()
         self.assertEqual(snapshot['reads'][0]['arguments'], {'period': period})
         self.assert_bank_error('MARKET_CONTEXT_CONFLICT', lambda: tools.invoke('market_weekly', {'period': 'latest'}))
-        market.publish('market_events', event['id'], {**event, 'summary': '第二版合成摘要。'}, 'unseen-weekly-event-v2')
+        self.revise_event(event, '第二版合成摘要。')
         self.assertEqual(market.weekly(period)['report']['citations'][0]['event_version'], 1)
         self.assert_bank_error('STALE_MARKET_EVIDENCE', tools.fresh)
         self.assert_bank_error('STALE_MARKET_EVIDENCE', lambda: BankTools(self.g, self.w, 'unseen-weekly-new').invoke(

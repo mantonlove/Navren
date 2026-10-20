@@ -5,7 +5,7 @@
   try { enabled = new URL(document.currentScript?.src || '', location.href).searchParams.get('contract') === 'welcome-business-v1'; } catch (_) {}
   if (!enabled) {
     // 静态文件可能先于认证服务发布。旧注入不调用欢迎-only logout，也不撤销现役界面。
-    const unsupported = Object.freeze({status: 'unsupported_contract', authenticated: null, auth_subject: null,
+    const unsupported = Object.freeze({status: 'unsupported_contract', authenticated: null, registered_user_id:null, auth_subject: null,
       current_business_identity: null, business_identity_status: 'unavailable', revoked: false, business_revoked: false,
       logout_status: 'unavailable', error: '退出接线待更新，请稍后重试'});
     window.NavrenWelcomeSession = Object.freeze({
@@ -24,7 +24,7 @@
     return;
   }
   const accounts = new Set(['tycoon', 'grain_farmer', 'working_landlady', 'retired_entrepreneur']);
-  let epoch = 0, subject = null, flight = null, logoutFlight = null, channel;
+  let epoch = 0, subject = null, registeredUser = null, flight = null, logoutFlight = null, channel;
   let revoked = false, businessRevoked = false, paused = false, navigated = false, lastIdentity = null;
   const originalFetch = window.fetch.bind(window);
   window.fetch = (input, options) => {
@@ -46,26 +46,37 @@
     if (value && typeof value === 'object') return Object.freeze(Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copy(v)])));
     return value;
   };
-  let state = copy({authenticated: false, auth_subject: null, mode: null, user: null, csrf: null,
+  let state = copy({authenticated: false, registered_user_id:null, auth_subject: null, mode: null, user: null, csrf: null,
     entry_experience_account: null, experience_account: null, current_business_identity: null,
     business_identity_status: 'unavailable', status: 'checking', revoked: false, business_revoked: false,
     logout_status: 'idle', error: null, epoch});
   const update = fields => { state = copy({...state, ...fields, epoch}); return state; };
-  const getState = () => state;
+  const getState = () => {
+    if(state.current_business_identity&&!leaseCurrent(state.current_business_identity))revoke('business_lease_expired');
+    return state;
+  };
   const signal = (name, detail) => window.dispatchEvent(new CustomEvent(name, {detail: copy(detail)}));
   const descriptor = value => value && accounts.has(value.user_id) && typeof value.display_name === 'string'
     ? copy({user_id: value.user_id, display_name: value.display_name}) : null;
 
+  function leaseCurrent(value){
+    return Number.isSafeInteger(value?.session_generation)&&value.session_generation>=0&&
+      Number.isFinite(value.auth_expires_at)&&Number.isFinite(value.lease_expires_at)&&
+      Date.now()/1000<value.lease_expires_at&&value.lease_expires_at<=value.auth_expires_at;
+  }
+
   function businessIdentity(data) {
     const value = data.current_business_identity;
     if (data.business_identity_status !== 'verified' || !value || value.environment !== 'simulation' ||
-      !accounts.has(value.account_id) || typeof value.workspace_id !== 'string' || !value.workspace_id ||
-      !Number.isInteger(value.privacy_revision) || value.privacy_revision < 0) return null;
-    const next = {environment: 'simulation', account_id: value.account_id, workspace_id: value.workspace_id,
-      privacy_revision: value.privacy_revision};
+      !accounts.has(value.account_id) || value.registered_user_id!==data.registered_user_id ||
+      value.auth_subject!==data.auth_subject || typeof value.workspace_id !== 'string' || !/^[a-f0-9]{32}$/.test(value.workspace_id) ||
+      !Number.isSafeInteger(value.privacy_revision) || value.privacy_revision < 0||!leaseCurrent(value)) return null;
+    const next = {environment: 'simulation', registered_user_id:value.registered_user_id,auth_subject:value.auth_subject,account_id: value.account_id, workspace_id: value.workspace_id,
+      privacy_revision: value.privacy_revision,session_generation:value.session_generation,
+      auth_expires_at:value.auth_expires_at,lease_expires_at:value.lease_expires_at};
     for (const key of ['personal_revision', 'generation']) {
       if (value[key] != null) {
-        if (!Number.isInteger(value[key]) || value[key] < 0) return null;
+        if (!Number.isSafeInteger(value[key]) || value[key] < 0 || (key==='generation'&&value[key]!==value.session_generation)) return null;
         next[key] = value[key];
       }
     }
@@ -104,19 +115,17 @@
     window.BankClient?.beginAccountSwitch?.();
     window.NavrenSpeech?.stop?.();
     document.querySelectorAll('audio,video').forEach(media => { try { media.pause(); } catch (_) {} });
-    for (const key of ['qingzhou_chatHistory', 'qingzhou_chatKeyMoments']) {
-      try { localStorage.removeItem(key); } catch (_) {}
-    }
+    try { Storage.unloadPrivateContext?.(); } catch (_) {}
     for (const key of ['navren_return_view', 'navren_research_selection', 'navren_calendar_question']) {
       try { sessionStorage.removeItem(key); } catch (_) {}
     }
-    signal('navren:privacy-reset', {scope: 'welcome_subject', epoch});
+    signal('navren:privacy-reset', {scope: 'welcome_subject', reason:'session_unloaded', persistent_history_deleted:false, epoch});
   }
   function revoke(reason, navigate = true) {
     cancelRefresh();
     const first = !revoked;
     revoked = true;
-    update({authenticated: false, csrf: null, current_business_identity: null, experience_account: null,
+    update({authenticated: false, registered_user_id:null, csrf: null, current_business_identity: null, experience_account: null,
       business_identity_status: 'revoked', status: 'revoked', revoked: true, error: reason});
     privateGate();
     if (first) {
@@ -126,11 +135,13 @@
     if (navigate) navigateToEntry();
   }
   function applySession(data) {
-    if (data?.authenticated !== true || typeof data.auth_subject !== 'string' || !data.auth_subject) {
+    if (data?.authenticated !== true || typeof data.auth_subject !== 'string' || !/^[A-Za-z0-9:_-]{16,192}$/.test(data.auth_subject)) {
       revoke('welcome_session_revoked'); return state;
     }
+    if (typeof data.registered_user_id!=='string'||!/^[a-f0-9]{32}$/.test(data.registered_user_id)) { revoke('registered_user_missing'); return state; }
+    if (registeredUser && data.registered_user_id!==registeredUser) { revoke('registered_user_changed'); return state; }
     if (subject && data.auth_subject !== subject) { revoke('welcome_subject_changed'); return state; }
-    subject = data.auth_subject;
+    subject = data.auth_subject; registeredUser=data.registered_user_id;
     const identity = businessIdentity(data), previous = state.current_business_identity;
     const status = identity ? 'verified' : ['not_connected', 'unavailable', 'revoked'].includes(data.business_identity_status)
       ? data.business_identity_status : 'unavailable';
@@ -140,7 +151,7 @@
     if (businessWasRevoked) businessRevoked = true;
     if (businessWasRevoked || businessChanged) epoch++;
     if (identity) lastIdentity = identity;
-    update({authenticated: true, auth_subject: subject, csrf: typeof data.csrf === 'string' ? data.csrf : null,
+    update({authenticated: true, registered_user_id:registeredUser,auth_subject: subject, csrf: typeof data.csrf === 'string' ? data.csrf : null,
       mode: ['local', 'experience'].includes(data.mode) ? data.mode : null, user: data.user || null,
       entry_experience_account: descriptor(data.entry_experience_account),
       experience_account: identity && alias?.user_id === identity.account_id ? alias : null,
@@ -155,7 +166,7 @@
       stopPrivateActivity();
     }
     if (identity && JSON.stringify(previous) !== JSON.stringify(identity)) {
-      signal('navren:business-identity', {auth_subject: subject, current_business_identity: identity,
+      signal('navren:business-identity', {registered_user_id:registeredUser,auth_subject: subject, current_business_identity: identity,
         business_identity_status: 'verified', epoch});
     }
     return state;
@@ -206,7 +217,8 @@
         if (!response.ok) throw new Error('session_unavailable');
         const session = await response.json();
         if (request.epoch !== epoch || paused) return false;
-        if (session?.authenticated !== true || typeof session.auth_subject !== 'string' || !session.auth_subject) { revoke('welcome_session_revoked'); return false; }
+        if (session?.authenticated !== true || typeof session.auth_subject !== 'string' || !/^[A-Za-z0-9:_-]{16,192}$/.test(session.auth_subject)) { revoke('welcome_session_revoked'); return false; }
+        if (registeredUser&&session.registered_user_id!==registeredUser) { revoke('registered_user_changed'); return false; }
         if (subject && session.auth_subject !== subject) { revoke('welcome_subject_changed'); return false; }
         subject = session.auth_subject;
         if (typeof session.csrf !== 'string' || !session.csrf) throw new Error('csrf_unavailable');

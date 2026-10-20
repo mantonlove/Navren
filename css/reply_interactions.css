@@ -1,0 +1,17 @@
+/* 回复内的轻量交互；对话选择与银行确认卡采用独立容器。 */
+.reply-interaction { margin-top:14px; padding-top:12px; border-top:1px solid var(--border); }
+.reply-interaction-prompt { margin:0 0 10px; color:var(--ink); font-size:var(--font-size-sm); font-weight:550; line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
+.reply-interaction-options { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.reply-interaction-button { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface-card); color:var(--ink-70); font:inherit; font-size:var(--font-size-sm); line-height:1.5; cursor:pointer; }
+.reply-interaction-button:hover { color:var(--primary-deep); background:var(--primary-soft); border-color:var(--primary-border); }
+.reply-interaction-button.is-primary { color:var(--on-primary); background:var(--primary-deep); border-color:var(--primary-deep); }
+.reply-interaction-button.is-primary:hover { background:var(--primary); border-color:var(--primary); }
+.reply-interaction-button:focus-visible { outline:2px solid var(--primary-deep); outline-offset:3px; }
+.reply-interaction-button:disabled { opacity:.55; cursor:default; }
+.reply-interaction-button.is-selected { opacity:1; color:var(--primary-deep); background:var(--primary-soft); border-color:var(--primary-border); }
+.reply-interaction-status { margin:8px 0 0; color:var(--ink-50); font-size:var(--font-size-xs); line-height:1.6; overflow-wrap:anywhere; }
+.reply-interaction-status:only-child { margin:0; }
+.bank-action-card>.bank-plan-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.bank-action-card>.bank-plan-actions>button { min-height:38px; padding:8px 14px; border-radius:10px; }
+.mode-senior .reply-interaction-button,.mode-senior .bank-action-card>.bank-plan-actions>button { min-height:44px; }
+@media(max-width:480px) { .reply-interaction-options { gap:7px; } .reply-interaction-button { max-width:100%; padding:8px 12px; overflow-wrap:anywhere; } }

@@ -1,7 +1,8 @@
 """现行目录的真实字段、日期、完整性与故障边界。"""
 import io
 import json
-from datetime import datetime, timezone
+import os
+from datetime import date
 import tempfile
 import threading
 from pathlib import Path
@@ -28,7 +29,8 @@ class CurrentCatalogTests(unittest.TestCase):
         def opener(url, **kwargs):
             calls.append(url); return io.BytesIO(payload())
         result=PublicProductCatalog(opener).read()
-        self.assertEqual(calls,[URL]);self.assertEqual(result['source_date'],'2026-09-24')
+        self.assertEqual(len(calls),1);self.assertTrue(calls[0].full_url.startswith(URL+'?'))
+        self.assertEqual(result['source_date'],'2026-09-24')
         p=result['products'][0]
         self.assertEqual(p['code'],'006210');self.assertEqual(p['risk'],'R2中低风险')
         self.assertEqual(p['sale_status'],'在售');self.assertEqual(p['sales_status_as_of'],'2026-09-24')
@@ -80,10 +82,10 @@ class CurrentCatalogTests(unittest.TestCase):
 
     def test_cached_snapshot_ages_even_if_refresh_fails(self):
         catalog=PublicProductCatalog(lambda *a,**kw:io.BytesIO(payload()))
-        with patch('webank_catalog.datetime') as clock:
-            clock.now.return_value=datetime(2026,9,27,tzinfo=timezone.utc)
+        with patch('webank_catalog.publication_today') as clock:
+            clock.return_value=date(2026,9,27)
             self.assertEqual(catalog.read()['status'],'current_disclosure')
-            clock.now.return_value=datetime(2026,10,5,tzinfo=timezone.utc)
+            clock.return_value=date(2026,10,5)
             self.assertTrue(catalog.read()['stale'])
             catalog.until=0
             catalog.opener=lambda *a,**kw:(_ for _ in ()).throw(OSError())
@@ -106,9 +108,10 @@ class CurrentCatalogTests(unittest.TestCase):
         from server import create_server
         from test_bank_integration import Browser
         rows=[row(f'{n:06d}',f'产品{n}') for n in range(13658)]
-        with tempfile.TemporaryDirectory() as tmp:
-            server=create_server(0,Path(tmp)/'bank.sqlite')
-            server.finance.public_products.opener=lambda *a,**kw:io.BytesIO(payload(rows))
+        with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,{
+                'NAVREN_KNOWLEDGE_DB':str(Path(tmp)/'knowledge.sqlite'),'NAVREN_FINANCIAL_DB':''}):
+            catalog=PublicProductCatalog(lambda *a,**kw:io.BytesIO(payload(rows)))
+            server=create_server(0,Path(tmp)/'bank.sqlite',public_catalog=catalog,public_sync_enabled=False)
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             try:
                 browser=Browser('http://127.0.0.1:'+str(server.server_port));browser.start()

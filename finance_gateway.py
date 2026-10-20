@@ -14,7 +14,8 @@ import time
 from contextlib import closing, contextmanager, ExitStack
 from contextvars import ContextVar
 from copy import deepcopy
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from http.cookies import SimpleCookie
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -25,6 +26,7 @@ from simulated_bank.statement_import import MAX_BYTES, StatementImportService
 from cashflow_timeline import build_cashflow_timeline, validate_horizon_days
 from finance_capabilities import finance_read_capabilities, workflow_capability_catalog
 from user_memory import UserMemoryStore
+from personal_profile import PersonalProfile
 from service_negotiation import ServiceNegotiationService
 from public_products import PublicProductCatalog
 from personal_graph import PersonalGraph
@@ -77,18 +79,34 @@ def request_text(handler):
 
 
 class FinanceGateway:
-    def __init__(self, database=None, *, financial_database=None):
+    def __init__(self, database=None, *, financial_database=None, public_catalog=None,
+                 sms_provider=None, allow_test_sms_provider=False, registered_mode=False):
+        if type(registered_mode) is not bool:raise TypeError('registered_mode_must_be_bool')
+        self.registered_mode=registered_mode
+        self.experience_provider=None
         path = database or os.environ.get('NAVREN_SIM_DB') or os.environ.get('QINGZHOU_SIM_DB') or str(Path.home()/'Library/Application Support/Qingzhou/simulated-bank.sqlite3')
-        self.bank = SimulatedBank(path)
+        self.bank = SimulatedBank(path, sms_provider=sms_provider,
+                                  allow_test_sms_provider=allow_test_sms_provider)
         self.statements = StatementImportService(self.bank)
         self.memories = UserMemoryStore(self.bank)
         self.personal_data = self.memories.store
+        from base_runtime.account_state import AccountState
+        self.account_state = AccountState(self)
+        self.personal_profile = PersonalProfile(self)
         knowledge_path = os.environ.get('NAVREN_KNOWLEDGE_DB') or str(Path(path).with_name(Path(path).stem+'.knowledge.sqlite3'))
         self.knowledge_provider = LocalKnowledgeProvider(knowledge_path)
+        from local_knowledge.catalog_information_host import CatalogInformationHost
+        self.catalog_information_host=CatalogInformationHost()
         self._speech_receipts = {}
         self._speech_lock = threading.Lock()
         self.personal_graph = PersonalGraph(self)
-        self.public_products = PublicProductCatalog()
+        self.public_products = public_catalog if public_catalog is not None else PublicProductCatalog(
+            data_dir=os.environ.get('NAVREN_PUBLIC_DATA_DIR') or self.bank.database.parent/'public-data',
+            refresh_interval_seconds=os.environ.get('NAVREN_PUBLIC_SYNC_INTERVAL_SECONDS','300'))
+        self.product_performance = None
+        self.public_money_products = None
+        self.public_product_research = None
+        self._product_performance_lock = threading.Lock()
         self.service_negotiations = ServiceNegotiationService(self)
         self.wealth = WealthPortfolio(self)
         self.calendar = FinancialCalendar(self)
@@ -96,12 +114,16 @@ class FinanceGateway:
         self.goals = GoalService(self.bank)
         self.page_contexts = PageContexts(self)
         self.research_plans = ResearchPlans(self)
+        from research_workspace import ResearchWorkspace
+        self.research_workspace = ResearchWorkspace(self)
         from demo_accounts import DemoAccountService
         from base_runtime.identity import DemoSessions
         from financial_metrics import FinancialMetrics
         self.demo_accounts = DemoAccountService(self)
         self.bank.demo_accounts = self.demo_accounts
         self.demo_sessions = DemoSessions(self)
+        self._runtime_bindings = {}
+        self._runtime_binding_lock = threading.Lock()
         self.financial_metrics = FinancialMetrics(self)
         from base_runtime.evidence import OperationEvidence
         self.operation_evidence = OperationEvidence(self)
@@ -111,17 +133,66 @@ class FinanceGateway:
         if financial_path:
             from financial_data_service import FinancialDataService
             self.financial_data = FinancialDataService(financial_path)
+        from simulated_bank.connected_assets import ConnectedAssets
+        self.connected_assets = ConnectedAssets(self)
+        from simulated_bank.account_connections import AccountConnections
+        self.account_connections = AccountConnections(self)
+        from simulated_bank.card_bindings import CardBindings
+        self.card_bindings = CardBindings(self)
+        from message_center import MessageCenter
+        self.messages = MessageCenter(self)
+        if registered_mode:
+            from registered_instances import attach_registered_experiences
+            attach_registered_experiences(self)
+        self.research_workspace.install()
+
+    def start_public_sync(self, enabled=None):
+        if enabled is None:
+            value=os.environ.get('NAVREN_PUBLIC_SYNC_ENABLED','true').strip().lower()
+            if value not in ('true','false','1','0','yes','no','on','off'):
+                raise ValueError('invalid_public_sync_enabled')
+            enabled=value in ('true','1','yes','on')
+        value=os.environ.get('NAVREN_MESSAGE_WORKER_ENABLED','true').strip().lower()
+        if value not in ('true','false','1','0','yes','no','on','off'):
+            raise ValueError('invalid_message_worker_enabled')
+        living=False
+        if self.registered_mode:
+            raw=os.environ.get('NAVREN_LIVING_WORKER_ENABLED','true').strip().lower()
+            if raw not in ('true','false','1','0','yes','no','on','off'):
+                raise ValueError('invalid_living_worker_enabled')
+            living=raw in ('true','1','yes','on')
+        started=self.public_products.start() if enabled else False
+        message_started=False
+        try:
+            if value in ('true','1','yes','on'):message_started=self.messages.start()
+            if living:self.living_scheduler.start()
+        except Exception:
+            if message_started:self.messages.stop(timeout=2)
+            if started:self.public_products.stop(timeout=2)
+            raise
+        return started
+
+    def stop_public_sync(self, timeout=2):
+        try:
+            if self.registered_mode and not self.living_scheduler.stop(timeout=timeout):
+                raise RuntimeError('living_worker_not_stopped')
+        finally:
+            try:
+                if not self.messages.stop(timeout=timeout):raise RuntimeError('message_worker_not_stopped')
+            finally:result=self.public_products.stop(timeout=timeout)
+        return result
 
     def financial_query(self, workspace, operation, arguments):
         """同源浏览器与MCP读取同一事实服务；金融写操作仍用原确认流程。"""
         if self.financial_data is None:
             raise BankError('FINANCIAL_DATA_NOT_CONFIGURED', '独立财务库尚未显式接入此服务。', 503)
         subject = self.demo_accounts.subject_for(workspace)
+        service=self.demo_accounts.active_history(workspace) or self.financial_data
         if operation == 'presentation':
             from financial_data_service.presentation import FinancialPresentationService
-            result = FinancialPresentationService(self.financial_data).query(subject, arguments)
+            result = FinancialPresentationService(service).query(subject, arguments)
         else:
-            result = self.financial_data.query(subject, operation, arguments)
+            result = service.query(subject, operation, arguments)
         if result.get('error'):
             error = result['error']
             code = error['code']
@@ -142,6 +213,23 @@ class FinanceGateway:
         if name not in ('accounting_report','returns_report','allocation_preview') or not isinstance(arguments,dict):
             raise BankError('METRIC_ARGUMENTS_INVALID','金融方法入口或参数结构不合法。',422)
         return self.financial_metrics.method_report(workspace,name,arguments)
+
+    def capture_request_binding(self,workspace):
+        from base_runtime.runtime_guards import capture_request_binding
+        return capture_request_binding(self,workspace)
+
+    def current_registered_binding(self,workspace_id,bank_db):
+        provider=self.experience_provider
+        request=self.demo_sessions._request.get()
+        if provider is None or request is None or request[1]!=workspace_id:
+            raise BankError('REGISTERED_CONTEXT_REQUIRED','请从当前注册体验会话读取本人记录。',403)
+        record=provider._validate(bank_db,request[0],workspace=workspace_id)
+        return {'registered_user_id':record['registered_user_id'],'workspace_id':workspace_id,
+                'persona_id':record['persona_id']}
+
+    def revalidate_request_binding(self,binding,*,bank_db):
+        from base_runtime.runtime_guards import revalidate_request_binding
+        return revalidate_request_binding(self,binding,bank_db=bank_db)
 
     def accounting_report(self,workspace,**arguments):
         return self.financial_method_report(workspace,'accounting_report',arguments)
@@ -213,7 +301,7 @@ class FinanceGateway:
             result['insurance'] = {'status':'available', 'source':'navren_synthetic',
                 'dataset_version':policies['dataset_version'], 'as_of':policies['as_of'],
                 'policies':policies['data']['items'], 'sum_insured_is_not_asset':True,
-                'notice':'合成保障合同；非真实保单，现金价值与未提供的理赔保持未知。'}
+                'notice':'保障合同资料；现金价值与未提供的理赔保持未知。'}
             result['independent_financial_data'] = self.demo_accounts.independent_reading_status()
         return result
 
@@ -271,6 +359,7 @@ class FinanceGateway:
         token = cookies[COOKIE].value if COOKIE in cookies else ''
         workspace,role = self.bank.session(token)
         if role!='human': raise BankError('HUMAN_REQUIRED','当前会话不能确认操作。',403)
+        if self.experience_provider is not None:self.experience_provider.validate(token,workspace)
         handler._navren_session_token = token
         return workspace,token
 
@@ -289,6 +378,8 @@ class FinanceGateway:
             raise BankError('CSRF_DENIED','页面会话已变化，请刷新后重新查看操作。',403)
 
     def create_session(self):
+        if self.registered_mode:
+            raise BankError('REGISTERED_LOGIN_REQUIRED','请先完成手机号注册并选择本人画像。',401)
         catalog = self.demo_accounts.catalog()
         if catalog['accounts']:
             return self.demo_sessions.create(catalog['accounts'][0]['user_id'])
@@ -299,14 +390,34 @@ class FinanceGateway:
             self.bank._audit(db,workspace,'application_session_created',{'environment':'simulation'})
         return workspace,token
 
+    def _committed_personal_result(self, handler, workspace, mutation, *args, **kwargs):
+        from user_memory import privacy_revision
+        start = getattr(handler, '_navren_start_revision', None)
+        if start is None:
+            with closing(self.bank.connect()) as db:
+                start = privacy_revision(db, workspace)
+        result, receipt = self.personal_data.committed_response(
+            workspace, start, mutation, workspace, *args, **kwargs)
+        # 本请求真实提交的版本替代起始版本；原发送 guard 仍拒绝随后外部变化。
+        handler._navren_start_revision = receipt.privacy_after
+        return result
+
     def session_data(self,workspace,token):
         from user_memory import privacy_revision
         with closing(self.bank.connect()) as db:revision=privacy_revision(db,workspace)
-        return {'environment':'simulation','workspace_id':workspace,'csrf':self.csrf(token),'privacy_revision':revision,
+        identity=self.demo_sessions.describe(token)
+        result={'environment':'simulation','workspace_id':workspace,'csrf':self.csrf(token),'privacy_revision':revision,
                 'personal_revision':self.personal_data.revision(workspace),
-                'demo_identity':self.demo_sessions.describe(token),
-                'account_id':self.demo_sessions.describe(token).get('user_id'),
+                'demo_identity':identity,
+                'account_id':identity.get('user_id'),
                 'safe_switch':True}
+        if self.experience_provider is not None:
+            binding=self.experience_provider.validate(token,workspace)
+            result.update(registered_user_id=binding['registered_user_id'],persona_id=binding['persona_id'],
+                          auth_subject=binding['auth_subject'],
+                          session_generation=binding['generation'],auth_expires_at=binding['auth_expires_at'],
+                          lease_expires_at=binding['expires_at'])
+        return result
 
     def approve_speech(self, workspace, result, session_token=None):
         """只有后端已校验的本轮答复可以获取短期语音凭据。正文不放入凭据。"""
@@ -321,6 +432,11 @@ class FinanceGateway:
             personal=self.personal_data.revision(workspace)
             if result.get('personal_revision')!=personal or result.get('privacy_revision')!=revision:
                 return None
+            from local_knowledge.catalog_information_host import response_snapshot
+            catalog_information=response_snapshot(result)
+            if catalog_information is not None:
+                self.catalog_information_host.lookup(catalog_information,workspace=workspace,
+                    privacy_revision=revision,personal_revision=personal,request_id=result.get('bank_response_id'))
             receipt=secrets.token_urlsafe(32)
             with self._speech_lock:
                 now=time.monotonic()
@@ -332,6 +448,7 @@ class FinanceGateway:
                     'context':result.get('_answer_context'),'text':text,'market':result.get('market_snapshot'),
                     'service':result.get('service_snapshot'),
                     'metrics':result.get('financial_metric_snapshot'),
+                    'catalog_information':catalog_information,'request_id':result.get('bank_response_id'),
                     'metric_batches':result.get('financial_metric_batches',[]),
                     'session_hash':digest(session_token) if session_token else None})
         return receipt
@@ -352,6 +469,9 @@ class FinanceGateway:
             self.demo_sessions.validate(session_token,workspace)
         if value['expires']<=time.monotonic():
             raise BankError('SPEECH_RECEIPT_INVALID','这段答复没有有效的语音凭据，请重新查询。',403)
+        if value.get('catalog_information') is not None:
+            self.catalog_information_host.lookup(value['catalog_information'],workspace=workspace,
+                privacy_revision=value['privacy'],personal_revision=value['personal'],request_id=value['request_id'])
         return value
 
     def assert_speech_evidence(self,workspace,receipt,session_token=None, *, db):
@@ -359,7 +479,8 @@ class FinanceGateway:
         value=self.assert_speech_receipt(workspace,receipt,session_token)
         self.assert_response_evidence(workspace,value['privacy'],value['personal'],value['knowledge'],value['context'],
             db=db,market_snapshot=value.get('market'),metric_snapshot=value.get('metrics'),
-            service_snapshot=value.get('service'),metric_batches=value.get('metric_batches'))
+            service_snapshot=value.get('service'),metric_batches=value.get('metric_batches'),
+            catalog_information=value.get('catalog_information'))
         # Original/metric validation can take time; TTL must still hold when
         # control returns to the caller that will actually send the text/audio.
         return self.assert_speech_receipt(workspace,receipt,session_token)['text']
@@ -388,7 +509,8 @@ class FinanceGateway:
             value=self.assert_speech_receipt(workspace,receipt,session_token)
             with self.publication_guard(workspace,value['privacy'],value['personal'],value['knowledge'],value['context'],
                                      market_snapshot=value.get('market'),metric_snapshot=value.get('metrics'),
-                                     service_snapshot=value.get('service'),metric_batches=value.get('metric_batches')) as db:
+                                     service_snapshot=value.get('service'),metric_batches=value.get('metric_batches'),
+                                     catalog_information=value.get('catalog_information')) as db:
                 checkpoint=lambda:self.assert_speech_evidence(workspace,receipt,session_token,db=db)
                 token=_publication_checkpoint.set(checkpoint)
                 try:yield checkpoint()
@@ -400,12 +522,15 @@ class FinanceGateway:
             raise
 
     def assert_response_evidence(self,workspace,expected_privacy,expected_personal,knowledge_snapshot=None,expected_context=None,
-                                *,db,market_snapshot=None,metric_snapshot=None,service_snapshot=None,metric_batches=None):
+                                *,db,market_snapshot=None,metric_snapshot=None,service_snapshot=None,metric_batches=None,catalog_information=None):
         """只读末端复查；调用方须持有银行、公开库及适用服务规则锁。"""
         from user_memory import privacy_revision
         from simulated_bank.agent_guard import context_hash
         if privacy_revision(db,workspace)!=expected_privacy or self.personal_data.revision(workspace)!=expected_personal:
             raise BankError('PERSONAL_VERSION_CONFLICT','个人资料已变化，旧答复已丢弃，请重新查询。',409)
+        if catalog_information is not None:
+            self.catalog_information_host.lookup(catalog_information,workspace=workspace,
+                privacy_revision=expected_privacy,personal_revision=expected_personal)
         if expected_context and context_hash(db,workspace)!=expected_context:
             raise BankError('STALE_EVIDENCE','账户或资料已变化，旧答复已丢弃，请重新查询。',409)
         if metric_snapshot:self.financial_metrics.validate(workspace,metric_snapshot,db)
@@ -416,15 +541,17 @@ class FinanceGateway:
 
     @contextmanager
     def response_guard(self,workspace,expected_privacy,expected_personal,knowledge_snapshot=None,expected_context=None,
-                       *,market_snapshot=None,metric_snapshot=None,service_snapshot=None,metric_batches=None):
+                       *,market_snapshot=None,metric_snapshot=None,service_snapshot=None,metric_batches=None,catalog_information=None):
         """提交前验证和绑定；退出并提交成功后才能进入只读发布区。"""
         with ExitStack() as locks, self.bank.transaction() as db:
             locks.enter_context(self.operation_evidence.public_guard({'market':market_snapshot,'knowledge':knowledge_snapshot}))
+            locks.enter_context(self.catalog_information_host.guard(catalog_information,workspace=workspace,
+                privacy_revision=expected_privacy,personal_revision=expected_personal))
             if service_snapshot:
                 locks.enter_context(self.service_negotiations.evidence_guard(workspace,service_snapshot,db=db))
             checkpoint=lambda:self.assert_response_evidence(workspace,expected_privacy,expected_personal,knowledge_snapshot,expected_context,
                 db=db,market_snapshot=market_snapshot,metric_snapshot=metric_snapshot,
-                service_snapshot=service_snapshot,metric_batches=metric_batches)
+                service_snapshot=service_snapshot,metric_batches=metric_batches,catalog_information=catalog_information)
             checkpoint()
             token=_publication_checkpoint.set(checkpoint)
             try:
@@ -435,7 +562,7 @@ class FinanceGateway:
     @contextmanager
     def publication_guard(self,workspace,expected_privacy,expected_personal,knowledge_snapshot=None,expected_context=None,
                           *,market_snapshot=None,metric_snapshot=None,service_snapshot=None,metric_batches=None,
-                          before_send=None,budget_check=None,budget_remaining=None):
+                          before_send=None,budget_check=None,budget_remaining=None,catalog_information=None):
         """提交后重新按原锁序校验；发布区银行连接只读、释放时回滚空事务。"""
         if before_send is not None and not callable(before_send):raise TypeError('发布前处理器必须由本地服务注入。')
         if budget_check is not None and not callable(budget_check):raise TypeError('发布预算检查必须由本地服务注入。')
@@ -447,13 +574,15 @@ class FinanceGateway:
                 identity_guard=getattr(self.bank,'request_identity_guard',None)
                 if identity_guard:identity_guard(db)
                 locks.enter_context(self.operation_evidence.public_guard({'market':market_snapshot,'knowledge':knowledge_snapshot}))
+                locks.enter_context(self.catalog_information_host.guard(catalog_information,workspace=workspace,
+                    privacy_revision=expected_privacy,personal_revision=expected_personal))
                 if service_snapshot:
                     locks.enter_context(self.service_negotiations.evidence_guard(workspace,service_snapshot,db=db))
                 def validate():
                     if budget_check is not None:budget_check()
                     self.assert_response_evidence(workspace,expected_privacy,expected_personal,knowledge_snapshot,expected_context,
                         db=db,market_snapshot=market_snapshot,metric_snapshot=metric_snapshot,
-                        service_snapshot=service_snapshot,metric_batches=metric_batches)
+                        service_snapshot=service_snapshot,metric_batches=metric_batches,catalog_information=catalog_information)
                     if budget_check is not None:budget_check()
                 validate()
                 # 禁止发布区继续写入银行状态；此处无需也不能依赖后置commit。
@@ -544,6 +673,7 @@ class FinanceGateway:
         return build_cashflow_timeline(archive,horizon_days,workspace_id=workspace)
 
     def overview(self,workspace):
+        self.bank.process_due_remittances(workspace)
         archive = self.bank.customer_archive(workspace)
         accounts,profile,records = archive['accounts'],archive['profile'],archive['records']
         today = date.fromisoformat(archive['as_of'])
@@ -573,7 +703,9 @@ class FinanceGateway:
             if r['id'] not in linked and r['status']=='active' and r['next_charge_date']<=end:
                 commitments.append({'kind':'mandate','name':r['merchant'],'account_id':r['account_id'],
                                     'amount_minor':r['amount_minor'],'due_on':r['next_charge_date'],'evidence_id':r['id']})
+        reserved_schedules={r['scheduled_payment_id'] for r in records['remittances'] if r['status']=='scheduled'}
         for r in records['scheduled_payments']:
+            if r['id'] in reserved_schedules:continue
             if r['status']=='active' and r['next_due_on']<=end:
                 beneficiary=next((b for b in records['beneficiaries'] if b['id']==r['beneficiary_id']),None)
                 commitments.append({'kind':'scheduled_transfer','name':'定时转账 · '+(beneficiary['display_name'] if beneficiary else '模拟收款人'),
@@ -583,7 +715,16 @@ class FinanceGateway:
         cash = sum(r['balance_minor'] for r in accounts)
         assets = archive['financial_summary']
         held_by_account={a['id']:sum(h['amount_minor'] for h in records['fund_holds']
-                                    if h['account_id']==a['id'] and h['status']=='held') for a in accounts}
+                                    if h['account_id']==a['id'] and h['status']=='held')+
+                                sum(r['amount_minor'] for r in records['remittances']
+                                    if r['account_id']==a['id'] and r['status']=='scheduled') for a in accounts}
+        accounts=[{**a,'held_minor':held_by_account[a['id']],
+                   'available_minor':max(0,a['balance_minor']-held_by_account[a['id']])} for a in accounts]
+        connection_states=self.account_connections.overview_states(workspace)
+        account_connections={a['account_id']:b for b in connection_states for a in b['accounts']}
+        accounts=[{**a,'binding_id':account_connections[a['id']]['id'] if a['id'] in account_connections else None,
+                   'connection_status':account_connections[a['id']]['status'] if a['id'] in account_connections else 'connected',
+                   'connection_active':account_connections[a['id']]['active'] if a['id'] in account_connections else True} for a in accounts]
         card_views=[]
         for card in records['cards']:
             card_views.append({**card,
@@ -592,10 +733,11 @@ class FinanceGateway:
                 'limit_requests':[r for r in records['card_limit_requests'] if r['card_id']==card['id']],
                 'events':[e for e in records['card_events'] if e['card_id']==card['id']]})
         return {'environment':'simulation','workspace_id':workspace,'as_of':archive['as_of'],'version':archive['version'],
-                'accounts':accounts,'profile':profile,'holdings':records['holdings'],'lots':records['investment_lots'],
+                'accounts':accounts,'account_connections':connection_states,'profile':profile,'holdings':records['holdings'],'lots':records['investment_lots'],
                 'mandates':records['mandates'],'orders':records['orders'],'operations':records['operations'],
                 'cards':card_views,'card_applications':records['card_applications'],
                 'beneficiaries':records['beneficiaries'],'scheduled_payments':records['scheduled_payments'],
+                'payment_instructions':records['payment_instructions'],'remittances':records['remittances'],
                 'split_bills':records['split_bills'],'split_participants':records['split_participants'],
                 'subscriptions':records['subscriptions'],'subscription_events':records['subscription_events'],
                 'orchestration_tasks':records['orchestration_tasks'],'task_steps':records['task_steps'],
@@ -637,7 +779,8 @@ class FinanceGateway:
         strict_fields(payload,['action','account_id','product_id','amount_minor','mandate_id','card_id','control_type','enabled',
                                'limit_minor','requested_type','requested_limit_minor','idempotency_key','liquidity_floor_minor',
                                'beneficiary_id','reference','frequency','next_due_on','end_on','scheduled_payment_id',
-                               'split_id','participant_id','subscription_id','task_id','expires_on','hold_id','quote_ids'],
+                               'split_id','participant_id','subscription_id','task_id','expires_on','hold_id','quote_ids','remittance',
+                               'aa_bill','aa_share_id','aa_bill_id','replacement_id','purpose'],
                       ['action','account_id','idempotency_key'])
         core = {k:v for k,v in payload.items() if k!='liquidity_floor_minor'}
         for key in ('action','account_id','idempotency_key'):
@@ -645,13 +788,19 @@ class FinanceGateway:
                 raise BankError('INVALID_FIELDS','操作、账户和幂等键必须为字符串。')
         floor = integer(payload.get('liquidity_floor_minor',0),'保留资金')
         with closing(self.bank.connect()) as db:
+            if core['action']=='aa_create':
+                from simulated_bank.aa_payments import canonical
+                core=canonical(self.bank,db,workspace,core)
+            if core['action'] in ('transfer','schedule_transfer') and 'remittance' in core:
+                from simulated_bank.remittance import canonical_payload
+                core=canonical_payload(self.bank,db,workspace,core)
             existing = db.execute('SELECT id,payload_hash,state FROM operations WHERE workspace_id=? AND idempotency_key=?',(workspace,core['idempotency_key'])).fetchone()
         if not existing or existing['state'] not in TERMINAL:
             if core['action']=='purchase':
                 budget = self.budget(workspace,core['account_id'],floor)
                 if integer(core.get('amount_minor'),'申购金额',1)>budget['investable_minor']:
                     raise BankError('LIQUIDITY_GUARD','申购金额超过扣除保留资金及近期到期款后的可投资额度。',422)
-            elif core['action'] in ('transfer','reserve_funds'):
+            elif core['action']=='reserve_funds':
                 budget=self.budget(workspace,core['account_id'])
                 if integer(core.get('amount_minor'),'操作金额',1)>budget['investable_minor']:
                     raise BankError('LIQUIDITY_GUARD','金额超过扣除应急金、到期款和已预留资金后的可用额度。',422)
@@ -674,8 +823,13 @@ class FinanceGateway:
         return self.operation_view(workspace,op['id'])
 
     def operation_view(self,workspace,operation_id):
-        op = self.bank.operation(workspace,operation_id)
+        from simulated_bank.aa_payments import operation_view as aa_operation_view
         state = self.overview(workspace)
+        op = self.bank.operation(workspace,operation_id)
+        aa=None
+        if op['action'].startswith('aa_'):
+            aa_snapshot=aa_operation_view(self.bank,workspace,operation_id,include_operation=True)
+            op=aa_snapshot['operation'];aa=aa_snapshot['aa']
         payload = op['payload']
         product = next((p for p in self.bank.products(workspace) if p['id']==payload.get('product_id')),None)
         mandate = next((m for m in state['mandates'] if m['id']==payload.get('mandate_id')),None)
@@ -694,25 +848,43 @@ class FinanceGateway:
             policy = db.execute("SELECT details FROM audit WHERE workspace_id=? AND operation_id=? AND event='liquidity_policy' ORDER BY id LIMIT 1",(workspace,operation_id)).fetchone()
             agent_review = db.execute('SELECT status,policy_version,expires_at FROM agent_draft_reviews WHERE workspace_id=? AND operation_id=?',
                                       (workspace,operation_id)).fetchone()
+            strong_verification = self.bank.permissions.status(db,workspace,operation_id)
+            from simulated_bank.operation_mfa_evidence import operation_mfa_evidence
+            mfa_evidence = operation_mfa_evidence(db, workspace, operation_id, now=self.bank.clock(),
+                provider=self.bank.permissions.provider, status=strong_verification)
+            transfer_terms=self.bank.ordinary_transfer_terms(db,workspace,operation_id) if op['action']=='transfer' and 'remittance' not in payload else None
         floor = json.loads(policy['details'])['floor_minor'] if policy else 0
         return {'operation':op,'agent_review':dict(agent_review) if agent_review else None,'product':product,'mandate':mandate,'card':card,
+                'aa':aa,
+                **({'transfer_terms':transfer_terms} if op['action']=='transfer' and 'remittance' not in payload else {}),
+                'remittance':self.bank.remittances(workspace,operation_id,process_due=False) if 'remittance' in payload else None,
                 'beneficiary':beneficiary,'schedule':schedule,'split':split,'participant':participant,
                 'subscription':subscription,'task':task,'hold':hold,'quotes':quotes,
                 'card_application':{'requested_type':payload.get('requested_type'),
-                                    'requested_limit_minor':payload.get('requested_limit_minor')} if op['action']=='apply_card' else None,
+                                    'requested_limit_minor':payload.get('requested_limit_minor'),
+                                    'virtual_terms':{'purpose':payload.get('purpose','online_payment'),'fee_minor':0,
+                                        'validity_days':365,'credit_limit_minor':0,'real_payment_capability':False,
+                                        'single_transaction_limit_minor':payload.get('requested_limit_minor'),
+                                        'terms_version':'navren.virtual-card.demo/1'} if payload.get('requested_type')=='virtual' else None} if op['action']=='apply_card' else None,
                 'account':next(a for a in state['accounts'] if a['id']==payload['account_id']),
                 'budget':self.budget(workspace,payload['account_id'],floor,
                                      payload.get('hold_id') if op['action']=='book_services' else None),
                 'liquidity_floor_minor':floor,
-                'environment':'simulation','verification_required':op['permission']=='red'}
+                'environment':'simulation','verification_required':op['permission']=='red',
+                'strong_verification':strong_verification, 'operation_mfa_evidence':mfa_evidence}
 
     def confirm(self,workspace,operation_id,payload):
-        strict_fields(payload,['confirmed','confirmation_digest','verification_code'],['confirmed','confirmation_digest'])
+        try:
+            strict_fields(payload,['confirmed','confirmation_digest','verification_code','challenge_id'],['confirmed','confirmation_digest'])
+        except BankError:
+            self.bank.permissions.failed_attempt(workspace,operation_id,'INVALID_FIELDS',suspicious=True)
+            raise
+        self.bank.process_due_remittances(workspace)
         op = self.bank.operation(workspace,operation_id)
-        if op['state'] in TERMINAL:
-            result = self.bank.confirm(workspace,operation_id,{k:v for k,v in payload.items() if k!='verification_code'})
+        if op['state'] in TERMINAL or ('remittance' in op['payload'] and op['state'] in ('scheduled','failed')):
+            result = self.bank.confirm(workspace,operation_id,{k:v for k,v in payload.items() if k not in ('verification_code','challenge_id')})
             return {'operation':result,'overview':self.overview(workspace)}
-        if op['action'] in ('purchase','transfer','reserve_funds'):
+        if op['action'] in ('purchase','reserve_funds'):
             view = self.operation_view(workspace,operation_id)
             if op['payload']['amount_minor']>view['budget']['investable_minor']:
                 raise BankError('LIQUIDITY_GUARD','当前资金不足以满足已确认的应急保留、到期款和资金预留约束，请重新准备。',422)
@@ -721,15 +893,96 @@ class FinanceGateway:
             total=sum(q['price_minor'] for q in view['quotes'])
             if total>view['budget']['investable_minor']:
                 raise BankError('LIQUIDITY_GUARD','当前可用资金不足以完成预约，请先核对预留和到期款。',422)
-        body = {k:v for k,v in payload.items() if k!='verification_code'}
+        body = {k:v for k,v in payload.items() if k not in ('verification_code','challenge_id')}
         if body['confirmed'] is not True: raise BankError('CONFIRMATION_REQUIRED','请明确确认此操作。')
         if not isinstance(body['confirmation_digest'],str) or body['confirmation_digest']!=op['confirmation_digest']:
+            self.bank.permissions.failed_attempt(workspace,operation_id,'CONFIRMATION_MISMATCH',suspicious=True)
             raise BankError('CONFIRMATION_MISMATCH','确认摘要不一致。',409)
         if op['permission']=='red':
-            grant = self.bank.verify(workspace,operation_id,{'verification_code':payload.get('verification_code')})
+            grant = self.bank.verify(workspace,operation_id,{'verification_code':payload.get('verification_code'),
+                                                          'challenge_id':payload.get('challenge_id')})
             body['verification_token'] = grant['verification_token']
         result = self.bank.confirm(workspace,operation_id,body)
+        if op['action']=='password_change':
+            return {'operation':result,'relogin_required':True,'sessions_revoked':True,
+                    'credential_scope':'simulated_bank_access'}
         return {'operation':result,'overview':self.overview(workspace)}
+
+    def prepare_remittance(self,workspace,payload):
+        fields={'account_id','card_id','sender_name','sender_phone','recipient_name','recipient_account',
+                'recipient_bank','recipient_branch','amount_minor','purpose','message','mode','idempotency_key'}
+        strict_fields(payload,fields,fields-{'message','sender_name','sender_phone'})
+        if any(not isinstance(payload[k],str) or not 1<=len(payload[k])<=128 for k in ('account_id','idempotency_key')):
+            raise BankError('INVALID_FIELDS','账户和幂等键必须为不超过128字符的字符串。')
+        integer(payload['amount_minor'],'汇款金额',1)
+        if payload['mode'] not in ('realtime','ordinary','next_day'):
+            raise BankError('INVALID_REMITTANCE_MODE','汇款方式无效。')
+        form={k:payload.get(k,'') for k in fields-{'account_id','amount_minor','idempotency_key','sender_name','sender_phone'}}
+        core={'action':'transfer' if payload['mode']=='realtime' else 'schedule_transfer',
+              'account_id':payload['account_id'],'amount_minor':payload['amount_minor'],
+              'idempotency_key':payload['idempotency_key'],'remittance':form}
+        if core['action']=='schedule_transfer':
+            with closing(self.bank.connect()) as db:
+                ws=self.bank._workspace(db,workspace)
+                existing=db.execute('SELECT payload FROM operations WHERE workspace_id=? AND idempotency_key=?',
+                                    (workspace,payload['idempotency_key'])).fetchone()
+                old=json.loads(existing['payload']) if existing else {}
+                due=old.get('next_due_on') or (date.fromisoformat(ws['as_of'])+timedelta(days=1)).isoformat()
+            core.update(frequency='once',next_due_on=due)
+        return self.prepare(workspace,core)
+
+    def prepare_aa(self,workspace,payload,*,kind='create',object_id=None,agent_origin=False):
+        from simulated_bank.aa_payments import identity,share_row,bill_row,text
+        if kind=='create':
+            fields={'account_id','title','total_minor','split_mode','participants','due_at','source_transaction_id','source_consumption_id','attachment_ids','idempotency_key'}
+            strict_fields(payload,fields,fields-{'due_at','source_transaction_id','source_consumption_id','attachment_ids'})
+            core={'action':'aa_create','account_id':payload['account_id'],'idempotency_key':payload['idempotency_key'],
+                  'aa_bill':{k:v for k,v in payload.items() if k not in ('account_id','idempotency_key')}}
+        elif kind=='pay':
+            strict_fields(payload,{'account_id','card_id','idempotency_key'},{'account_id','card_id','idempotency_key'})
+            core={**payload,'action':'aa_pay','aa_share_id':text(object_id,'share_id')}
+        else:
+            strict_fields(payload,{'idempotency_key'},{'idempotency_key'})
+            with closing(self.bank.connect()) as db:
+                identity(db,workspace=workspace)
+                if kind=='cancel':
+                    bill=bill_row(db,object_id)
+                    if bill['creator_workspace']!=workspace:raise BankError('AA_NOT_FOUND','AA账单不存在或无权访问。',404)
+                    account_id=bill['account_id'];field='aa_bill_id'
+                elif kind=='decline':
+                    share_row(db,workspace,object_id)
+                    account_id=self.bank._accounts(db,workspace)[0]['id'];field='aa_share_id'
+                else:raise BankError('INVALID_FIELDS','AA操作类型无效。')
+            core={'action':'aa_'+kind,'account_id':account_id,field:object_id,'idempotency_key':payload['idempotency_key']}
+        return self.prepare(workspace,core,agent_origin=agent_origin)
+
+    def aa_bills(self,workspace,bill_id=None):
+        from simulated_bank.aa_payments import bills
+        return bills(self.bank,workspace,bill_id)
+
+    def aa_consumptions(self,workspace,query):
+        from simulated_bank.aa_evidence import consumptions
+        if set(query)-{'q','from','to','limit','offset'} or any(len(v)!=1 for v in query.values()):
+            raise BankError('INVALID_QUERY','消费查询参数无效。',400)
+        return consumptions(self.bank,workspace,q=query.get('q',[''])[0],
+            from_day=query.get('from',[None])[0],to_day=query.get('to',[None])[0],
+            limit=self.page_number(query,'limit',20,1,50),offset=self.page_number(query,'offset',0,0,10000))
+
+    def aa_attachment(self,workspace,attachment_id=None,payload=None,*,delete=False):
+        from simulated_bank.aa_evidence import upload,read_attachment,delete_attachment
+        if delete:
+            strict_fields(payload,[])
+            return delete_attachment(self.bank,workspace,attachment_id)
+        if payload is not None:return upload(self.bank,workspace,payload)
+        return read_attachment(self.bank,workspace,attachment_id)
+
+    def payment_contacts(self,workspace,payload=None,contact_id=None,action=None):
+        from simulated_bank.aa_payments import contacts
+        return contacts(self.bank,workspace,payload,contact_id,action)
+
+    def remittance_contacts(self,workspace,payload=None,contact_id=None,action=None):
+        from simulated_bank.remittance_contacts import contacts
+        return contacts(self.bank,workspace,payload,contact_id,action)
 
     def _audit_disconnected_response(self,path,result,workspace):
         match = re.fullmatch(r'/api/finance/operations/([a-f0-9]{32})/confirm',path)
@@ -751,16 +1004,33 @@ class FinanceGateway:
                   f'workspace_ref={workspace_ref} '
                   f'error={type(error).__name__}',file=sys.stderr)
 
+    @property
+    def security_events(self):
+        """可信HTTP/Agent宿主接口，不注册为模型工具；计数复用原permission_security。"""
+        return self.bank.permissions.events
+
     def dispatch(self,handler):
+        if not urlsplit(handler.path).path.startswith('/api/finance'):return False
+        return self.security_events.audit_http(handler,self._dispatch_finance)
+
+    def _dispatch_finance(self,handler):
         parsed = urlsplit(handler.path)
         if not parsed.path.startswith('/api/finance'): return False
+        if parsed.path.startswith('/api/finance/research/'):
+            return self.research_workspace.dispatch(handler)
         cookie = None
         request_guard = None
         try:
             self.origin_check(handler)
-            path,query = parsed.path,parse_qs(parsed.query,keep_blank_values=parsed.path.startswith('/api/finance/data/'))
+            path,query = parsed.path,parse_qs(parsed.query,keep_blank_values=(
+                parsed.path=='/api/finance/messages' or parsed.path.startswith('/api/finance/messages/') or
+                parsed.path.startswith('/api/finance/data/') or
+                parsed.path=='/api/finance/account-connections' or parsed.path.startswith('/api/finance/account-connections/') or
+                parsed.path=='/api/finance/card-bindings' or
+                parsed.path in ('/api/finance/public-product-performance','/api/finance/public-money-products','/api/finance/public-research-products','/api/finance/connected-assets/transactions',
+                                '/api/finance/demo/accounts','/api/finance/dialogue-archive','/api/finance/simulation/snapshots')))
             if any(len(v)!=1 for v in query.values()): raise BankError('INVALID_QUERY','查询参数重复。')
-            if path=='/api/finance/demo/accounts' and handler.command=='GET':
+            if path=='/api/finance/demo/accounts' and handler.command=='GET' and not self.registered_mode:
                 if query:raise BankError('INVALID_QUERY','账户目录不接受身份参数。')
                 result={**self.demo_accounts.catalog(),'schema_version':1,'data_scope':'navren_synthetic'}
                 try:
@@ -780,11 +1050,89 @@ class FinanceGateway:
                     cookie = f'{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000'
                 handler._finance_json(200,self.session_data(workspace,token),cookie)
                 return True
+            if path=='/api/finance/security/password-session' and handler.command=='POST':
+                if self.registered_mode:
+                    raise BankError('REGISTERED_LOGIN_REQUIRED','注册体验请通过原手机号账号重新登录，不能另发匿名银行会话。',401)
+                from simulated_bank.security_credentials import restore
+                result=restore(self.bank,request_json(handler))
+                token=result.pop('session_token')
+                result.update(csrf=self.csrf(token))
+                handler._finance_json(200,result,f'{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000')
+                return True
             workspace,token = self.identity(handler)
             handler._navren_workspace=workspace
             request_guard=self.demo_sessions.request(token,workspace)
             request_guard.__enter__()
-            if handler.command=='GET':
+            if path.startswith('/api/finance/security/recovery'):
+                if parsed.query:
+                    raise BankError('INVALID_QUERY','金融锁恢复不接受查询参数。')
+                if handler.command=='GET' and path=='/api/finance/security/recovery':
+                    result=self.security_events.status(workspace)
+                elif handler.command=='POST':
+                    self.check_csrf(handler,token)
+                    result=self.security_events.recovery.dispatch(workspace,path,request_json(handler))
+                else:
+                    raise BankError('METHOD_NOT_ALLOWED','金融锁恢复接口方法无效。',405)
+                handler._finance_json(200,result)
+                return True
+            if path=='/api/finance/account-state':
+                if parsed.query:raise BankError('INVALID_QUERY','账号状态接口不接受查询参数。',400)
+                if getattr(handler,'finance_send_guard_contract',None)!='navren.finance-send-guard/1':
+                    raise BankError('ACCOUNT_STATE_SEND_GUARD_REQUIRED','账号状态缺少实际发送守卫。',503)
+                if handler.command not in ('GET','POST'):
+                    raise BankError('METHOD_NOT_ALLOWED','账号状态仅支持读取和保存。',405)
+                if handler.command=='POST':
+                    self.check_csrf(handler,token)
+                    payload=request_json(handler)
+                    with self.bank.transaction() as db:
+                        from user_memory import privacy_revision
+                        revision=privacy_revision(db,workspace)
+                        if (handler.headers.get('X-Navren-Workspace')!=workspace or
+                                handler.headers.get('X-Navren-Privacy-Revision')!=str(revision)):
+                            raise BankError('PRIVACY_REVISION_CHANGED','保存请求的工作区或资料权限已变化。',409)
+                        result=self.account_state.save(workspace,payload,bank_db=db)
+                        handler._navren_start_revision=revision
+                else:
+                    with self.bank.transaction() as db:
+                        from user_memory import privacy_revision
+                        handler._navren_start_revision=privacy_revision(db,workspace)
+                        result=self.account_state.read(workspace,bank_db=db)
+                handler._navren_finance_send_guard=lambda data:self.account_state.send_guard(workspace,result['revision'])
+                handler._finance_json(200,result)
+                return True
+            if path.startswith('/api/finance/messages/') and parsed.query:
+                raise BankError('INVALID_QUERY','消息详情与写入接口不接受查询参数。')
+            if path=='/api/finance/messages' and handler.command!='GET' and parsed.query:
+                raise BankError('INVALID_QUERY','消息写入接口不接受查询参数。')
+            if (path=='/api/finance/remittance-contacts' or path.startswith('/api/finance/remittance-contacts/')) and parsed.query:
+                raise BankError('INVALID_QUERY','收款联系人接口不接受查询参数。')
+            if path=='/api/finance/personal-profile' and parsed.query:
+                raise BankError('INVALID_QUERY','账户资料接口不接受查询参数。')
+            if path=='/api/finance/session/logout':
+                if handler.command!='POST':
+                    raise BankError('METHOD_NOT_ALLOWED','退出接口仅接受POST。',405)
+                if parsed.query:
+                    raise BankError('INVALID_QUERY','退出接口不接受查询参数。',400)
+                self.check_csrf(handler,token)
+                strict_fields(request_json(handler),[])
+                # 银行写锁内重新校验精确请求令牌；不重置工作区，也不撤销其他会话。
+                with self.bank.transaction() as db:
+                    hashed=digest(token)
+                    current=db.execute('SELECT token_hash FROM demo_sessions WHERE token_hash=?',(hashed,)).fetchone()
+                    if current:
+                        db.execute('UPDATE demo_sessions SET revoked=1 WHERE token_hash=?',(hashed,))
+                    else:
+                        db.execute('INSERT INTO demo_sessions VALUES(?,?,?,?,?,1)',
+                            (hashed,workspace,'legacy',0,self.bank.clock()))
+                    self.bank._audit(db,workspace,'account_logout',{})
+                # 此回执仅证明认证终止；旧令牌已撤销，不能再作为私有资料发布绑定。
+                handler._navren_workspace=None
+                handler._navren_session_token=None
+                handler._finance_json(200,{'logged_out':True,'old_requests_revoked':True,
+                    'public_session_logout_required':True},
+                    f'{COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
+                return True
+            if handler.command=='GET' or path.startswith('/api/finance/messages') or path=='/api/finance/personal-profile':
                 from user_memory import privacy_revision
                 with closing(self.bank.connect()) as db:handler._navren_start_revision=privacy_revision(db,workspace)
             if handler.command=='GET':
@@ -794,9 +1142,18 @@ class FinanceGateway:
                 elif path=='/api/finance/graph/evidence':allowed={'source','table','id'}
                 elif path=='/api/finance/reports/snapshot':allowed={'source','source_version','month','year'}
                 elif path=='/api/finance/public-products':allowed={'q','offset','limit'}
+                elif path=='/api/finance/public-products/sync-status':allowed=set()
+                elif path=='/api/finance/public-product-performance':allowed={'code','catalog_version'}
+                elif path=='/api/finance/public-research-products':allowed={'code'}
                 elif path=='/api/finance/budget':allowed={'account_id'}
                 elif path=='/api/finance/metrics':allowed={'days'}
+                elif path=='/api/finance/aa/consumptions':allowed={'q','from','to','limit','offset'}
+                elif path=='/api/finance/account-connections':allowed={'kind','institution'}
+                elif path=='/api/finance/messages':allowed={'view','category','unread','offset','limit'}
                 elif path=='/api/finance/demo/history':allowed={'table','period','limit','offset'}
+                elif path=='/api/finance/dialogue-archive':allowed={'cursor','limit'}
+                elif path=='/api/finance/simulation/snapshots':allowed={'from','to'}
+                elif path=='/api/finance/connected-assets/transactions':allowed={'month','account_id','limit','offset','kind'}
                 elif path.startswith('/api/finance/data/'):
                     from financial_data_service.service import OPERATIONS
                     operation = path[len('/api/finance/data/'):]
@@ -808,6 +1165,37 @@ class FinanceGateway:
                     else:
                         allowed = OPERATIONS[operation]
                 if set(query)-allowed: raise BankError('INVALID_QUERY','查询参数无效。')
+                if path=='/api/finance/dialogue-archive':
+                    if any(not values[0] for values in query.values()):raise BankError('INVALID_QUERY','历史分页参数不能为空。',400)
+                    if getattr(handler,'finance_send_guard_contract',None)!='navren.finance-send-guard/1':
+                        raise BankError('FINANCE_SEND_GUARD_REQUIRED','当前入口尚未接入受控历史发送。',503)
+                    reader=getattr(self,'dialogue_archive',None)
+                    if reader is None:raise BankError('DIALOGUE_ARCHIVE_UNAVAILABLE','完整聊天归档尚未装配。',503)
+                    raw_limit=query.get('limit',['20'])[0]
+                    if not re.fullmatch(r'[0-9]{1,2}',raw_limit) or not 1<=int(raw_limit)<=50:
+                        raise BankError('INVALID_QUERY','历史分页数量须为1至50。',400)
+                    page,capture=reader.read_page(workspace,cursor=query.get('cursor',[None])[0],limit=int(raw_limit))
+                    handler._navren_finance_send_guard=lambda body:reader.send_guard(workspace,capture,body)
+                    handler._finance_json(200,page);return True
+                if path=='/api/finance/simulation/snapshots':
+                    if any(not values[0] for values in query.values()):raise BankError('INVALID_QUERY','快照日期不能为空。',400)
+                    if not self.registered_mode:raise BankError('REGISTERED_LOGIN_REQUIRED','仅用于本人注册实例。',401)
+                    if getattr(handler,'finance_send_guard_contract',None)!='navren.finance-send-guard/1':
+                        raise BankError('FINANCE_SEND_GUARD_REQUIRED','当前入口尚未接入受控快照发送。',503)
+                    from simulated_bank.living_simulation import LivingError
+                    try:
+                        result=self.living_simulation.read_snapshots(workspace,start_on=query.get('from',[None])[0],end_on=query.get('to',[None])[0])
+                    except LivingError:
+                        raise BankError('LIVING_SNAPSHOT_UNAVAILABLE','运行快照待重新核验，未返回旧版本。',409) from None
+                    version=result['ledger_version']
+                    handler._navren_finance_send_guard=lambda body:self.living_simulation.snapshot_send_guard(workspace,version)
+                    handler._finance_json(200,result);return True
+                if path=='/api/finance/demo/accounts':
+                    identity=self.session_data(workspace,token)
+                    result={**self.demo_accounts.catalog(),'schema_version':1,'data_scope':'navren_synthetic',
+                            'workspace_binding':workspace,'current_account_id':identity['account_id'],
+                            'privacy_revision':identity['privacy_revision']}
+                    handler._finance_json(200,result);return True
                 if path.startswith('/api/finance/data/'):
                     if any(len(v)!=1 for v in query.values()):
                         raise BankError('INVALID_QUERY','独立财务读取参数不得重复。',400)
@@ -862,6 +1250,13 @@ class FinanceGateway:
                     return True
                 routes = {
                     '/api/finance/session':lambda:self.session_data(workspace,token),
+                    '/api/finance/connected-assets':lambda:self.connected_assets.overview(workspace),
+                    '/api/finance/account-connections':lambda:self.account_connections.read(workspace,query),
+                    '/api/finance/connected-assets/transactions':lambda:self.connected_assets.transactions(
+                        workspace,month=query.get('month',[datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y-%m')])[0],
+                        account_id=query.get('account_id',[None])[0],
+                        kind=query.get('kind',[None])[0],
+                        limit=self.page_number(query,'limit',8,1,100),offset=self.page_number(query,'offset',0,0,10000)),
                     '/api/finance/demo/current':lambda:self.demo_accounts.current(workspace),
                     '/api/finance/demo/history':lambda:self.demo_accounts.history(workspace,query.get('table',['cash_transactions'])[0],
                         period=query.get('period',[None])[0],limit=self.page_number(query,'limit',100,1,500),
@@ -883,15 +1278,36 @@ class FinanceGateway:
                     '/api/finance/periodic-charges':lambda:self.periodic_charges(workspace),
                     '/api/finance/audit':lambda:self.bank.audit(workspace),
                     '/api/finance/memories':lambda:self.memories.state(workspace),
+                    '/api/finance/personal-profile':lambda:self.personal_profile.read(workspace,identity=self.demo_sessions.describe(token)),
                     '/api/finance/personal-graph':lambda:self.financial_graph.query(workspace,{k:v[0] for k,v in query.items()}),
                     '/api/finance/graph/evidence':lambda:self.financial_graph.evidence(workspace,{k:v[0] for k,v in query.items()}),
                     '/api/finance/public-products':lambda:self.public_products.read(query.get('q',[''])[0],self.page_number(query,'limit',24,1,500),self.page_number(query,'offset',0,0,100000)),
+                    '/api/finance/public-products/sync-status':self.public_products.sync_status,
+                    '/api/finance/remittances':lambda:self.bank.remittances(workspace),
+                    '/api/finance/payment-contacts':lambda:self.payment_contacts(workspace),
+                    '/api/finance/remittance-contacts':lambda:self.remittance_contacts(workspace),
+                    '/api/finance/aa/bills':lambda:self.aa_bills(workspace),
+                    '/api/finance/aa/consumptions':lambda:self.aa_consumptions(workspace,query),
+                    '/api/finance/public-product-performance':lambda:self.public_product_performance(query),
+                    '/api/finance/public-money-products':lambda:self.public_money_products_read(),
+                    '/api/finance/public-research-products':lambda:self.public_research_products_read(query),
                     '/api/finance/financial-records':lambda:self.financial_records(workspace),
                     '/api/finance/service-negotiations':lambda:self.service_negotiations.applications(workspace),
                     '/api/finance/demo-code':lambda:{'code':self.demo_code(token),'notice':'仅用于模拟额外验证；不要发送到对话。'},
                 }
                 match = re.fullmatch(r'/api/finance/operations/([a-f0-9]{32})',path)
                 if path in routes: result = routes[path]()
+                elif path=='/api/finance/messages':result=self.messages.read(workspace,query,expected_privacy=handler._navren_start_revision)
+                elif path=='/api/finance/messages/summary':result=self.messages.read(workspace,summary=True,expected_privacy=handler._navren_start_revision)
+                elif re.fullmatch(r'/api/finance/messages/[a-f0-9]{32}',path):
+                    result=self.messages.read(workspace,message_id=path.rsplit('/',1)[1],expected_privacy=handler._navren_start_revision)
+                elif re.fullmatch(r'/api/finance/aa/bills/[a-f0-9]{32}',path):
+                    result=self.aa_bills(workspace,path.split('/')[-1])
+                elif re.fullmatch(r'/api/finance/aa/attachments/[a-f0-9]{32}',path):
+                    if query:raise BankError('INVALID_QUERY','图片凭证不接受额外查询参数。',400)
+                    result=self.aa_attachment(workspace,path.split('/')[-1])
+                elif re.fullmatch(r'/api/finance/remittances/[a-f0-9]{32}',path):
+                    result=self.bank.remittances(workspace,path.rsplit('/',1)[1])
                 elif path.startswith('/api/finance/goals/drafts/'):
                     result=self.goals.draft(workspace,path.rsplit('/',1)[1])
                 elif path.startswith('/api/finance/goals/'):
@@ -904,13 +1320,17 @@ class FinanceGateway:
                 else: raise BankError('NOT_FOUND','银行接口不存在。',404)
             elif handler.command=='POST':
                 self.check_csrf(handler,token)
-                match = re.fullmatch(r'/api/finance/operations/([a-f0-9]{32})/(confirm|cancel)',path)
+                match = re.fullmatch(r'/api/finance/operations/([a-f0-9]{32})/(confirm|cancel|sms)',path)
                 if path=='/api/finance/calendar/import/preview':
                     result=self.calendar.events.preview(workspace,request_text(handler))
                 elif path=='/api/finance/statements/preview':
                     result = self.statements.preview(workspace,request_text(handler))
                 else:
                     payload = request_json(handler)
+                    if path.startswith('/api/finance/account-connections') and parsed.query:
+                        raise BankError('INVALID_QUERY','平台关联写入不接受查询参数。',400)
+                    if path=='/api/finance/card-bindings' and parsed.query:
+                        raise BankError('INVALID_QUERY','银行卡登记接口不接受查询参数。',400)
                     if path.startswith(('/api/finance/memories','/api/finance/memory-relations/','/api/finance/profile-observations/')):
                         if type(payload.get('expected_revision')) is not int:
                             raise BankError('PERSONAL_VERSION_REQUIRED','请先读取当前个人资料，再提交版本绑定的修改。',409)
@@ -967,25 +1387,65 @@ class FinanceGateway:
                     elif calendar_read:
                         strict_fields(payload,[]);result=self.calendar.events.read_reminder(workspace,calendar_read[1])
                     elif path=='/api/finance/statements/commit': result = self.statements.commit(workspace,payload)
-                    elif observation_match: result = self.personal_graph.update(workspace,observation_match[1],payload)
+                    elif observation_match:
+                        result=self._committed_personal_result(handler,workspace,
+                            self.personal_graph.update,observation_match[1],payload)
                     elif path=='/api/finance/statements/cancel': result = self.statements.cancel(workspace,payload)
                     elif path=='/api/finance/service-negotiations/preview': result = self.service_negotiations.preview(workspace,payload)
                     elif service_accept: result = self.service_negotiations.accept(workspace,service_accept[1],payload)
                     elif path=='/api/finance/source': result = self.set_source(workspace,payload)
-                    elif path=='/api/finance/memories': result = self.memories.create(workspace,payload)
-                    elif path=='/api/finance/memories/settings': result = self.memories.set_enabled(workspace,payload)
-                    elif memory_match and memory_match[2]=='correct': result = self.memories.correct(workspace,memory_match[1],payload)
-                    elif memory_match and memory_match[2]=='delete': result = self.memories.delete(workspace,memory_match[1],payload)
-                    elif memory_relation_match: result = self.memories.add_relation(workspace,memory_relation_match[1],payload)
+                    elif path=='/api/finance/memories':
+                        result=self._committed_personal_result(handler,workspace,self.memories.create,payload)
+                    elif path=='/api/finance/personal-profile':result=self.personal_profile.save(workspace,payload,
+                        identity=self.demo_sessions.describe(token),expected_privacy=handler._navren_start_revision)
+                    elif path=='/api/finance/memories/settings':
+                        result=self._committed_personal_result(handler,workspace,self.memories.set_enabled,payload)
+                    elif memory_match and memory_match[2]=='correct':
+                        result=self._committed_personal_result(handler,workspace,
+                            self.memories.correct,memory_match[1],payload)
+                    elif memory_match and memory_match[2]=='delete':
+                        result=self._committed_personal_result(handler,workspace,
+                            self.memories.delete,memory_match[1],payload)
+                    elif memory_relation_match:
+                        result=self._committed_personal_result(handler,workspace,
+                            self.memories.add_relation,memory_relation_match[1],payload)
                     elif memory_relation_delete:
                         strict_fields(payload,['expected_revision'],['expected_revision'])
-                        result = self.memories.delete_relation(workspace,memory_relation_delete[1],payload['expected_revision'])
+                        result=self._committed_personal_result(handler,workspace,
+                            self.memories.delete_relation,memory_relation_delete[1],payload['expected_revision'])
                     elif path=='/api/finance/simulation/advance':
+                        if self.registered_mode:
+                            raise BankError('LIVING_CLOCK_MANAGED','注册实例随服务器时间持续模拟，不能手动生成未来交易。',409)
                         strict_fields(payload,['days','confirmed'],['days','confirmed'])
                         if payload['confirmed'] is not True:
                             raise BankError('CONFIRMATION_REQUIRED','推进模拟日期需要明确确认。')
                         result=self.bank.advance_days(workspace,payload['days'])
                     elif path=='/api/finance/operations/prepare': result = self.prepare(workspace,payload)
+                    elif path=='/api/finance/security/password-drafts':
+                        from simulated_bank.security_credentials import prepare as prepare_password
+                        result=prepare_password(self.bank,workspace,payload)
+                    elif path=='/api/finance/account-connections':result=self.account_connections.change(workspace,payload)
+                    elif path=='/api/finance/card-bindings':result=self.card_bindings.register(workspace,payload)
+                    elif path=='/api/finance/messages/read-all':result=self.messages.mark_read(workspace,payload,expected_privacy=handler._navren_start_revision)
+                    elif re.fullmatch(r'/api/finance/messages/[a-f0-9]{32}/read',path):
+                        result=self.messages.mark_read(workspace,payload,message_id=path.split('/')[-2],expected_privacy=handler._navren_start_revision)
+                    elif re.fullmatch(r'/api/finance/account-connections/[a-f0-9]{32}/disconnect',path):
+                        result=self.account_connections.change(workspace,payload,path.split('/')[-2])
+                    elif path=='/api/finance/remittances/prepare':result=self.prepare_remittance(workspace,payload)
+                    elif path=='/api/finance/aa/bills/prepare':result=self.prepare_aa(workspace,payload)
+                    elif path=='/api/finance/aa/attachments':result=self.aa_attachment(workspace,payload=payload)
+                    elif re.fullmatch(r'/api/finance/aa/attachments/[a-f0-9]{32}/delete',path):
+                        result=self.aa_attachment(workspace,path.split('/')[-2],payload,delete=True)
+                    elif re.fullmatch(r'/api/finance/aa/shares/[a-f0-9]{32}/(pay|decline)/prepare',path):
+                        result=self.prepare_aa(workspace,payload,kind=path.split('/')[-2],object_id=path.split('/')[-3])
+                    elif re.fullmatch(r'/api/finance/aa/bills/[a-f0-9]{32}/cancel/prepare',path):
+                        result=self.prepare_aa(workspace,payload,kind='cancel',object_id=path.split('/')[-3])
+                    elif path=='/api/finance/payment-contacts':result=self.payment_contacts(workspace,payload,action='create')
+                    elif path=='/api/finance/remittance-contacts':result=self.remittance_contacts(workspace,payload,action='create')
+                    elif re.fullmatch(r'/api/finance/remittance-contacts/[a-f0-9]{32}/(update|delete)',path):
+                        result=self.remittance_contacts(workspace,payload,path.split('/')[-2],path.split('/')[-1])
+                    elif re.fullmatch(r'/api/finance/payment-contacts/[a-f0-9]{32}/(update|delete)',path):
+                        result=self.payment_contacts(workspace,payload,path.split('/')[-2],path.split('/')[-1])
                     elif path=='/api/finance/profile': result = self.bank.profile(workspace,payload)
                     elif re.fullmatch(r'/api/finance/periodic-charges/[a-f0-9]{64}/mark',path):
                         candidate_match = re.fullmatch(r'/api/finance/periodic-charges/([a-f0-9]{64})/mark',path)
@@ -995,12 +1455,23 @@ class FinanceGateway:
                         service=self.bank if source=='simulation' else self.statements
                         result=service.mark_periodic_candidate(workspace,{'candidate_id':candidate_match[1],'decision':payload['decision']})
                     elif match and match[2]=='confirm': result = self.confirm(workspace,match[1],payload)
+                    elif match and match[2]=='sms':
+                        strict_fields(payload,[])
+                        result = self.bank.start_sms_verification(workspace,match[1])
                     elif match:
                         strict_fields(payload,[])
                         result = self.bank.cancel(workspace,match[1])
                     else: raise BankError('NOT_FOUND','银行接口不存在。',404)
             else: raise BankError('METHOD_NOT_ALLOWED','此接口不支持该方法。',405)
             try:
+                if self.registered_mode and path=='/api/finance/personal-profile' and isinstance(result,dict) and 'account_revision' in result:
+                    handler._navren_finance_send_guard=lambda data:self.account_state.send_guard(workspace,result['account_revision'])
+                if (isinstance(result,dict) and result.get('sessions_revoked') is True
+                        and result.get('operation',{}).get('action')=='password_change'
+                        and result['operation'].get('state')=='succeeded'):
+                    handler._navren_workspace=None
+                    handler._navren_session_token=None
+                    cookie=f'{COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'
                 handler._finance_json(200,result,cookie)
             except ConnectionError:
                 # Only classify failures from writing a completed HTTP response as client disconnects.
@@ -1014,6 +1485,60 @@ class FinanceGateway:
         finally:
             if request_guard:request_guard.__exit__(None,None,None)
         return True
+
+    def public_money_products_read(self):
+        if self.public_money_products is None:
+            with self._product_performance_lock:
+                if self.public_money_products is None:
+                    from product_performance import PublicMoneyProducts
+                    self.public_money_products = PublicMoneyProducts()
+        return self.public_money_products.read()
+
+    def public_research_products_read(self, query):
+        if (set(query) - {'code'} or any(len(v) != 1 for v in query.values())
+                or ('code' in query and not re.fullmatch(r'[0-9]{6}', query['code'][0]))):
+            raise BankError('INVALID_QUERY', '产品研究查询参数无效。')
+        if self.public_product_research is None:
+            with self._product_performance_lock:
+                if self.public_product_research is None:
+                    from product_research import PublicProductResearch
+                    self.public_product_research = PublicProductResearch(self.public_products)
+        code = query.get('code', [None])[0]
+        result = self.public_product_research.read(code)
+        if code is not None and result.get('ranking_complete') and not result['products']:
+            raise BankError('OBJECT_NOT_FOUND', '公开目录中未找到该份额。', 404)
+        return result
+
+    def public_product_performance(self, query):
+        """业绩资料单独读取；销售目录身份与行情来源不得互相替代。"""
+        if set(query)-{'code','catalog_version'} or any(len(v)!=1 for v in query.values()):
+            raise BankError('INVALID_QUERY','产品业绩查询参数无效。')
+        code = query.get('code',[''])[0]
+        expected = query.get('catalog_version',[None])[0]
+        if not isinstance(code,str) or not re.fullmatch(r'[0-9]{6}',code):
+            raise BankError('INVALID_PRODUCT_CODE','基金份额代码须为六位数字。')
+        if expected is not None and not re.fullmatch(r'[a-f0-9]{64}',expected):
+            raise BankError('INVALID_PRODUCT_VERSION','产品目录版本无效。')
+        catalog = self.public_products.read(query=code,limit=500)
+        version = catalog.get('catalog_version')
+        if not version or catalog.get('status')=='unavailable':
+            raise BankError('PRODUCT_CATALOG_UNAVAILABLE','产品目录暂时无法读取，请稍后重试。',503)
+        if expected is not None and expected != version:
+            raise BankError('OBJECT_VERSION_CHANGED','产品目录已更新，请重新读取产品。',409)
+        product = next((p for p in catalog.get('products',[]) if p.get('code')==code),None)
+        if product is None:
+            raise BankError('OBJECT_NOT_FOUND','微众公开目录中未找到该产品。',404)
+        if self.product_performance is None:
+            with self._product_performance_lock:
+                if self.product_performance is None:
+                    from product_performance import ProductPerformance
+                    self.product_performance = ProductPerformance()
+        result = self.product_performance.read(product)
+        return {**result,'product_code':code,'product_name':product['name'],
+                'catalog_version':version,'catalog_source_date':catalog.get('source_date'),
+                'catalog_source_url':product.get('source_url'),
+                'catalog_fetch_status':catalog.get('fetch_status'),
+                'catalog_stale':catalog.get('stale',True),'executable':False}
 
     @staticmethod
     def page_number(query,key,default,minimum,maximum):

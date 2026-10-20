@@ -29,6 +29,7 @@ from urllib.parse import urlsplit
 from unittest.mock import patch
 
 
+if str(Path(__file__).resolve().parent) not in sys.path:sys.path.insert(0,str(Path(__file__).resolve().parent))
 ROOT = Path(__file__).resolve().parents[2]
 _parts = ROOT.parts
 _outer = next((i for i in range(len(_parts)-2)
@@ -163,8 +164,112 @@ def inspect_inputs(candidate, source_path, data_path):
             'database': database, 'questions': questions, 'public_manifest': public_manifest}
 
 
+REUSE_HANDOFF_SCHEMA = 'navren.baseline-affected-evidence-reuse/1'
+REUSE_REQUIRED_SCOPES = {'original_local_semantics', 'budget_and_wire', 'permissions',
+                         'public_evidence', 'final_publish_and_history', 'current_UI_contracts'}
+
+
+def baseline_reuse_gate(handoff_path, handoff_sha, sources, datasets):
+    """Admit baseline model measurement from retained proofs, without declaring G1 passed.
+
+    Original failed runs and changed contracts remain visible. This admits only the
+    authorized synthetic model campaign; it does not approve release or real MFA.
+    """
+    path = Path(handoff_path).resolve()
+    if not handoff_sha or sha(path) != handoff_sha:
+        raise ValueError('reuse_handoff_digest_mismatch')
+    value = json.loads(path.read_text())
+    if (value.get('schema') != REUSE_HANDOFF_SCHEMA or value.get('attested_by') != '/root'
+            or value.get('purpose') != 'baseline_acceptance'
+            or value.get('admission_scope') != 'original97_synthetic_model_measurement'
+            or value.get('overall_accepted') is not False or value.get('release_allowed') is not False
+            or value.get('original_G1_rewritten_as_pass') is not False
+            or value.get('external_reviews_allowed') is not False):
+        raise ValueError('reuse_handoff_scope_invalid')
+    if value.get('source_sha256') != sources or value.get('data_sha256') != datasets:
+        raise ValueError('reuse_handoff_source_or_data_mismatch')
+    root = Path(value.get('source_root', '')).resolve()
+    if root != ROOT.resolve():
+        raise ValueError('reuse_handoff_actual_running_root_mismatch')
+
+    tracked_evidence = {}
+
+    def reference(ref):
+        if not isinstance(ref, dict): raise ValueError('reuse_reference_missing')
+        file = checked_file(root, ref['path'])
+        if any(parent.is_symlink() for parent in file.parents if parent.is_relative_to(root)):
+            raise ValueError('reuse_reference_parent_symlink')
+        if sha(file) != ref.get('sha256'): raise ValueError('reuse_reference_digest_mismatch')
+        tracked_evidence[str(file)] = ref['sha256']
+        return json.loads(file.read_text())
+
+    auth = reference(value['direct_user_authorization'])
+    campaign = auth.get('baseline_campaign', {})
+    if (auth.get('approved') is not True
+            or auth.get('authorization_origin') != 'direct user reply in current conversation'
+            or campaign.get('purpose') != 'baseline_acceptance'
+            or campaign.get('maximum_API_tokens') != 12000000
+            or campaign.get('maximum_cny') != '35'
+            or campaign.get('original_Jev_ledger_and_budget_may_change') is not False
+            or campaign.get('external_development_or_result_review_allowed') is not False):
+        raise ValueError('reuse_direct_baseline_authorization_invalid')
+    original = reference(value['original_G1_run'])
+    if original.get('stage') != 'local' or original.get('status') == 'engineering_stage_passed':
+        raise ValueError('reuse_original_failed_G1_not_preserved')
+    previous = original.get('source_sha256')
+    if not isinstance(previous, dict) or not previous:
+        raise ValueError('reuse_original_source_provenance_missing')
+    changed = {name for name in set(previous) | set(sources) if previous.get(name) != sources.get(name)}
+    impacts = value.get('impacts')
+    if (not isinstance(impacts, list) or len(impacts) != len(changed)
+            or {row.get('path') for row in impacts} != changed):
+        raise ValueError('reuse_all_changed_inputs_need_impact_disposition')
+    proofs = value.get('proofs')
+    if (not isinstance(proofs, list) or {p.get('scope') for p in proofs} != REUSE_REQUIRED_SCOPES
+            or len({p.get('id') for p in proofs}) != len(proofs)):
+        raise ValueError('reuse_required_component_proofs_missing')
+    proof_ids = {proof['id'] for proof in proofs}
+    for proof in proofs:
+        evidence = reference(proof['receipt'])
+        checks = proof.get('checks')
+        if not isinstance(checks, list) or not checks:
+            raise ValueError('reuse_actual_receipt_checks_missing')
+        for check in checks:
+            current = evidence
+            for part in check['pointer'].strip('/').split('/'):
+                part = part.replace('~1', '/').replace('~0', '~')
+                current = current[int(part)] if isinstance(current, list) else current[part]
+            if type(current) is not type(check['equals']) or current != check['equals']:
+                raise ValueError('reuse_actual_receipt_assertion_failed')
+    for impact in impacts:
+        if (impact.get('current_sha256') != sources.get(impact['path'])
+                or not impact.get('rationale') or not impact.get('proof_ids')
+                or not set(impact['proof_ids']) <= proof_ids):
+            raise ValueError('reuse_changed_input_proof_binding_missing')
+    conflicts = reference(value['original_issue_dispositions'])
+    if (conflicts.get('not_same_source_443_pass') is not True
+            or conflicts.get('unmapped_precise_original_IDs') != []):
+        raise ValueError('reuse_unidentified_original_issue_remains')
+    if not value.get('remaining_overall_gaps'):
+        raise ValueError('reuse_remaining_product_gaps_must_stay_visible')
+    basis = {key: value[key] for key in ('direct_user_authorization', 'original_G1_run',
+        'original_issue_dispositions', 'source_sha256', 'data_sha256', 'proofs', 'impacts')}
+    basis_sha = hashlib.sha256(json.dumps(basis, ensure_ascii=False, sort_keys=True,
+        separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+    return {'ready': True, 'scope': value['admission_scope'],
+            'reuse_basis_sha256': basis_sha, 'tracked_evidence': tracked_evidence,
+            'original_failed_G1_path': str(checked_file(root, value['original_G1_run']['path'])),
+            'basis': 'root_checked_affected_and_retained_component_evidence',
+            'original_G1_rewritten_as_pass': False, 'overall_accepted': False,
+            'release_allowed': False, 'handoff_sha256': handoff_sha,
+            'remaining_overall_gaps': value['remaining_overall_gaps']}
+
+
 def cloud_gate(handoff_path, handoff_sha, sources, datasets, contract):
     """模板旗标不够：要求同一冻结候选的实际 G1 正常退出及零跳过计数。"""
+    if handoff_path and handoff_sha and sha(handoff_path) == handoff_sha:
+        if json.loads(Path(handoff_path).read_text()).get('schema') == REUSE_HANDOFF_SCHEMA:
+            return baseline_reuse_gate(handoff_path, handoff_sha, sources, datasets)
     if not handoff_path or not handoff_sha or sha(handoff_path) != handoff_sha:
         raise ValueError('cloud_handoff_digest_missing_or_mismatch')
     gate = contract.handoff_gate(handoff_path, sources, datasets)
@@ -458,8 +563,12 @@ def paid_usage_audit(runtime, logs, turn_id=None, *, budget_limit=100000):
     calls = runtime.get('model_calls') if isinstance(runtime, dict) else None
     calls = calls if isinstance(calls, list) else []
     totals = {'primary':0, 'reviewer':0}
-    all_known = bool(calls)
-    known_lower, lower_observed = 0, False
+    known_zero = (isinstance(runtime,dict) and runtime.get('model_calls')==[] and logs==[]
+        and runtime.get('usage_complete')is True
+        and all(type(runtime.get(k))is int and runtime[k]==0 for k in
+            ('primary_tokens','reviewer_tokens','total_tokens','budget_tokens','primary_requests_sent','reviewer_requests_sent')))
+    all_known = bool(calls) or known_zero
+    known_lower, lower_observed = 0, known_zero
     if not isinstance(turn_id,str) or not 1<=len(turn_id)<=256:
         errors.append('actual_model_turn_identity_missing')
     def counters(value):
@@ -527,7 +636,7 @@ def paid_usage_audit(runtime, logs, turn_id=None, *, budget_limit=100000):
             'primary_tokens':totals['primary'] if all_known else None,
             'reviewer_tokens':totals['reviewer'] if all_known else None,
             'known_tokens_lower_bound':known_lower if lower_observed else None,
-            'actual_model_requests_sent':sum(call['request_sent']is True for call in calls)
+            'actual_model_requests_sent':0 if known_zero else sum(call['request_sent']is True for call in calls)
              if calls and all(isinstance(call,dict) and type(call.get('request_sent'))is bool for call in calls) else None,
             'provider_cost':None}
 
@@ -731,11 +840,12 @@ def execute_case(candidate, case, inputs, out, cloud, seconds):
                 stack.enter_context(patch.dict(os.environ, environment))
                 stack.enter_context(patch('urllib.request.urlopen', guarded_open))
                 stack.enter_context(patch.object(urllib.request.OpenerDirector, 'open', guarded_opener))
-                from agent_runtime.conversation import ConversationAgent
+                from agent_runtime.agent_factory import create_agent
                 from local_knowledge import LocalKnowledgeProvider
                 from local_knowledge.runtime import EvidenceRuntime
                 from local_knowledge.store import KnowledgeError
                 from server import create_server, ProxyHandler
+                from registered_entry_context import build_template,template_factory,attach_server,browser_bootstrap,browser_consume
                 from voice_gateway import VoiceGateway
                 from scripts.run_skill_acceptance import TracePrimary, TraceReviewer, safe_data
                 import fund_history
@@ -786,11 +896,18 @@ def execute_case(candidate, case, inputs, out, cloud, seconds):
                     class OfflineReviewer(ProtocolReviewer):
                         billing_mode = 'unpaid_fixture'
                     primary, reviewer = OfflinePrimary(deepcopy(case)), OfflineReviewer()
-                agent = ConversationAgent(primary, reviewer, max_rounds=8, max_tools=12,
-                                          timeout_seconds=max(.01, seconds-(time.monotonic()-started)), max_tokens=100000)
-                stack.enter_context(patch.object(ProxyHandler, 'log_message', lambda *args: None))
-                server = create_server(0, bank, voice=VoiceGateway(key='isolated-no-cloud-audio'),
-                                       conversation_agent=agent, evidence_runtime=runtime)
+                agent = create_agent(primary=primary, reviewer=reviewer, route_provider='off',
+                                     max_rounds=8, max_tools=12,
+                                     timeout_seconds=max(.01, seconds-(time.monotonic()-started)), max_tokens=100000)
+                def quiet_http_with_original_error(handler,format,*arguments):
+                    if format=='agent failure %s' and len(arguments)==1:
+                        print(arguments[0],file=sys.stderr,flush=True)  # 原server已脱敏type/frames，保留真正异常定位。
+                stack.enter_context(patch.object(ProxyHandler, 'log_message', quiet_http_with_original_error))
+                registered_template=build_template(candidate,state)
+                with template_factory(registered_template)as registered_factory:
+                    server = create_server(0, bank, voice=VoiceGateway(key='isolated-no-cloud-audio'),
+                                           conversation_agent=agent, evidence_runtime=runtime,finance_factory=registered_factory)
+                registered_host=attach_server(server,registered_template)
                 def close_server_before_restoring_guards():
                     nonlocal server, thread, runtime
                     if server is not None:
@@ -831,7 +948,9 @@ def execute_case(candidate, case, inputs, out, cloud, seconds):
                         response = error
                     with response:
                         return response.status, json.loads(response.read()), dict(response.headers)
+                browser_bootstrap(client,base)
                 code, session, _headers = request('/api/finance/session', {})
+                if code==200:browser_consume(client,base,session)
                 if code != 200:
                     raise ValueError('session_setup_failed')
                 workspace = session['workspace_id']
@@ -953,8 +1072,11 @@ def run(args):
             report['cloud_handoff_gate'] = cloud_gate(args.handoff, args.handoff_sha256,
                                                     inputs['sources'], inputs['datasets'], inputs['contract'])
             tracked[str(Path(args.handoff))] = sha(args.handoff)
-            tracked[report['cloud_handoff_gate']['g1_run_path']] = report['cloud_handoff_gate']['g1_run_sha256']
-            tracked[report['cloud_handoff_gate']['g1_execution_path']] = report['cloud_handoff_gate']['g1_execution_sha256']
+            if 'reuse_basis_sha256' in report['cloud_handoff_gate']:
+                tracked.update(report['cloud_handoff_gate']['tracked_evidence'])
+            else:
+                tracked[report['cloud_handoff_gate']['g1_run_path']] = report['cloud_handoff_gate']['g1_run_sha256']
+                tracked[report['cloud_handoff_gate']['g1_execution_path']] = report['cloud_handoff_gate']['g1_execution_sha256']
         report['status'] = 'running'
         atomic_json(out / 'results.json', report)
         for case in inputs['cases']:
@@ -969,8 +1091,14 @@ def run(args):
             if args.cloud:
                 cloud_gate(args.handoff, args.handoff_sha256, inputs['sources'], inputs['datasets'], inputs['contract'])
             case_started = time.monotonic()
-            record = execute_case(candidate, case, inputs, out, args.cloud,
-                                  min(BUDGET['task_seconds'], BUDGET['whole_seconds']-(case_started-started)))
+            if args.cloud:
+                from paid_campaign import execute
+                record = execute(args.paid_campaign, suite_id='integration-public-original-P10-P02',
+                    case_id=case['id'], output=out/case['id'], call=lambda identity: execute_case(candidate, case, inputs,
+                    out, True, min(BUDGET['task_seconds'], BUDGET['whole_seconds']-(case_started-started))))
+            else:
+                record = execute_case(candidate, case, inputs, out, args.cloud,
+                                      min(BUDGET['task_seconds'], BUDGET['whole_seconds']-(case_started-started)))
             # execute_case 的 return 经过 finally、服务关闭和临时目录退出；以此结束同一原任务。
             record['elapsed_seconds'] = time.monotonic()-case_started
             record['complete_prepare_http_cleanup'] = True
@@ -1021,9 +1149,19 @@ def main():
     parser.add_argument('--data-manifest', type=Path, required=True)
     parser.add_argument('--out-dir', type=Path, required=True)
     parser.add_argument('--cloud', action='store_true')
+    parser.add_argument('--paid-preflight-manifest', type=Path)
     parser.add_argument('--handoff', type=Path)
     parser.add_argument('--handoff-sha256')
     args = parser.parse_args()
+    if args.cloud:
+        try:
+            from paid_entry_admission import admit_cli
+            args.paid_admission = admit_cli(args, root=args.candidate, suite_id='integration-public-original-P10-P02', entrypoint=Path(__file__).resolve())
+            from paid_campaign import load_campaign
+            args.paid_campaign = load_campaign(args.candidate, args.paid_preflight_manifest)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print(json.dumps({'status':'paid_admission_blocked','reason':str(error),'provider_calls':0}))
+            return 2
     return run(args)
 
 

@@ -1,0 +1,273 @@
+/* 汇款付款卡：银行身份与账户余额分层，菜单沿用页面主题。 */
+.ah-payer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink-70);
+  font-size: var(--font-size-sm, 14px);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.ah-payer-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .14s, background .14s, box-shadow .14s;
+}
+
+.ah-payer-trigger:hover:enabled,
+.ah-payer-trigger[aria-expanded="true"] {
+  border-color: var(--border-emphasis, var(--primary-border));
+  background: var(--surface-card);
+}
+
+#accountHome .ah-payer-trigger:focus-visible {
+  outline: 0;
+  border-color: var(--primary);
+  background: var(--surface-card);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.ah-payer-trigger:disabled {
+  color: var(--ink-50);
+  cursor: default;
+}
+
+.ah-payer-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ah-payer-symbol {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid color-mix(in srgb, var(--ah-payer-brand, var(--primary-deep)) 12%, var(--surface-card));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ah-payer-brand, var(--primary-deep)) 7%, var(--surface-card));
+  color: var(--ah-payer-brand, var(--primary-deep));
+}
+
+.ah-payer-symbol svg {
+  display: block;
+  width: 23px;
+  height: 23px;
+}
+
+:is(.ah-payer-symbol, .ah-payer-option)[data-bank-theme="boc"] { --ah-payer-brand: #a51c30; }
+:is(.ah-payer-symbol, .ah-payer-option)[data-bank-theme="ccb"] { --ah-payer-brand: #005bac; }
+:is(.ah-payer-symbol, .ah-payer-option)[data-bank-theme="abc"] { --ah-payer-brand: #008577; }
+:is(.ah-payer-symbol, .ah-payer-option)[data-bank-theme="icbc"] { --ah-payer-brand: #bc2434; }
+:is(.ah-payer-symbol, .ah-payer-option)[data-bank-theme="cmb"] { --ah-payer-brand: #bd1532; }
+:is(.ah-payer-symbol, .ah-payer-option)[data-bank-theme="psbc"] { --ah-payer-brand: #007c45; }
+
+.ah-payer-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ah-payer-copy strong {
+  color: var(--ink);
+  font-size: var(--font-size-sm, 14px);
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ah-payer-copy small {
+  color: var(--ink-50);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ah-payer-chevron {
+  display: grid;
+  place-items: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-50);
+}
+
+.ah-payer-chevron svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ah-payer-trigger[aria-expanded="true"] .ah-payer-chevron {
+  transform: rotate(180deg);
+}
+
+.ah-payer-balance {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 1px 2px 0;
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.5;
+}
+
+.ah-payer-balance small {
+  flex-shrink: 0;
+  color: var(--ink-50);
+  font: inherit;
+  font-weight: 400;
+}
+
+.ah-payer-balance strong {
+  min-width: 0;
+  color: var(--ink-70);
+  font: inherit;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.ah-payer-menu {
+  position: fixed;
+  z-index: 1500;
+  box-sizing: border-box;
+  width: min(430px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(420px, calc(100dvh - 24px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-card);
+  color: var(--ink);
+  font-family: var(--body);
+  box-shadow: 0 5px 12px color-mix(in srgb, var(--ink) 5%, transparent),
+    0 16px 36px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.ah-payer-menu[hidden] {
+  display: none;
+}
+
+.ah-payer-menu-title {
+  padding: 5px 10px 9px;
+  margin: 0 0 3px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-50);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.ah-payer-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 66px;
+  margin: 2px 0;
+  padding: 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.ah-payer-option:hover {
+  background: var(--surface-hover, var(--primary-soft));
+}
+
+.ah-payer-menu .ah-payer-option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, var(--border));
+  outline-offset: -2px;
+  background: var(--primary-soft);
+}
+
+.ah-payer-option[aria-checked="true"] {
+  background: var(--primary-soft);
+}
+
+.ah-payer-option-balance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  max-width: 150px;
+  min-width: 0;
+  text-align: right;
+  line-height: 1.4;
+}
+
+.ah-payer-option-balance span {
+  color: var(--ink-50);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 400;
+}
+
+.ah-payer-option-balance strong {
+  color: var(--ink);
+  font-size: var(--font-size-sm, 14px);
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.ah-payer-check {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--primary-deep);
+  opacity: 0;
+}
+
+.ah-payer-check svg {
+  width: 17px;
+  height: 17px;
+}
+
+.ah-payer-option[aria-checked="true"] .ah-payer-check {
+  opacity: 1;
+}
+
+@media (max-width: 400px) {
+  .ah-payer-option { gap: 8px; padding: 9px 8px; grid-template-columns: minmax(0, 1fr) minmax(80px, .75fr) 16px; }
+  .ah-payer-option .ah-payer-identity { gap: 8px; }
+  .ah-payer-option .ah-payer-symbol { flex-basis: 30px; width: 30px; height: 30px; }
+  .ah-payer-option .ah-payer-symbol svg { width: 21px; height: 21px; }
+  .ah-payer-check { width: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ah-payer-trigger, .ah-payer-option { transition: none; }
+}

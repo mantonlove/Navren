@@ -114,12 +114,24 @@ class AgentBudgetCompactContracts(unittest.TestCase):
         cls.conversation = importlib.import_module("agent_runtime.conversation")
         cls.native = importlib.import_module("agent_runtime.native_client")
         cls.adapters = importlib.import_module("agent_runtime.model_adapters")
+        cls.request_budget = importlib.import_module("agent_runtime.request_budget")
         cls.boundaries = importlib.import_module("agent_runtime.data_boundary")
         cls.bank_tools = importlib.import_module("agent_runtime.bank_tools")
         cls.claims = importlib.import_module("agent_runtime.metric_claims")
         cls.gateway = importlib.import_module("finance_gateway")
         cls.BankError = importlib.import_module("simulated_bank").BankError
         cls.privacy_revision = staticmethod(importlib.import_module("user_memory").privacy_revision)
+        profile_client = cls.native.AIPingToolClient(key_loader=lambda: "offline-fixture-placeholder")
+        profile_wire = profile_client.serialized_request([
+            {"role": "system", "content": "离线预算配置核验"},
+            {"role": "user", "content": "仅核验模型 profile，不调用网络"}], [])
+        profile = cls.request_budget.estimate_request(profile_wire)
+        if (profile.get("model_id") != cls.native.AIPING_PRIMARY_MODEL
+                or profile.get("bound_method") != "official_dsv4_two_profiles_two_modes_max_20pct_plus1024"
+                or {row.get("profile") for row in profile.get("profiles", [])} != {"base", "0731"}
+                or profile.get("provider_bound_certified") is not False):
+            raise RuntimeError("canonical_aiping_v4_budget_profile_unavailable")
+        cls.primary_budget_profile = profile
         if source_manifest() != cls.before:
             raise RuntimeError("candidate_changed_during_import")
 
@@ -133,6 +145,12 @@ class AgentBudgetCompactContracts(unittest.TestCase):
             "authoring_snapshot_matches": all(cls.before.get(p) == v
                 for p, v in ORACLE["authoring_source_sha256"].items()),
             "cloud_model_calls": 0, "real_supplier_budget_gate_verified": False,
+            "offline_fixture": {"primary_provider": "ai_ping",
+                "primary_model_id": cls.native.AIPING_PRIMARY_MODEL,
+                "primary_bound_method": cls.primary_budget_profile["bound_method"],
+                "primary_profiles": sorted({row["profile"] for row in cls.primary_budget_profile["profiles"]}),
+                "provider_bound_certified": False,
+                "reviewer_provider": "ai_ping", "reviewer_model_id": cls.conversation.GLM_REVIEW_MODEL},
             "formal_financial_four_questions_verified": False,
             "observations": cls.observations}
         (cls.output / "suite-evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n")
@@ -181,7 +199,7 @@ class AgentBudgetCompactContracts(unittest.TestCase):
             ensure_ascii=False, sort_keys=True, default=str), flush=True)
 
     def reviewer_client(self, transport):
-        client = self.adapters.OpenAICompatibleJsonClient(provider="ai_ping", model_id="offline-glm-transport",
+        client = self.adapters.OpenAICompatibleJsonClient(provider="ai_ping", model_id=self.conversation.GLM_REVIEW_MODEL,
             url="https://offline.invalid/chat/completions", env_name="NAVREN_OFFLINE_KEY_UNUSED",
             keychain_service="NAVREN_OFFLINE_KEY_UNUSED", key_loader=lambda: "offline-fixture-placeholder",
             urlopen=transport, max_retries=0, log_path=str(self.directory / "review-provider.jsonl"))
@@ -189,11 +207,23 @@ class AgentBudgetCompactContracts(unittest.TestCase):
 
     def drive(self, primary_transport, reviewer_transport, *, native_capability=True,
               boundary_capability=True, missing_key=False):
-        primary = self.native.DeepSeekToolClient(urlopen=primary_transport,
+        primary = self.native.AIPingToolClient(urlopen=primary_transport,
             key_loader=(lambda: "") if missing_key else (lambda: "offline-fixture-placeholder"),
             log_path=str(self.directory / "native-provider.jsonl"))
-        primary.supports_compact_metric_sources = native_capability
         reviewer = self.reviewer_client(reviewer_transport)
+        self.assertEqual(primary.provider, "ai_ping")
+        self.assertEqual(primary.model_id, self.native.AIPING_PRIMARY_MODEL)
+        self.assertEqual(primary.billing_mode, "paid")
+        self.assertIs(type(reviewer), self.conversation.GLMConversationReviewer)
+        self.assertEqual(reviewer.client.provider, "ai_ping")
+        self.assertEqual(reviewer.client.model_id, self.conversation.GLM_REVIEW_MODEL)
+        self.assertTrue(reviewer.supports_financial_metric_catalog)
+        self.assertEqual(reviewer.billing_mode, "paid")
+        # The frozen suite predates the separate financial-metric-catalog capability.
+        # Keep its two compact-source booleans as the only negotiated matrix.
+        primary.supports_financial_metric_catalog = False
+        self.assertIs(primary.supports_financial_metric_catalog, False)
+        primary.supports_compact_metric_sources = native_capability
         agent = self.conversation.ConversationAgent(primary, reviewer, timeout_seconds=105, max_tokens=100000)
         original_tools, original_boundary = self.bank_tools.BankTools, self.boundaries.CloudDataBoundary
         owner = self
@@ -238,6 +268,16 @@ class AgentBudgetCompactContracts(unittest.TestCase):
         self.last_audit = audit
         self.last_result = result
         self.primary_transport, self.review_transport = primary_transport, reviewer_transport
+        for payload in primary_transport.requests:
+            self.assertEqual(payload["model"], self.native.AIPING_PRIMARY_MODEL)
+            names = {item.get("function", {}).get("name") for item in payload.get("tools", [])}
+            if names and names <= {"answer_facts", "answer_reviewed"} and "answer_reviewed" in names:
+                self.assertEqual(payload["tool_choice"], {
+                    "type": "function", "function": {"name": "answer_reviewed"}})
+        for payload in reviewer_transport.requests:
+            self.assertEqual(payload["model"], self.conversation.GLM_REVIEW_MODEL)
+            self.assertEqual(payload["reasoning_effort"], "low")
+            self.assertEqual(payload["response_format"], {"type": "json_object"})
         return result
 
     def approve_envelope(self, usage=None):
@@ -245,6 +285,14 @@ class AgentBudgetCompactContracts(unittest.TestCase):
         message = {"role": "assistant", "content": json.dumps({"verdict": "approve",
             "reason": "离线可信传输用于协议验收", "issues": []}, ensure_ascii=False)}
         return envelope(message, usage)
+
+    def reviewed_terminal_envelope(self, original_text, usage, finish_reason="stop"):
+        original_bytes = original_text.encode("utf-8")
+        arguments = {"text": original_bytes.decode("utf-8"),
+                     "claims": [], "draft_ids": [],
+                     "followups": []}
+        self.assertEqual(arguments["text"].encode("utf-8"), original_bytes)
+        return envelope(tool_call("answer_reviewed", arguments), usage, finish_reason)
 
     def final_from_view(self, payload, *, count=1, mutate=None):
         view = json.loads(next(message["content"] for message in reversed(payload["messages"])
@@ -332,7 +380,8 @@ class AgentBudgetCompactContracts(unittest.TestCase):
             p, r = OfflineTransport(response), OfflineTransport(self.approve_envelope())
             prefix, wanted_primary, wanted_review = 0, 1, 0
         else:
-            p = OfflineTransport(envelope(message, ORACLE["literal_valid_usage"]))
+            p = OfflineTransport(self.reviewed_terminal_envelope(message["content"],
+                ORACLE["literal_valid_usage"]))
             content = {"role": "assistant", "content": json.dumps({"verdict": "approve",
                 "reason": "可信协议夹具", "issues": []}, ensure_ascii=False)}
             response = envelope(content, usage, "length" if outcome == "failure" else "stop")
@@ -368,7 +417,7 @@ class AgentBudgetCompactContracts(unittest.TestCase):
             r = OfflineTransport(self.approve_envelope())
             expected_calls = (2, 0)
         else:
-            p = OfflineTransport(envelope({"role": "assistant", "content": "请说明需要比较的范围。"}, valid))
+            p = OfflineTransport(self.reviewed_terminal_envelope("请说明需要比较的范围。", valid))
             message = {"role": "assistant", "content": "not-json" if failure == "invalid_contract" else
                        json.dumps({"verdict": "approve", "reason": "部分答复", "issues": []}, ensure_ascii=False)}
             r = OfflineTransport(envelope(message, failed, "length" if failure == "length" else "stop"))
@@ -393,7 +442,8 @@ class AgentBudgetCompactContracts(unittest.TestCase):
             r = OfflineTransport(self.approve_envelope())
             expected_calls = (1, 0)
         else:
-            p = OfflineTransport(envelope(message, ORACLE["literal_valid_usage"]))
+            p = OfflineTransport(self.reviewed_terminal_envelope("请说明需要比较的范围。",
+                ORACLE["literal_valid_usage"]))
             usage = {"prompt_tokens": 100000, "completion_tokens": 993, "total_tokens": 100993}
             approval = {"role": "assistant", "content": json.dumps({"verdict": "approve",
                 "reason": "可信夹具", "issues": []}, ensure_ascii=False)}

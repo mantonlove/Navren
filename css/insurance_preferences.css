@@ -1,0 +1,25 @@
+.insurance-preferences { min-width:0; }
+.insurance-preferences-heading { display:flex; align-items:center; gap:12px 20px; }
+.insurance-preferences-heading h3 { margin:0; flex:none; font-size:var(--font-size-base,1rem); font-weight:600; }
+.insurance-preferences-summary { display:flex; align-items:center; flex-wrap:wrap; gap:8px; flex:1; min-width:0; }
+.insurance-preferences-tag { display:inline-flex; align-items:center; gap:7px; padding:5px 10px 5px 6px; border-radius:8px; color:var(--ink-70); background:var(--surface); font-size:var(--font-size-sm,.9375rem); line-height:1.6; }
+.insurance-preferences-order { display:grid; place-items:center; width:19px; height:19px; flex:none; border-radius:6px; background:var(--primary-soft); color:var(--primary-deep,var(--primary)); font-size:var(--font-size-xs,.8125rem); }
+.insurance-preferences-empty,.insurance-preferences-limit,.insurance-preferences-status { color:var(--ink-50); font-size:var(--font-size-xs,.8125rem); line-height:1.6; }
+.insurance-preferences-heading .insurance-preferences-edit { margin-left:auto; flex:none; }
+.insurance-preferences-choices { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.insurance-preferences-choice { min-height:40px; padding:8px 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface-card); color:var(--ink-70); font:inherit; font-size:var(--font-size-sm); cursor:pointer; }
+.insurance-preferences-choice:hover { background:var(--surface-hover); }
+.insurance-preferences-choice[aria-pressed="true"] { border-color:var(--primary); background:var(--primary-soft); color:var(--primary-deep); }
+.insurance-preferences-choice:disabled { cursor:default; opacity:.45; }
+.insurance-preferences-choice:focus-visible,.insurance-preferences-actions button:focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
+.insurance-preferences-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.insurance-preferences-actions [data-insurance-action="automatic"] { margin-right:auto; }
+.insurance-preferences-actions .insurance-preferences-save { background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+.insurance-preferences-status { margin:8px 0 0; }
+.insurance-preferences-status[hidden] { display:none; }
+@media(max-width:640px) {
+  .insurance-preferences-heading { flex-wrap:wrap; gap:10px; }
+  .insurance-preferences-summary { order:3; flex-basis:100%; }
+  .insurance-preferences-heading .insurance-preferences-edit { margin-left:auto; }
+  .insurance-preferences-actions { justify-content:flex-start; }
+}

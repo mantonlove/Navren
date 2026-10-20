@@ -17,6 +17,12 @@ window.addEventListener('bank:unavailable',event=>{
     const target=document.getElementById(id);if(target)U.showError(target,event.detail,()=>U.load().catch(()=>{}));
   });
 });
+window.addEventListener('navren:bank-session-revoked',()=>{
+  accountFormWorkspace=null;
+  for(const id of ['holdingsList','bankBudget','bankTransfers','bankOrchestration','bankCards','bankMandates','bankOrders','bankReports']){
+    const root=document.getElementById(id);if(root)root.replaceChildren(U.note('银行访问会话已失效。'),U.button('验证银行访问密码',()=>U.passwordSessionForm()));
+  }
+});
 function renderAccount(s,products) {
   if(s.workspace_id!==B.identity()?.workspace_id)return;
   const formRoots=['bankTransfers','bankOrchestration'];const savedForms=accountFormWorkspace===s.workspace_id?formRoots.flatMap(id=>[...document.getElementById(id).querySelectorAll('form')].map((form,index)=>({id,index,dirty:form.dataset.navrenDirty==='true',operation_id:form.querySelector('[type=submit]')?.dataset.operationId,fields:[...form.querySelectorAll('input,select,textarea')].map(input=>({type:input.type,value:input.value,checked:input.checked}))}))).filter(x=>x.dirty||x.operation_id):[];accountFormWorkspace=s.workspace_id;
@@ -148,8 +154,9 @@ function renderCards(s) {
   const p=U.panel('银行卡与交易控制');
   p.append(U.note('此处只操作本机模拟卡片。办卡和提额申请会在模拟日期推进后按演示规则审核，不代表真实银行审核、制卡或授信。'));
   p.append(U.button('申请新卡',()=>U.cardApplicationForm(s.accounts[0]?.id),true));
+  p.append(U.button('银行访问密码',()=>U.passwordChangeForm(s.accounts[0]?.id)));
   for(const card of s.cards||[]) {
-    const type=card.type==='credit'?'信用卡':'借记卡';
+    const type=card.type==='virtual'?'SIM 虚拟卡':card.type==='credit'?'信用卡':'借记卡';
     const status=card.status==='active'?'正常':card.status==='lost'?'已挂失':'已过期';
     const item=U.panel(type+' · '+card.network+' 尾号 '+card.last_four+' · '+status);item.dataset.accountObjectKind='card';item.dataset.accountObjectId=card.id;
     item.append(U.note('账户：'+(s.accounts.find(a=>a.id===card.account_id)?.name||'模拟账户')));
@@ -178,14 +185,15 @@ function renderCards(s) {
       if(card.type==='credit')item.append(U.button('申请提高信用额度',()=>U.cardLimitRequestForm(card)));
       item.append(U.button('挂失此卡',()=>U.reportCardLost(card)));
     } else if(card.status==='lost') {
-      item.append(U.note('交易控制已关闭。模拟挂失不可撤销；如需继续用卡，请提交补卡申请。'));
-      item.append(U.button('申请补卡',()=>U.cardApplicationForm(card.account_id,card.type,card)));
+      item.append(U.note('交易控制已关闭。未过期的本账户卡片可经短信验证解挂；解挂后交易开关仍保持关闭。'));
+      const unblock=U.button('解除模拟挂失',()=>U.unblockCard(card));unblock.disabled=!card.expires_on||card.expires_on<=s.as_of;item.append(unblock);
+      if(card.type!=='virtual')item.append(U.button('申请补卡',()=>U.cardApplicationForm(card.account_id,card.type,card)));
     }
     p.append(item);
   }
   const applications=s.card_applications||[];
   if(applications.length)p.append(U.table(['申请类型','申请额度','状态','日期','审核说明'],applications.map(row=>[
-    row.requested_type==='credit'?'信用卡':'借记卡',B.money(row.requested_limit_minor),
+    row.requested_type==='virtual'?'SIM 虚拟卡 · 单笔限额':row.requested_type==='credit'?'信用卡':'借记卡',B.money(row.requested_limit_minor),
     row.status==='submitted'?'已提交，待模拟审核':row.status==='issued'?'模拟审核通过并生成卡片':row.status==='declined'?'模拟审核未通过':row.status,
     row.requested_on,row.decision_reason])));
   root.replaceChildren(p);
@@ -221,7 +229,7 @@ function renderOperations(s,products) {
     const task=(s.orchestration_tasks||[]).find(x=>x.id===payload.task_id);
     const name=products.find(p=>p.id===payload.product_id)?.name||s.mandates.find(m=>m.id===payload.mandate_id)?.merchant||
       beneficiary?.display_name||subscription?.plan_name||task?.title||
-      (card?(card.type==='credit'?'信用卡':'借记卡')+' 尾号 '+card.last_four:payload.requested_type?payload.requested_type==='credit'?'信用卡申请':'借记卡申请':'');
+      (card?(card.type==='virtual'?'SIM 虚拟卡':card.type==='credit'?'信用卡':'借记卡')+' 尾号 '+card.last_four:payload.requested_type?payload.requested_type==='virtual'?'SIM 虚拟卡申请':payload.requested_type==='credit'?'信用卡申请':'借记卡申请':'');
     const view=U.button('查看 '+op.id.slice(0,8),()=>U.openDraft(payload,view));view.dataset.operationId=op.id;
     const amount=payload.amount_minor||payload.requested_limit_minor||payload.limit_minor;
     return [U.actions[op.action]||op.action,name+(amount?' / '+B.money(amount):''),U.operationStatus(op),op.id.slice(0,8),view];

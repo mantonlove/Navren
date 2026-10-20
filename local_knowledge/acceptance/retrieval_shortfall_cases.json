@@ -1,0 +1,3004 @@
+{
+  "schema": "navren_retrieval_shortfall_cases/v1",
+  "frozen_at": "2026-10-10T08:06:28.870958+00:00",
+  "authoring_basis": "独立人工阅读保存的官方原件后制定预期；未调用检索器、未运行修复后的题集、未读取个人数据库。",
+  "scope": "公共资料的提供端召回、对象/时点、原始证据支持程度；不代表云端最终答复或实时金融事实验收。",
+  "split_policy": "产品dev/test按不同产品代码划分；英文本dev/test按不同文档主题划分，原文控制及多机构题显式保留。冻结后不得因召回失败改题或降低阈值。",
+  "evaluation_policy": {
+    "positive": "先核对预期原文哈希、字段和值，再评分引用top-k命中与必需原片段支持；不以提供器现有结果生成预期。",
+    "negative": "主题相关命中可以存在；必须把背景支持和具体事实支持分开。should_no_support不能通过any_hits==false简化。",
+    "entity_conflict": "结构身份与文本对象冲突、未核验份额应拒绝或澄清；不能把别的产品字段作为请求对象的事实。",
+    "freshness": "旧目录日期是2026-09-30；检索时点不能用文件保存日更新。风险/费用/客群7天、销售当天是本地策略。",
+    "no_source_filter": "市场题请求中没有source_id/publisher硬过滤，多组织题须保留所有正确来源，检索后按原件组织/政策对象区分。",
+    "no_threshold_tuning_on_test": true
+  },
+  "sources": {
+    "webank": {
+      "path": "outputs/official-discovery-audit-20261009/catalog-original.jsonp",
+      "sha256": "02081118e6e145669f747bd3370222700ae2fd2bc258f34fafdb2f0489182b9d",
+      "extract_date": "2026-09-30",
+      "source_url": "https://tctp.tctpwebankcdn.net/owb-admin/data/appsystems/owb-admin/productpresentation.json",
+      "record_count": 13660,
+      "selected_records": {
+        "000011": {
+          "row_index_zero_based": 3,
+          "record": {
+            "code": "000011",
+            "name": "华夏大盘精选A",
+            "saleStatus": "在售",
+            "type": "开放式基金",
+            "placement": "公募",
+            "saleType": "代销",
+            "risk": "R4中高风险",
+            "publish": "华夏基金管理有限公司",
+            "investor": "C4进取型、C5激进型",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人客户"
+          },
+          "record_sha256": "245bd8730dab5705f8b8a6e05a0eaa05515f1a6224c604a199f5fbd1d730a73d"
+        },
+        "17322D": {
+          "row_index_zero_based": 11230,
+          "record": {
+            "code": "17322D",
+            "name": "招银理财招睿月添利（平衡）2号固定收益类理财计划",
+            "saleStatus": "存续",
+            "type": "理财产品",
+            "placement": "公募",
+            "saleType": "代销",
+            "risk": "R2中低风险",
+            "publish": "招银理财有限责任公司",
+            "investor": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+            "charge": "详见产品页",
+            "chargeWay": "详见产品页",
+            "customerGroupType": "符合资质的个人客户"
+          },
+          "record_sha256": "2f6de470ea04a4f0f282e033adc587450fe59dcc3bf0799dd4acbcfcc090ccfd"
+        },
+        "07607E": {
+          "row_index_zero_based": 10796,
+          "record": {
+            "code": "07607E",
+            "name": "嘉实基金微享鸿鹄均衡1号",
+            "saleStatus": "存续",
+            "type": "集合资产管理计划",
+            "placement": "私募",
+            "saleType": "代销",
+            "risk": "较高风险",
+            "publish": "嘉实基金管理有限公司",
+            "investor": "进取型、激进型的合格投资者",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人投资者"
+          },
+          "record_sha256": "1c4d123019d06e89528aac705182365eda32257708293df9a6b899e68d52b690"
+        },
+        "GRQCJBSJ1201": {
+          "row_index_zero_based": 12280,
+          "record": {
+            "code": "GRQCJBSJ1201",
+            "name": "企惠保·财产基本险（升级版）2.0",
+            "saleStatus": "在售",
+            "type": "保险",
+            "placement": "不适用",
+            "saleType": "代销",
+            "risk": "低风险",
+            "publish": "国任财产保险股份有限公司",
+            "investor": "以保险公司核保规则为准",
+            "charge": "以保险公司核定为准",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的机构投资者"
+          },
+          "record_sha256": "2894ae856cd148bd8c7898aa4468e89f9d44b2f579fef6d13aa024b3b1a9c9d5"
+        },
+        "000014": {
+          "row_index_zero_based": 4,
+          "record": {
+            "code": "000014",
+            "name": "华夏聚利债券A",
+            "saleStatus": "在售",
+            "type": "开放式基金",
+            "placement": "公募",
+            "saleType": "代销",
+            "risk": "R4中高风险",
+            "publish": "华夏基金管理有限公司",
+            "investor": "C4进取型、C5激进型",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人客户"
+          },
+          "record_sha256": "c984be2c9afabd257e991bf6e38bd59b7bc579c64bbe363bd70fde210f5a75ae"
+        },
+        "000015": {
+          "row_index_zero_based": 5,
+          "record": {
+            "code": "000015",
+            "name": "华夏纯债债券A",
+            "saleStatus": "在售",
+            "type": "开放式基金",
+            "placement": "公募",
+            "saleType": "代销",
+            "risk": "R2中低风险",
+            "publish": "华夏基金管理有限公司",
+            "investor": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人客户"
+          },
+          "record_sha256": "1100f534facd33b2c7be32fb8429006cadef5b0ec087610c81c06ac4a220cbbc"
+        },
+        "000016": {
+          "row_index_zero_based": 6,
+          "record": {
+            "code": "000016",
+            "name": "华夏纯债债券C",
+            "saleStatus": "在售",
+            "type": "开放式基金",
+            "placement": "公募",
+            "saleType": "代销",
+            "risk": "R2中低风险",
+            "publish": "华夏基金管理有限公司",
+            "investor": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人客户"
+          },
+          "record_sha256": "1a8443f60fbeb1a6662db7dbc90a1c22982be3223c422c778a44f152d0f7df75"
+        },
+        "GT2KSQ": {
+          "row_index_zero_based": 12285,
+          "record": {
+            "code": "GT2KSQ",
+            "name": "国投泰康信托招福宝L款WZ01号",
+            "saleStatus": "存续",
+            "type": "集合资金信托计划",
+            "placement": "私募",
+            "saleType": "代销",
+            "risk": "中等风险",
+            "publish": "国投泰康信托有限公司",
+            "investor": "稳健型、进取型、激进型的合格投资者",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人投资者"
+          },
+          "record_sha256": "c0a262b97445a4acaccefbbd1635e5d1764917c1c5aa9b74075e345dab96bb2e"
+        }
+      },
+      "excluded_previous_round_codes": [
+        "000001",
+        "000006",
+        "000008",
+        "17321D",
+        "GRKYB0301",
+        "B99353"
+      ]
+    },
+    "market": {
+      "path": "outputs/vector-data-adaptation/data-acceptance-market.sqlite3",
+      "sha256": "96747165bd752d4ea696b9899f5ae97a4e24bc9c530415639e4244b57caa24ba",
+      "release_id": "pub-7eadf1a8e8bf13369bc5a9ec523cd9e2d09057e7",
+      "document_count": 52,
+      "selected_originals": {
+        "collateral": {
+          "document_id": "d0fd5b9b71334955aeed191e8cd732226",
+          "source_id": "market-ecb",
+          "source_url": "https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr260929~050089e922.en.html",
+          "document_version_id": "v4f9d94236643ba20caaa0e5a8e6b58da3e9d66ba",
+          "title": "ECB amends monetary policy implementation guidelines as part of regular review",
+          "published_on": "2026-09-29",
+          "parsed_sha256": "b82b93ad7efd0b37a2265ba7372d24fc8f56529c5a86ebfa50360b0aaf4dbcfd",
+          "raw_sha256": "b82b93ad7efd0b37a2265ba7372d24fc8f56529c5a86ebfa50360b0aaf4dbcfd"
+        },
+        "ai": {
+          "document_id": "de7bb207408efe5f4b460b86c115f660b",
+          "source_id": "market-ecb",
+          "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261001~cf3c630379.en.html",
+          "document_version_id": "v1d7e8c5884aa85d622727998806e10bbfe213b14",
+          "title": "Where AI risks meet",
+          "published_on": "2026-10-01",
+          "parsed_sha256": "e0fa1e4686788be93a3217019feaf81240f7356e193bac214013ab9a3dc46af8",
+          "raw_sha256": "e0fa1e4686788be93a3217019feaf81240f7356e193bac214013ab9a3dc46af8"
+        },
+        "minutes": {
+          "document_id": "d13e3b3b1a3369c31c51c6b649587c715",
+          "source_id": "market-fed",
+          "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm",
+          "document_version_id": "v7478c0e2af22b8fba8a879ae11307e727013164d",
+          "title": "Minutes of the Federal Open Market Committee, September 15-16, 2026",
+          "published_on": "2026-10-07",
+          "parsed_sha256": "0393a4e991a768d036be5073f72da6b800c65ad7b128f3cedbfefe8ba87d23a4",
+          "raw_sha256": "0393a4e991a768d036be5073f72da6b800c65ad7b128f3cedbfefe8ba87d23a4"
+        },
+        "statement": {
+          "document_id": "deddfe2f8a022c059cb4e25b029f8bc26",
+          "source_id": "market-fed",
+          "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+          "document_version_id": "v29680cae83ae18bad3c644b38aa14a82af8c320e",
+          "title": "Federal Reserve issues FOMC statement",
+          "published_on": "2026-09-16",
+          "parsed_sha256": "3479cdd716c46d9c3f4f88ba9d57daee498902c0b0d642119d65fd52fa6a63a4",
+          "raw_sha256": "3479cdd716c46d9c3f4f88ba9d57daee498902c0b0d642119d65fd52fa6a63a4"
+        },
+        "projections": {
+          "document_id": "d5b2e72e8b006b64d428b471fd8a8a15f",
+          "source_id": "market-fed",
+          "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916b.htm",
+          "document_version_id": "ve849e20c82275a0de562fde63908a7541c18cdc1",
+          "title": "Federal Reserve Board and Federal Open Market Committee release economic projections from the September 15-16 FOMC meeting",
+          "published_on": "2026-09-16",
+          "parsed_sha256": "dbb53f18a7ca3707fd27c20b9945adc19b53fab91171826b106e5d460ac4f154",
+          "raw_sha256": "dbb53f18a7ca3707fd27c20b9945adc19b53fab91171826b106e5d460ac4f154"
+        },
+        "sesfod": {
+          "document_id": "d302d7a71bd3be7d7b26178978668d847",
+          "source_id": "market-ecb",
+          "source_url": "https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr261007~6447350434.en.html",
+          "document_version_id": "v32b41bd1847a62dc1a44082e42ae70af2d96ebb1",
+          "title": "Results of the September 2026 survey on credit terms and conditions in euro-denominated securities financing and OTC derivatives markets (SESFOD)",
+          "published_on": "2026-10-07",
+          "parsed_sha256": "b638c59363457a7d798f4d8b1c8771b519d562ea875034398c72b8e799c25e77",
+          "raw_sha256": "b638c59363457a7d798f4d8b1c8771b519d562ea875034398c72b8e799c25e77"
+        },
+        "supervision": {
+          "document_id": "d44c465eabace4669e3cd290df797e4fa",
+          "source_id": "market-ecb",
+          "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261006_1~0df91e4e44.en.html",
+          "document_version_id": "v399484ef8533859a8097557a035a9e3287d0d9d2",
+          "title": "Effective supervision through timely remediation",
+          "published_on": "2026-10-06",
+          "parsed_sha256": "e28cd7de52f3960ae443c5cbc2c29d5c788fcc9a9bcd1b78923102d582222caa",
+          "raw_sha256": "e28cd7de52f3960ae443c5cbc2c29d5c788fcc9a9bcd1b78923102d582222caa"
+        },
+        "hearing": {
+          "document_id": "d56fad1feb24111454051972a07bba35b",
+          "source_id": "market-ecb",
+          "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp260928~a875675544.en.html",
+          "document_version_id": "vb79a3dd87ec07f169b63399087d0ec5205d1c22a",
+          "title": "Hearing of the Committee on Economic and Monetary Affairs of the European Parliament",
+          "published_on": "2026-09-28",
+          "parsed_sha256": "82585897fe662356c2da6ead607a2d596648ba59ab7150c18b6aa0b4285eeb00",
+          "raw_sha256": "82585897fe662356c2da6ead607a2d596648ba59ab7150c18b6aa0b4285eeb00"
+        },
+        "pbc_tools": {
+          "document_id": "d9c303e0cc9ced74f737c29b0115c4a54",
+          "source_id": "market-pbc",
+          "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026092917474922559/index.html",
+          "document_version_id": "vc9847f55b04e60bc61004c218a2709cff684b97b",
+          "title": "中国人民银行调整完善若干货币政策工具",
+          "published_on": "2026-09-28",
+          "parsed_sha256": "2455410cc09f00d74bf22023aab87ee5d87871366e149805fdec925db69de80b",
+          "raw_sha256": "2455410cc09f00d74bf22023aab87ee5d87871366e149805fdec925db69de80b"
+        },
+        "pbc_committee": {
+          "document_id": "d64b560c8a72944622473dee8e5bdc853",
+          "source_id": "market-pbc",
+          "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026092416074632670/index.html",
+          "document_version_id": "v9ac67758060e3e0d1b4755b2d86b9624cbc1bd18",
+          "title": "中国人民银行货币政策委员会召开2026年第三季度例会",
+          "published_on": "2026-09-23",
+          "parsed_sha256": "7ba0e154d8da80d8e9d1eb526f3a6491823bac7a086c6902207b3beaebcad640",
+          "raw_sha256": "7ba0e154d8da80d8e9d1eb526f3a6491823bac7a086c6902207b3beaebcad640"
+        }
+      }
+    }
+  },
+  "webank_cases": [
+    {
+      "id": "field-000011-risk",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "000011",
+      "query": "华夏大盘精选A，亏损风险大不大，披露给它分的是哪一档？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "risk",
+        "value": "R4中高风险",
+        "paragraph": "productPresentation:000011/risk",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000011-publish",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "000011",
+      "query": "华夏大盘精选A，钱交给哪家公司负责这款产品，登记的主体是谁？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "publish",
+        "value": "华夏基金管理有限公司",
+        "paragraph": "productPresentation:000011/publish",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000011-charge",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "000011",
+      "query": "华夏大盘精选A，目录有没有写要扣多少钱，收费依据在哪儿？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "charge",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:000011/charge",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-000011-chargeWay",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "000011",
+      "query": "华夏大盘精选A，费用是怎么收走的，记录有没有列明做法？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "chargeWay",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:000011/chargeWay",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-000011-investor",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "000011",
+      "query": "华夏大盘精选A，我是哪类风险承受水平才在它披露的范围里？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "investor",
+        "value": "C4进取型、C5激进型",
+        "paragraph": "productPresentation:000011/investor",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000011-customerGroupType",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "000011",
+      "query": "华夏大盘精选A，我以公司名义买行不行，还是面向个人？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "customerGroupType",
+        "value": "符合资质的个人客户",
+        "paragraph": "productPresentation:000011/customerGroupType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000011-saleType",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "000011",
+      "query": "华夏大盘精选A，银行是自己发行销售，还是帮别的机构卖？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "saleType",
+        "value": "代销",
+        "paragraph": "productPresentation:000011/saleType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000011-placement",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "000011",
+      "query": "华夏大盘精选A，普通公众募集还是特定人群私下募集，目录怎么分？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "placement",
+        "value": "公募",
+        "paragraph": "productPresentation:000011/placement",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-17322D-risk",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "17322D",
+      "query": "招银理财招睿月添利（平衡）2号固定收益类理财计划，这款承担多大的波动风险，原目录怎么定级？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "risk",
+        "value": "R2中低风险",
+        "paragraph": "productPresentation:17322D/risk",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-17322D-publish",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "17322D",
+      "query": "招银理财招睿月添利（平衡）2号固定收益类理财计划，这款究竟是哪家公司发出来的？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "publish",
+        "value": "招银理财有限责任公司",
+        "paragraph": "productPresentation:17322D/publish",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-17322D-charge",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "17322D",
+      "query": "招银理财招睿月添利（平衡）2号固定收益类理财计划，先帮我看它收多少费用，披露到了什么程度？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "charge",
+        "value": "详见产品页",
+        "paragraph": "productPresentation:17322D/charge",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-17322D-chargeWay",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "17322D",
+      "query": "招银理财招睿月添利（平衡）2号固定收益类理财计划，扣费的做法是一次性还是分次，披露怎么指引？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "chargeWay",
+        "value": "详见产品页",
+        "paragraph": "productPresentation:17322D/chargeWay",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-17322D-investor",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "17322D",
+      "query": "招银理财招睿月添利（平衡）2号固定收益类理财计划，风险偏好要到哪一档才属于这款允许的投资范围？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "investor",
+        "value": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+        "paragraph": "productPresentation:17322D/investor",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-17322D-customerGroupType",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "17322D",
+      "query": "招银理财招睿月添利（平衡）2号固定收益类理财计划，这是给自然人，还是也给企业客户的？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "customerGroupType",
+        "value": "符合资质的个人客户",
+        "paragraph": "productPresentation:17322D/customerGroupType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-17322D-saleType",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "17322D",
+      "query": "招银理财招睿月添利（平衡）2号固定收益类理财计划，微众卖这款时扮演的是自营还是代理销售角色？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "saleType",
+        "value": "代销",
+        "paragraph": "productPresentation:17322D/saleType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-17322D-placement",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "17322D",
+      "query": "招银理财招睿月添利（平衡）2号固定收益类理财计划，这是向公众募集的，还是私募？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "placement",
+        "value": "公募",
+        "paragraph": "productPresentation:17322D/placement",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-07607E-risk",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "07607E",
+      "query": "嘉实基金微享鸿鹄均衡1号，如果想知道它危险不危险，该看哪一档？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "risk",
+        "value": "较高风险",
+        "paragraph": "productPresentation:07607E/risk",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-07607E-publish",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "07607E",
+      "query": "嘉实基金微享鸿鹄均衡1号，这不是银行自己管理的吧，目录登记的公司叫什么？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "publish",
+        "value": "嘉实基金管理有限公司",
+        "paragraph": "productPresentation:07607E/publish",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-07607E-charge",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "07607E",
+      "query": "嘉实基金微享鸿鹄均衡1号，这款的收费金额或者比例有直接给出吗？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "charge",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:07607E/charge",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-07607E-chargeWay",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "07607E",
+      "query": "嘉实基金微享鸿鹄均衡1号，如果只想看扣费方式，原目录给了什么说明？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "chargeWay",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:07607E/chargeWay",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-07607E-investor",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "07607E",
+      "query": "嘉实基金微享鸿鹄均衡1号，进取或激进的客户能买它吗，原件怎么限定？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "investor",
+        "value": "进取型、激进型的合格投资者",
+        "paragraph": "productPresentation:07607E/investor",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-07607E-customerGroupType",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "07607E",
+      "query": "嘉实基金微享鸿鹄均衡1号，渠道记录把它的客户限定为个人还是机构？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "customerGroupType",
+        "value": "符合资质的个人投资者",
+        "paragraph": "productPresentation:07607E/customerGroupType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-07607E-saleType",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "07607E",
+      "query": "嘉实基金微享鸿鹄均衡1号，渠道在这款上是自己出产品，还是替别人销售？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "saleType",
+        "value": "代销",
+        "paragraph": "productPresentation:07607E/saleType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-07607E-placement",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "07607E",
+      "query": "嘉实基金微享鸿鹄均衡1号，它的募集性质偏公开还是私下向合格投资者？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "placement",
+        "value": "私募",
+        "paragraph": "productPresentation:07607E/placement",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GRQCJBSJ1201-risk",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，原记录对这份保险的风险怎么写的？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "risk",
+        "value": "低风险",
+        "paragraph": "productPresentation:GRQCJBSJ1201/risk",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GRQCJBSJ1201-publish",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，这份保险背后的保险公司是哪家？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "publish",
+        "value": "国任财产保险股份有限公司",
+        "paragraph": "productPresentation:GRQCJBSJ1201/publish",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GRQCJBSJ1201-charge",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，保费能按固定费率算吗，记录让谁来核定？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "charge",
+        "value": "以保险公司核定为准",
+        "paragraph": "productPresentation:GRQCJBSJ1201/charge",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-GRQCJBSJ1201-chargeWay",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，这份保险怎么交费用，目录有详细做法吗？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "chargeWay",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:GRQCJBSJ1201/chargeWay",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-GRQCJBSJ1201-investor",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，要满足什么核保或投资者要求才在它的适用范围？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "investor",
+        "value": "以保险公司核保规则为准",
+        "paragraph": "productPresentation:GRQCJBSJ1201/investor",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GRQCJBSJ1201-customerGroupType",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，企业能投保还是只接个人，原目录怎么写？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "customerGroupType",
+        "value": "符合资质的机构投资者",
+        "paragraph": "productPresentation:GRQCJBSJ1201/customerGroupType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GRQCJBSJ1201-saleType",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，这份保险在银行渠道按哪种销售角色登记？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "saleType",
+        "value": "代销",
+        "paragraph": "productPresentation:GRQCJBSJ1201/saleType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GRQCJBSJ1201-placement",
+      "split": "dev",
+      "kind": "single_field",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，这份保险有公募私募这种划分吗，原件写什么？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "placement",
+        "value": "不适用",
+        "paragraph": "productPresentation:GRQCJBSJ1201/placement",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000014-risk",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000014",
+      "query": "华夏聚利债券A，这是偏稳还是偏冒险，目录给的档位是什么？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "risk",
+        "value": "R4中高风险",
+        "paragraph": "productPresentation:000014/risk",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000014-publish",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000014",
+      "query": "华夏聚利债券A，想查这只产品所属的管理公司，原件写了谁？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "publish",
+        "value": "华夏基金管理有限公司",
+        "paragraph": "productPresentation:000014/publish",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000014-charge",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000014",
+      "query": "华夏聚利债券A，买它的费率是不是已经在目录里列明？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "charge",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:000014/charge",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-000014-chargeWay",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000014",
+      "query": "华夏聚利债券A，钱按哪种办法扣，原件写没写收费方式？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "chargeWay",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:000014/chargeWay",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-000014-investor",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000014",
+      "query": "华夏聚利债券A，保守的人也在这款列出的适合人群里吗？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "investor",
+        "value": "C4进取型、C5激进型",
+        "paragraph": "productPresentation:000014/investor",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000014-customerGroupType",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000014",
+      "query": "华夏聚利债券A，我用个人账户买，是它列明的客户类别吗？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "customerGroupType",
+        "value": "符合资质的个人客户",
+        "paragraph": "productPresentation:000014/customerGroupType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000014-saleType",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000014",
+      "query": "华夏聚利债券A，这是银行自己的产品，还是在帮管理人销售？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "saleType",
+        "value": "代销",
+        "paragraph": "productPresentation:000014/saleType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000014-placement",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000014",
+      "query": "华夏聚利债券A，这只按公开募集还是私人募集登记？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "placement",
+        "value": "公募",
+        "paragraph": "productPresentation:000014/placement",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000015-risk",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000015",
+      "query": "华夏纯债债券A，别用名字判断，官方把这只产品的风险放在哪档？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "risk",
+        "value": "R2中低风险",
+        "paragraph": "productPresentation:000015/risk",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000015-publish",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000015",
+      "query": "华夏纯债债券A，请给我它的发行管理方全称。",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "publish",
+        "value": "华夏基金管理有限公司",
+        "paragraph": "productPresentation:000015/publish",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000015-charge",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000015",
+      "query": "华夏纯债债券A，我想算费用，官方记录给了数值还是让我另查？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "charge",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:000015/charge",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-000015-chargeWay",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000015",
+      "query": "华夏纯债债券A，这只产品如何扣费，目录让去哪里确认？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "chargeWay",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:000015/chargeWay",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-000015-investor",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000015",
+      "query": "华夏纯债债券A，哪些风险承受能力等级被这只产品列为适合？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "investor",
+        "value": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+        "paragraph": "productPresentation:000015/investor",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000015-customerGroupType",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000015",
+      "query": "华夏纯债债券A，这只面向公司机构，还是合资质的个人？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "customerGroupType",
+        "value": "符合资质的个人客户",
+        "paragraph": "productPresentation:000015/customerGroupType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000015-saleType",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000015",
+      "query": "华夏纯债债券A，想查银行与产品管理人关系，销售角色是什么？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "saleType",
+        "value": "代销",
+        "paragraph": "productPresentation:000015/saleType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000015-placement",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000015",
+      "query": "华夏纯债债券A，它属于公募产品还是私募产品？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "placement",
+        "value": "公募",
+        "paragraph": "productPresentation:000015/placement",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000016-risk",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000016",
+      "query": "华夏纯债债券C，想先看看风险高低，原件是怎么描述它的？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "risk",
+        "value": "R2中低风险",
+        "paragraph": "productPresentation:000016/risk",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000016-publish",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000016",
+      "query": "华夏纯债债券C，跟我说说这只产品由哪家机构负责发行。",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "publish",
+        "value": "华夏基金管理有限公司",
+        "paragraph": "productPresentation:000016/publish",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000016-charge",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000016",
+      "query": "华夏纯债债券C，它到底要扣多少手续费，原件有具体数字吗？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "charge",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:000016/charge",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-000016-chargeWay",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000016",
+      "query": "华夏纯债债券C，想查它扣费用的流程，该记录提供了什么？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "chargeWay",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:000016/chargeWay",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-000016-investor",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000016",
+      "query": "华夏纯债债券C，想知道它适合的风险偏好人群，目录怎么界定？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "investor",
+        "value": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+        "paragraph": "productPresentation:000016/investor",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000016-customerGroupType",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000016",
+      "query": "华夏纯债债券C，想区分个人与对公客户，这只的客群怎么登记？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "customerGroupType",
+        "value": "符合资质的个人客户",
+        "paragraph": "productPresentation:000016/customerGroupType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000016-saleType",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000016",
+      "query": "华夏纯债债券C，这只在微众的渠道属于自己卖自己的还是代理卖？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "saleType",
+        "value": "代销",
+        "paragraph": "productPresentation:000016/saleType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-000016-placement",
+      "split": "test",
+      "kind": "single_field",
+      "code": "000016",
+      "query": "华夏纯债债券C，想核对募集性质，是公开募资还是私募？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "placement",
+        "value": "公募",
+        "paragraph": "productPresentation:000016/placement",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GT2KSQ-risk",
+      "split": "test",
+      "kind": "single_field",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，这份信托在渠道记录里算多大风险？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "risk",
+        "value": "中等风险",
+        "paragraph": "productPresentation:GT2KSQ/risk",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GT2KSQ-publish",
+      "split": "test",
+      "kind": "single_field",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，这个信托计划的发行主体是哪家机构？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "publish",
+        "value": "国投泰康信托有限公司",
+        "paragraph": "productPresentation:GT2KSQ/publish",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GT2KSQ-charge",
+      "split": "test",
+      "kind": "single_field",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，收费数额按什么查，披露中是什么说法？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "charge",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:GT2KSQ/charge",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-GT2KSQ-chargeWay",
+      "split": "test",
+      "kind": "single_field",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，信托费用采用什么收取办法，原件写到哪里？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "chargeWay",
+        "value": "详见产品页面",
+        "paragraph": "productPresentation:GT2KSQ/chargeWay",
+        "support_level": "reference_only",
+        "specific_fact_supported": false
+      }
+    },
+    {
+      "id": "field-GT2KSQ-investor",
+      "split": "test",
+      "kind": "single_field",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，这种信托要求投资者是哪类合格人群？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "investor",
+        "value": "稳健型、进取型、激进型的合格投资者",
+        "paragraph": "productPresentation:GT2KSQ/investor",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GT2KSQ-customerGroupType",
+      "split": "test",
+      "kind": "single_field",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，这是机构的产品还是符合资质的个人可参与？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "customerGroupType",
+        "value": "符合资质的个人投资者",
+        "paragraph": "productPresentation:GT2KSQ/customerGroupType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GT2KSQ-saleType",
+      "split": "test",
+      "kind": "single_field",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，银行对这个信托是自家发行还是代理销售？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "saleType",
+        "value": "代销",
+        "paragraph": "productPresentation:GT2KSQ/saleType",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    },
+    {
+      "id": "field-GT2KSQ-placement",
+      "split": "test",
+      "kind": "single_field",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，这个信托的资金募集是公募还是私募？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "field": "placement",
+        "value": "私募",
+        "paragraph": "productPresentation:GT2KSQ/placement",
+        "support_level": "field_quote",
+        "specific_fact_supported": true
+      }
+    }
+  ],
+  "webank_special_cases": [
+    {
+      "id": "ambiguous-fee",
+      "split": "dev",
+      "kind": "ambiguous",
+      "code": "000011",
+      "query": "华夏大盘精选A，这产品的费用是怎么回事？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 5,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "request_override": {},
+      "expected": {
+        "field_groups": [
+          {
+            "field": "charge",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:000011/charge"
+          },
+          {
+            "field": "chargeWay",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:000011/chargeWay"
+          }
+        ],
+        "should_no_support": false,
+        "topic_support_allowed": true,
+        "require_empty_citations": false,
+        "required_action": "field_coverage",
+        "rationale": "费用数额和收取方式均相关；不能仅凭歧义选择一项并声称已解释全部费用。"
+      }
+    },
+    {
+      "id": "multi-publisher-fee",
+      "split": "test",
+      "kind": "multi_field",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，谁发的，费用怎么算？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 5,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "request_override": {},
+      "expected": {
+        "field_groups": [
+          {
+            "field": "publish",
+            "value": "国投泰康信托有限公司",
+            "paragraph": "productPresentation:GT2KSQ/publish"
+          },
+          {
+            "field": "charge",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:GT2KSQ/charge"
+          }
+        ],
+        "should_no_support": false,
+        "topic_support_allowed": false,
+        "require_empty_citations": false,
+        "required_action": "field_coverage",
+        "rationale": "发行方及收费依据均需要原字段支持。"
+      }
+    },
+    {
+      "id": "unknown-exact-fee",
+      "split": "test",
+      "kind": "unknown_fact",
+      "code": "000014",
+      "query": "华夏聚利债券A，我买一万元会被扣多少元申购费？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "request_override": {},
+      "expected": {
+        "field_groups": [
+          {
+            "field": "charge",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:000014/charge"
+          },
+          {
+            "field": "chargeWay",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:000014/chargeWay"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "require_empty_citations": false,
+        "required_action": "report_specific_fact_gap",
+        "rationale": "占位引用不支持具体费率、费用金额、零费用或计算。"
+      }
+    },
+    {
+      "id": "unknown-yearly-fee",
+      "split": "dev",
+      "kind": "unknown_fact",
+      "code": "17322D",
+      "query": "招银理财招睿月添利（平衡）2号固定收益类理财计划，每年管理费到底是百分之几？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "request_override": {},
+      "expected": {
+        "field_groups": [
+          {
+            "field": "charge",
+            "value": "详见产品页",
+            "paragraph": "productPresentation:17322D/charge"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "require_empty_citations": false,
+        "required_action": "report_specific_fact_gap",
+        "rationale": "产品名称及费用占位不支持年管理费数值。"
+      }
+    },
+    {
+      "id": "unknown-principal-guarantee",
+      "split": "test",
+      "kind": "unknown_fact",
+      "code": "000015",
+      "query": "华夏纯债债券A，把一万元放进去能保证本金一分不少吗？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "request_override": {},
+      "expected": {
+        "field_groups": [
+          {
+            "field": "risk",
+            "value": "R2中低风险",
+            "paragraph": "productPresentation:000015/risk"
+          },
+          {
+            "field": "type",
+            "value": "开放式基金",
+            "paragraph": "productPresentation:000015/type"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "require_empty_citations": false,
+        "required_action": "report_specific_fact_gap",
+        "rationale": "风险等级和产品类别不支持保本保证。"
+      }
+    },
+    {
+      "id": "unknown-profit-guarantee",
+      "split": "dev",
+      "kind": "unknown_fact",
+      "code": "07607E",
+      "query": "嘉实基金微享鸿鹄均衡1号，明年保证赚多少？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "request_override": {},
+      "expected": {
+        "field_groups": [
+          {
+            "field": "risk",
+            "value": "较高风险",
+            "paragraph": "productPresentation:07607E/risk"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "require_empty_citations": false,
+        "required_action": "report_specific_fact_gap",
+        "rationale": "无承诺收益、预测数值或者本金保证原文。"
+      }
+    },
+    {
+      "id": "wrong-object",
+      "split": "test",
+      "kind": "identity_conflict",
+      "code": "000016",
+      "query": "华夏纯债债券A的风险和收费给我说说。",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity"
+      ],
+      "request_override": {
+        "product_id": "WEBANK:000016",
+        "channel_id": "WEBANK"
+      },
+      "expected": {
+        "field_groups": [
+          {
+            "field": "risk",
+            "value": "R2中低风险",
+            "paragraph": "productPresentation:000016/risk"
+          },
+          {
+            "field": "charge",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:000016/charge"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": false,
+        "require_empty_citations": false,
+        "required_action": "clarify_or_identity_conflict",
+        "rationale": "文本是A而结构身份是C；不得把C证据声称成A证据，须暴露对象冲突或请求澄清。"
+      }
+    },
+    {
+      "id": "wrong-share",
+      "split": "test",
+      "kind": "identity_conflict",
+      "code": "000015",
+      "query": "华夏纯债债券A，给我核对C份额费用。",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity"
+      ],
+      "request_override": {
+        "product_id": "WEBANK:000015",
+        "share_class_id": "C",
+        "channel_id": "WEBANK"
+      },
+      "expected": {
+        "field_groups": [
+          {
+            "field": "charge",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:000015/charge"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": false,
+        "require_empty_citations": true,
+        "required_action": "clarify_or_identity_conflict",
+        "rationale": "名称A/C不是已经核验的份额映射；未注册的份额不能透传。"
+      }
+    },
+    {
+      "id": "unknown-object",
+      "split": "dev",
+      "kind": "identity_unverified",
+      "code": "000011",
+      "query": "火星稳赢债券基金，风险几级？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity"
+      ],
+      "request_override": {
+        "product_id": "WEBANK:NOT_A_REGISTERED_CODE",
+        "channel_id": "WEBANK"
+      },
+      "expected": {
+        "field_groups": [],
+        "should_no_support": true,
+        "topic_support_allowed": false,
+        "require_empty_citations": true,
+        "required_action": "field_coverage",
+        "rationale": "不存在的公共身份不能用相似产品代答。"
+      }
+    },
+    {
+      "id": "expired-risk",
+      "split": "test",
+      "kind": "expired",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，今天风险是什么档？",
+      "as_of": "2026-10-10",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity"
+      ],
+      "request_override": {
+        "product_id": "WEBANK:GT2KSQ",
+        "channel_id": "WEBANK"
+      },
+      "expected": {
+        "field_groups": [
+          {
+            "field": "risk",
+            "value": "中等风险",
+            "paragraph": "productPresentation:GT2KSQ/risk"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": false,
+        "require_empty_citations": true,
+        "required_action": "report_temporal_gap",
+        "rationale": "9月30日目录已超7天本地风险新鲜度；不能声称今天有效。"
+      }
+    },
+    {
+      "id": "expired-sale",
+      "split": "dev",
+      "kind": "expired",
+      "code": "000011",
+      "query": "华夏大盘精选A今天还能下单买吗？",
+      "as_of": "2026-10-10",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity"
+      ],
+      "request_override": {
+        "product_id": "WEBANK:000011",
+        "channel_id": "WEBANK"
+      },
+      "expected": {
+        "field_groups": [
+          {
+            "field": "saleStatus",
+            "value": "在售",
+            "paragraph": "productPresentation:000011/saleStatus"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": false,
+        "require_empty_citations": true,
+        "required_action": "report_temporal_gap",
+        "rationale": "销售状态当天策略，旧目录不能证明今天在售。"
+      }
+    },
+    {
+      "id": "future-source",
+      "split": "test",
+      "kind": "future_source",
+      "code": "000014",
+      "query": "华夏聚利债券A，九月二十九日的风险等级是什么？",
+      "as_of": "2026-09-29",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity"
+      ],
+      "request_override": {
+        "product_id": "WEBANK:000014",
+        "channel_id": "WEBANK"
+      },
+      "expected": {
+        "field_groups": [
+          {
+            "field": "risk",
+            "value": "R4中高风险",
+            "paragraph": "productPresentation:000014/risk"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": false,
+        "require_empty_citations": true,
+        "required_action": "report_temporal_gap",
+        "rationale": "不允许把9月30日来源当作9月29日已知披露。"
+      }
+    },
+    {
+      "id": "ambiguous-family-fee",
+      "split": "test",
+      "kind": "unknown_fact",
+      "code": "000015",
+      "query": "华夏纯债两个字母版本，哪个收费更省？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "request_override": {},
+      "expected": {
+        "field_groups": [
+          {
+            "field": "charge",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:000015/charge"
+          },
+          {
+            "field": "chargeWay",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:000015/chargeWay"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "require_empty_citations": false,
+        "required_action": "report_specific_fact_gap",
+        "rationale": "A、C都只有费用指引，不能凭名称或占位断言差额或更便宜。"
+      }
+    },
+    {
+      "id": "unknown-insurance-premium",
+      "split": "dev",
+      "kind": "unknown_fact",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，一百万元财产的保费肯定是多少？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "request_override": {},
+      "expected": {
+        "field_groups": [
+          {
+            "field": "charge",
+            "value": "以保险公司核定为准",
+            "paragraph": "productPresentation:GRQCJBSJ1201/charge"
+          }
+        ],
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "require_empty_citations": false,
+        "required_action": "report_specific_fact_gap",
+        "rationale": "以保险公司核定为准不支持具体保费或固定费率。"
+      }
+    }
+  ],
+  "market_cases": [
+    {
+      "id": "ecb-collateral-rating",
+      "split": "dev",
+      "kind": "cross_language",
+      "query": "欧洲央行说私营部门资产拿来抵押时，要看最好评级还是第二高的评级？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d0fd5b9b71334955aeed191e8cd732226",
+            "document_version_id": "v4f9d94236643ba20caaa0e5a8e6b58da3e9d66ba",
+            "title": "ECB amends monetary policy implementation guidelines as part of regular review",
+            "source_url": "https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr260929~050089e922.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-09-29",
+            "parsed_sha256": "b82b93ad7efd0b37a2265ba7372d24fc8f56529c5a86ebfa50360b0aaf4dbcfd",
+            "required_original_span": "the second-best rating issued by external credit assessment institutions will be used",
+            "span_start_char": 763,
+            "span_end_char": 848,
+            "supporting_citation_ids": [
+              "ccfcb681c3ea2c276e1a2df8e9033b822bd5d4c6b"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "ecb-collateral-cutover",
+      "split": "dev",
+      "kind": "cross_language",
+      "query": "欧元区央行改了抵押资产规则，新规什么时候开始适用？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d0fd5b9b71334955aeed191e8cd732226",
+            "document_version_id": "v4f9d94236643ba20caaa0e5a8e6b58da3e9d66ba",
+            "title": "ECB amends monetary policy implementation guidelines as part of regular review",
+            "source_url": "https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr260929~050089e922.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-09-29",
+            "parsed_sha256": "b82b93ad7efd0b37a2265ba7372d24fc8f56529c5a86ebfa50360b0aaf4dbcfd",
+            "required_original_span": "applicable as of 30 November 2026",
+            "span_start_char": 580,
+            "span_end_char": 613,
+            "supporting_citation_ids": [
+              "ccfcb681c3ea2c276e1a2df8e9033b822bd5d4c6b"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "ecb-ai-risk-areas",
+      "split": "dev",
+      "kind": "cross_language",
+      "query": "拉加德谈金融系统里的人工智能风险时，点出了哪三个方面？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "de7bb207408efe5f4b460b86c115f660b",
+            "document_version_id": "v1d7e8c5884aa85d622727998806e10bbfe213b14",
+            "title": "Where AI risks meet",
+            "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261001~cf3c630379.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-01",
+            "parsed_sha256": "e0fa1e4686788be93a3217019feaf81240f7356e193bac214013ab9a3dc46af8",
+            "required_original_span": "In financial market trading",
+            "span_start_char": 1890,
+            "span_end_char": 1917,
+            "supporting_citation_ids": [
+              "c5700f2aded7aed6c30f08febe637b8b54c660001"
+            ]
+          },
+          {
+            "document_id": "de7bb207408efe5f4b460b86c115f660b",
+            "document_version_id": "v1d7e8c5884aa85d622727998806e10bbfe213b14",
+            "title": "Where AI risks meet",
+            "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261001~cf3c630379.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-01",
+            "parsed_sha256": "e0fa1e4686788be93a3217019feaf81240f7356e193bac214013ab9a3dc46af8",
+            "required_original_span": "In cyber resilience",
+            "span_start_char": 2011,
+            "span_end_char": 2030,
+            "supporting_citation_ids": [
+              "c78605b8d88bb582a89583fbb637dba337eee8a57"
+            ]
+          },
+          {
+            "document_id": "de7bb207408efe5f4b460b86c115f660b",
+            "document_version_id": "v1d7e8c5884aa85d622727998806e10bbfe213b14",
+            "title": "Where AI risks meet",
+            "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261001~cf3c630379.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-01",
+            "parsed_sha256": "e0fa1e4686788be93a3217019feaf81240f7356e193bac214013ab9a3dc46af8",
+            "required_original_span": "And in geopolitics",
+            "span_start_char": 2116,
+            "span_end_char": 2134,
+            "supporting_citation_ids": [
+              "c78605b8d88bb582a89583fbb637dba337eee8a57"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "ecb-ai-similar-trades",
+      "split": "dev",
+      "kind": "cross_language",
+      "query": "很多金融机构一起用相似的智能模型，会怎样放大市场价格的变化？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "de7bb207408efe5f4b460b86c115f660b",
+            "document_version_id": "v1d7e8c5884aa85d622727998806e10bbfe213b14",
+            "title": "Where AI risks meet",
+            "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261001~cf3c630379.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-01",
+            "parsed_sha256": "e0fa1e4686788be93a3217019feaf81240f7356e193bac214013ab9a3dc46af8",
+            "required_original_span": "make similar trades in response, reinforcing the move in prices.",
+            "span_start_char": 3356,
+            "span_end_char": 3420,
+            "supporting_citation_ids": [
+              "c6ae0b4adb1c6d44c59602e1d311932860ed86622"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "fed-minutes-delay",
+      "split": "dev",
+      "kind": "cross_language",
+      "query": "美国央行的议息会议纪要一般要等决策后多久才发布？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d13e3b3b1a3369c31c51c6b649587c715",
+            "document_version_id": "v7478c0e2af22b8fba8a879ae11307e727013164d",
+            "title": "Minutes of the Federal Open Market Committee, September 15-16, 2026",
+            "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm",
+            "source_id": "market-fed",
+            "published_on": "2026-10-07",
+            "parsed_sha256": "0393a4e991a768d036be5073f72da6b800c65ad7b128f3cedbfefe8ba87d23a4",
+            "required_original_span": "generally published three weeks after the day of the policy decision.",
+            "span_start_char": 329,
+            "span_end_char": 398,
+            "supporting_citation_ids": [
+              "c461448dc7f9b4487571ded6d982aae311f3250ad"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "fed-minutes-information",
+      "split": "dev",
+      "kind": "cross_language",
+      "query": "会议结束后才出现的新消息，能当作那次美国议息会议纪要的依据吗？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d13e3b3b1a3369c31c51c6b649587c715",
+            "document_version_id": "v7478c0e2af22b8fba8a879ae11307e727013164d",
+            "title": "Minutes of the Federal Open Market Committee, September 15-16, 2026",
+            "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm",
+            "source_id": "market-fed",
+            "published_on": "2026-10-07",
+            "parsed_sha256": "0393a4e991a768d036be5073f72da6b800c65ad7b128f3cedbfefe8ba87d23a4",
+            "required_original_span": "based solely on the information that was available to the Committee at the time of the meeting.",
+            "span_start_char": 484,
+            "span_end_char": 579,
+            "supporting_citation_ids": [
+              "c461448dc7f9b4487571ded6d982aae311f3250ad"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "pbc-tools-rate",
+      "split": "dev",
+      "kind": "chinese_control",
+      "query": "国内央行9月调整抵押补充贷款时，一年期利率是怎么改的？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d9c303e0cc9ced74f737c29b0115c4a54",
+            "document_version_id": "vc9847f55b04e60bc61004c218a2709cff684b97b",
+            "title": "中国人民银行调整完善若干货币政策工具",
+            "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026092917474922559/index.html",
+            "source_id": "market-pbc",
+            "published_on": "2026-09-28",
+            "parsed_sha256": "2455410cc09f00d74bf22023aab87ee5d87871366e149805fdec925db69de80b",
+            "required_original_span": "一年期抵押补充贷款利率从1.75%降至1.5%",
+            "span_start_char": 168,
+            "span_end_char": 191,
+            "supporting_citation_ids": [
+              "c3dc1e13902a9d1ec32c4d8d5223a4d630bb8d5a0"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "ecb-remediation-focus",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "欧洲银行监管说简化流程以后，银行发现的严重问题还要及时改好吗？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d44c465eabace4669e3cd290df797e4fa",
+            "document_version_id": "v399484ef8533859a8097557a035a9e3287d0d9d2",
+            "title": "Effective supervision through timely remediation",
+            "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261006_1~0df91e4e44.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-06",
+            "parsed_sha256": "e28cd7de52f3960ae443c5cbc2c29d5c788fcc9a9bcd1b78923102d582222caa",
+            "required_original_span": "all supervisory findings need to be remediated in a timely and durable manner.",
+            "span_start_char": 2414,
+            "span_end_char": 2492,
+            "supporting_citation_ids": [
+              "ca32e1743ef2446ceee3344ef9978c98fa8b48762"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "ecb-remediation-escalation",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "如果银行迟迟不改严重缺陷，欧洲央行监管能升级到哪些干预办法？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d44c465eabace4669e3cd290df797e4fa",
+            "document_version_id": "v399484ef8533859a8097557a035a9e3287d0d9d2",
+            "title": "Effective supervision through timely remediation",
+            "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261006_1~0df91e4e44.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-06",
+            "parsed_sha256": "e28cd7de52f3960ae443c5cbc2c29d5c788fcc9a9bcd1b78923102d582222caa",
+            "required_original_span": "imposing business restrictions or periodic penalty payments as enforcement measures.",
+            "span_start_char": 3540,
+            "span_end_char": 3624,
+            "supporting_citation_ids": [
+              "ca39c93d9e6bf6dddcb04559e4c67a8ddf20d8eba"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "ecb-securities-conditions",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "欧元证券融资和场外衍生品调查里，借贷条件是在收紧还是稍微放松？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d302d7a71bd3be7d7b26178978668d847",
+            "document_version_id": "v32b41bd1847a62dc1a44082e42ae70af2d96ebb1",
+            "title": "Results of the September 2026 survey on credit terms and conditions in euro-denominated securities financing and OTC derivatives markets (SESFOD)",
+            "source_url": "https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr261007~6447350434.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-07",
+            "parsed_sha256": "b638c59363457a7d798f4d8b1c8771b519d562ea875034398c72b8e799c25e77",
+            "required_original_span": "Credit terms and conditions eased slightly for all counterparty types for fourth consecutive quarter",
+            "span_start_char": 175,
+            "span_end_char": 275,
+            "supporting_citation_ids": [
+              "c2c9f894695f8a1de5efb0e7bee0e88d26b2af354"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "ecb-securities-period",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "9月公布的欧洲证券融资调查，实际观察的是哪几个月？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d302d7a71bd3be7d7b26178978668d847",
+            "document_version_id": "v32b41bd1847a62dc1a44082e42ae70af2d96ebb1",
+            "title": "Results of the September 2026 survey on credit terms and conditions in euro-denominated securities financing and OTC derivatives markets (SESFOD)",
+            "source_url": "https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr261007~6447350434.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-07",
+            "parsed_sha256": "b638c59363457a7d798f4d8b1c8771b519d562ea875034398c72b8e799c25e77",
+            "required_original_span": "changes between June and August 2026",
+            "span_start_char": 4633,
+            "span_end_char": 4669,
+            "supporting_citation_ids": [
+              "c9425b1967a73f75be161f7c7c907d5093b2d33b0"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "fed-decision-direction",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "9月那次美国议息结果到底是加息还是降息，联邦基金目标区间怎么变？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "deddfe2f8a022c059cb4e25b029f8bc26",
+            "document_version_id": "v29680cae83ae18bad3c644b38aa14a82af8c320e",
+            "title": "Federal Reserve issues FOMC statement",
+            "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+            "source_id": "market-fed",
+            "published_on": "2026-09-16",
+            "parsed_sha256": "3479cdd716c46d9c3f4f88ba9d57daee498902c0b0d642119d65fd52fa6a63a4",
+            "required_original_span": "raise the target range for the federal funds rate by 1/4 percentage point to 3-3/4 to 4 percent",
+            "span_start_char": 214,
+            "span_end_char": 309,
+            "supporting_citation_ids": [
+              "c7598b8100e326d1d7763d2fe55ef3b2f611926a9"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "fed-decision-vote",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "美国9月议息声明有多少票同意、多少票反对？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "deddfe2f8a022c059cb4e25b029f8bc26",
+            "document_version_id": "v29680cae83ae18bad3c644b38aa14a82af8c320e",
+            "title": "Federal Reserve issues FOMC statement",
+            "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+            "source_id": "market-fed",
+            "published_on": "2026-09-16",
+            "parsed_sha256": "3479cdd716c46d9c3f4f88ba9d57daee498902c0b0d642119d65fd52fa6a63a4",
+            "required_original_span": "by a 12 – 0 vote",
+            "span_start_char": 171,
+            "span_end_char": 187,
+            "supporting_citation_ids": [
+              "c7598b8100e326d1d7763d2fe55ef3b2f611926a9"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "fed-projection-release",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "美国央行9月会议一起放出的经济预测，原公告说谁做的、用什么材料展示？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d5b2e72e8b006b64d428b471fd8a8a15f",
+            "document_version_id": "ve849e20c82275a0de562fde63908a7541c18cdc1",
+            "title": "Federal Reserve Board and Federal Open Market Committee release economic projections from the September 15-16 FOMC meeting",
+            "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916b.htm",
+            "source_id": "market-fed",
+            "published_on": "2026-09-16",
+            "parsed_sha256": "dbb53f18a7ca3707fd27c20b9945adc19b53fab91171826b106e5d460ac4f154",
+            "required_original_span": "tables and charts released on Wednesday summarize the economic projections made by Federal Open Market Committee participants",
+            "span_start_char": 190,
+            "span_end_char": 315,
+            "supporting_citation_ids": [
+              "c7ae14667c0d6f26993940acc8befa713c3be1ceb"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "fed-projection-attachment",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "想看9月美国联邦公开市场委员会经济预测的原表，发布页把我引向哪类附件？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d5b2e72e8b006b64d428b471fd8a8a15f",
+            "document_version_id": "ve849e20c82275a0de562fde63908a7541c18cdc1",
+            "title": "Federal Reserve Board and Federal Open Market Committee release economic projections from the September 15-16 FOMC meeting",
+            "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916b.htm",
+            "source_id": "market-fed",
+            "published_on": "2026-09-16",
+            "parsed_sha256": "dbb53f18a7ca3707fd27c20b9945adc19b53fab91171826b106e5d460ac4f154",
+            "required_original_span": "Projections (PDF) | Accessible Materials",
+            "span_start_char": 432,
+            "span_end_char": 472,
+            "supporting_citation_ids": [
+              "c7ae14667c0d6f26993940acc8befa713c3be1ceb"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "ecb-economy-unemployment",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "拉加德在欧洲议会说七月份失业情况怎样，有给出比例吗？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d56fad1feb24111454051972a07bba35b",
+            "document_version_id": "vb79a3dd87ec07f169b63399087d0ec5205d1c22a",
+            "title": "Hearing of the Committee on Economic and Monetary Affairs of the European Parliament",
+            "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp260928~a875675544.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-09-28",
+            "parsed_sha256": "82585897fe662356c2da6ead607a2d596648ba59ab7150c18b6aa0b4285eeb00",
+            "required_original_span": "Unemployment stood at 6.4% in July",
+            "span_start_char": 1964,
+            "span_end_char": 1998,
+            "supporting_citation_ids": [
+              "c2c507106dc42d2937a30ac933f3bbe669cf896f6"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "ecb-economy-growth",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "欧洲央行9月基准预测中，2027年的经济增长数字是多少？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d56fad1feb24111454051972a07bba35b",
+            "document_version_id": "vb79a3dd87ec07f169b63399087d0ec5205d1c22a",
+            "title": "Hearing of the Committee on Economic and Monetary Affairs of the European Parliament",
+            "source_url": "https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp260928~a875675544.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-09-28",
+            "parsed_sha256": "82585897fe662356c2da6ead607a2d596648ba59ab7150c18b6aa0b4285eeb00",
+            "required_original_span": "grow by 0.9% in 2026, 1.4% in 2027 and 1.5% in 2028",
+            "span_start_char": 2426,
+            "span_end_char": 2477,
+            "supporting_citation_ids": [
+              "c0cb39b5b0fdc459de08d63f010d18e2624cdd5ea"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "pbc-quarter-policy",
+      "split": "test",
+      "kind": "chinese_control",
+      "query": "中国央行三季度货币政策委员会说后面还是保持宽松吗？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d64b560c8a72944622473dee8e5bdc853",
+            "document_version_id": "v9ac67758060e3e0d1b4755b2d86b9624cbc1bd18",
+            "title": "中国人民银行货币政策委员会召开2026年第三季度例会",
+            "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026092416074632670/index.html",
+            "source_id": "market-pbc",
+            "published_on": "2026-09-23",
+            "parsed_sha256": "7ba0e154d8da80d8e9d1eb526f3a6491823bac7a086c6902207b3beaebcad640",
+            "required_original_span": "要继续实施适度宽松的货币政策",
+            "span_start_char": 370,
+            "span_end_char": 384,
+            "supporting_citation_ids": [
+              "c6f269e642793be141af9fd90d169c33d4d398f26"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "multi-bank-september-direction",
+      "split": "test",
+      "kind": "multi_organization",
+      "query": "对比9月会议和政策调整，美国央行利率决策、中国央行一年期抵押补充贷款利率分别往哪边动？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 8,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "deddfe2f8a022c059cb4e25b029f8bc26",
+            "document_version_id": "v29680cae83ae18bad3c644b38aa14a82af8c320e",
+            "title": "Federal Reserve issues FOMC statement",
+            "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+            "source_id": "market-fed",
+            "published_on": "2026-09-16",
+            "parsed_sha256": "3479cdd716c46d9c3f4f88ba9d57daee498902c0b0d642119d65fd52fa6a63a4",
+            "required_original_span": "raise the target range for the federal funds rate by 1/4 percentage point",
+            "span_start_char": 214,
+            "span_end_char": 287,
+            "supporting_citation_ids": [
+              "c7598b8100e326d1d7763d2fe55ef3b2f611926a9"
+            ]
+          },
+          {
+            "document_id": "d9c303e0cc9ced74f737c29b0115c4a54",
+            "document_version_id": "vc9847f55b04e60bc61004c218a2709cff684b97b",
+            "title": "中国人民银行调整完善若干货币政策工具",
+            "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026092917474922559/index.html",
+            "source_id": "market-pbc",
+            "published_on": "2026-09-28",
+            "parsed_sha256": "2455410cc09f00d74bf22023aab87ee5d87871366e149805fdec925db69de80b",
+            "required_original_span": "一年期抵押补充贷款利率从1.75%降至1.5%",
+            "span_start_char": 168,
+            "span_end_char": 191,
+            "supporting_citation_ids": [
+              "c3dc1e13902a9d1ec32c4d8d5223a4d630bb8d5a0"
+            ]
+          }
+        ],
+        "rationale": "须分别解释联邦基金目标区间与PSL操作利率，不能把不同政策对象视为同一种基准利率。"
+      }
+    },
+    {
+      "id": "multi-bank-monetary-scope",
+      "split": "test",
+      "kind": "multi_organization",
+      "query": "中美央行在九月份谈货币政策时，国内委员会的宽松表态和美国的利率声明各自怎么说？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 8,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "deddfe2f8a022c059cb4e25b029f8bc26",
+            "document_version_id": "v29680cae83ae18bad3c644b38aa14a82af8c320e",
+            "title": "Federal Reserve issues FOMC statement",
+            "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+            "source_id": "market-fed",
+            "published_on": "2026-09-16",
+            "parsed_sha256": "3479cdd716c46d9c3f4f88ba9d57daee498902c0b0d642119d65fd52fa6a63a4",
+            "required_original_span": "raise the target range for the federal funds rate",
+            "span_start_char": 214,
+            "span_end_char": 263,
+            "supporting_citation_ids": [
+              "c7598b8100e326d1d7763d2fe55ef3b2f611926a9"
+            ]
+          },
+          {
+            "document_id": "d64b560c8a72944622473dee8e5bdc853",
+            "document_version_id": "v9ac67758060e3e0d1b4755b2d86b9624cbc1bd18",
+            "title": "中国人民银行货币政策委员会召开2026年第三季度例会",
+            "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026092416074632670/index.html",
+            "source_id": "market-pbc",
+            "published_on": "2026-09-23",
+            "parsed_sha256": "7ba0e154d8da80d8e9d1eb526f3a6491823bac7a086c6902207b3beaebcad640",
+            "required_original_span": "要继续实施适度宽松的货币政策",
+            "span_start_char": 370,
+            "span_end_char": 384,
+            "supporting_citation_ids": [
+              "c6f269e642793be141af9fd90d169c33d4d398f26"
+            ]
+          }
+        ],
+        "rationale": "不限定单组织来源；两边资料需保留并按地域、政策对象区分。"
+      }
+    },
+    {
+      "id": "unknown-stock-price",
+      "split": "test",
+      "kind": "unknown_specific_fact",
+      "query": "今天苹果股票开盘是多少钱？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "specific_fact_supported": false,
+        "require_empty_citations": false,
+        "related_document_ids": [],
+        "required_action": "report_specific_fact_gap",
+        "rationale": "本库没有股票逐日行情。宏观、AI或证券融资主题文档即使命中，也不是苹果今天开盘价。"
+      }
+    },
+    {
+      "id": "unknown-stock-guarantee",
+      "split": "dev",
+      "kind": "unknown_specific_fact",
+      "query": "看了这些央行消息，下一周哪只股票保证涨停？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "specific_fact_supported": false,
+        "require_empty_citations": false,
+        "related_document_ids": [],
+        "required_action": "report_specific_fact_gap",
+        "rationale": "政策或宏观主题命中不支持具体证券未来涨停保证。"
+      }
+    },
+    {
+      "id": "unknown-fed-projection-number",
+      "split": "test",
+      "kind": "unknown_specific_fact",
+      "query": "9月美国央行经济预测中，2027年通胀的中位数是多少？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "specific_fact_supported": false,
+        "require_empty_citations": false,
+        "related_document_ids": [
+          "d5b2e72e8b006b64d428b471fd8a8a15f"
+        ],
+        "required_action": "report_specific_fact_gap",
+        "rationale": "该保存发布页仅指向PDF，没有预测表的具体数值。附件没有导入，不能依据附件名补数。"
+      }
+    },
+    {
+      "id": "unknown-fed-minutes-vote-detail",
+      "split": "dev",
+      "kind": "unknown_specific_fact",
+      "query": "美国九月会议的每位委员分别怎么解释自己的那一票？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "specific_fact_supported": false,
+        "require_empty_citations": false,
+        "related_document_ids": [
+          "d13e3b3b1a3369c31c51c6b649587c715",
+          "deddfe2f8a022c059cb4e25b029f8bc26"
+        ],
+        "required_action": "report_specific_fact_gap",
+        "rationale": "纪要发布页及声明有日期与票数，不含委员逐人投票理由。"
+      }
+    },
+    {
+      "id": "unknown-current-ecb-rate",
+      "split": "test",
+      "kind": "unknown_specific_fact",
+      "query": "欧洲央行今天的存款便利利率精确是多少？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "specific_fact_supported": false,
+        "require_empty_citations": false,
+        "related_document_ids": [
+          "d56fad1feb24111454051972a07bba35b",
+          "d302d7a71bd3be7d7b26178978668d847"
+        ],
+        "required_action": "report_specific_fact_gap",
+        "rationale": "保存讲话提到部分历史调整，没有今天存款便利利率绝对水平的有效披露。"
+      }
+    },
+    {
+      "id": "unknown-borrower-rate",
+      "split": "test",
+      "kind": "unknown_specific_fact",
+      "query": "央行调低利率之后，我的个人房贷今天一定降到多少？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "specific_fact_supported": false,
+        "require_empty_citations": false,
+        "related_document_ids": [
+          "d9c303e0cc9ced74f737c29b0115c4a54",
+          "d64b560c8a72944622473dee8e5bdc853"
+        ],
+        "required_action": "report_specific_fact_gap",
+        "rationale": "宏观工具、委员会表态不支持个人合同的当前房贷数值。"
+      }
+    }
+  ],
+  "counts": {
+    "webank_positive": 64,
+    "webank_special": 14,
+    "market": 26,
+    "total": 104,
+    "product_count": 8,
+    "market_original_count": 10
+  }
+}

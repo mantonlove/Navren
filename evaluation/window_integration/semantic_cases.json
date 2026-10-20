@@ -1172,7 +1172,7 @@
     "dataset_id": "navren-skill-semantic-synthetic-v1",
     "version": "1.0.0",
     "runner_path": "scripts/run_skill_acceptance.py",
-    "runner_sha256": "c3cf75416eb5306e0a2cf8e09b9222e68cf3deed4630cac6a7bad1de80ab215b",
+    "runner_sha256": "a4bc9a7631e89cc68f9a1a0d506563daa848de31874aeb6bf20890cb1a34e0d8",
     "copied_sections": [
       "fixtures",
       "fixture_policy",

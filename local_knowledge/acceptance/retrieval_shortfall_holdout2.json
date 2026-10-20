@@ -1,0 +1,1086 @@
+{
+  "schema": "navren_retrieval_shortfall_cases/v1",
+  "benchmark_id": "retrieval_shortfall_holdout2",
+  "frozen_at": "2026-10-10T08:37:08.533290+00:00",
+  "authoring_basis": "独立阅读保存的官方原件后制定预期；仅阅读第一题集定义防重复，未读取首轮TEST结果、未运行检索、未读取个人库。",
+  "scope": "第二份独立盲验题集，公共原件提供端召回/多维覆盖/来源区分/边界；不是最终云端金融答复验收。",
+  "split_policy": "23题全部标记test，只有候选与模型/策略冻结后才可首次执行，不提供dev子集，不用于调参或补词。原104题此后固定为回归集。",
+  "first_round_regression": {
+    "path": "local_knowledge/acceptance/retrieval_shortfall_cases.json",
+    "sha256": "891a5d748fe7e20af9a6ca57b13251cceb8095997027ccaa8ec6ab3eb7f04502",
+    "question_count": 104,
+    "status": "regression_keep_original_first_run_failures_visible",
+    "exposure_note": "产品代码继续使用既有8个；独立性来自新组合问法与7份之前正向题未用的市场原件，不能声称产品完全未见或旧104题初次盲验。"
+  },
+  "evaluation_policy": {
+    "positive": "先核对预期原文哈希、字段和值，再评分引用top-k命中与必需原片段支持；不以提供器现有结果生成预期。",
+    "negative": "主题相关命中可以存在；必须把背景支持和具体事实支持分开。should_no_support不能通过any_hits==false简化。",
+    "entity_conflict": "结构身份与文本对象冲突、未核验份额应拒绝或澄清；不能把别的产品字段作为请求对象的事实。",
+    "freshness": "旧目录日期是2026-09-30；检索时点不能用文件保存日更新。风险/费用/客群7天、销售当天是本地策略。",
+    "no_source_filter": "市场题请求中没有source_id/publisher硬过滤，多组织题须保留所有正确来源，检索后按原件组织/政策对象区分。",
+    "no_threshold_tuning_on_test": true
+  },
+  "sources": {
+    "webank": {
+      "path": "outputs/official-discovery-audit-20261009/catalog-original.jsonp",
+      "sha256": "02081118e6e145669f747bd3370222700ae2fd2bc258f34fafdb2f0489182b9d",
+      "extract_date": "2026-09-30",
+      "source_url": "https://tctp.tctpwebankcdn.net/owb-admin/data/appsystems/owb-admin/productpresentation.json",
+      "record_count": 13660,
+      "selected_records": {
+        "000011": {
+          "row_index_zero_based": 3,
+          "record": {
+            "code": "000011",
+            "name": "华夏大盘精选A",
+            "saleStatus": "在售",
+            "type": "开放式基金",
+            "placement": "公募",
+            "saleType": "代销",
+            "risk": "R4中高风险",
+            "publish": "华夏基金管理有限公司",
+            "investor": "C4进取型、C5激进型",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人客户"
+          },
+          "record_sha256": "245bd8730dab5705f8b8a6e05a0eaa05515f1a6224c604a199f5fbd1d730a73d"
+        },
+        "17322D": {
+          "row_index_zero_based": 11230,
+          "record": {
+            "code": "17322D",
+            "name": "招银理财招睿月添利（平衡）2号固定收益类理财计划",
+            "saleStatus": "存续",
+            "type": "理财产品",
+            "placement": "公募",
+            "saleType": "代销",
+            "risk": "R2中低风险",
+            "publish": "招银理财有限责任公司",
+            "investor": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+            "charge": "详见产品页",
+            "chargeWay": "详见产品页",
+            "customerGroupType": "符合资质的个人客户"
+          },
+          "record_sha256": "2f6de470ea04a4f0f282e033adc587450fe59dcc3bf0799dd4acbcfcc090ccfd"
+        },
+        "07607E": {
+          "row_index_zero_based": 10796,
+          "record": {
+            "code": "07607E",
+            "name": "嘉实基金微享鸿鹄均衡1号",
+            "saleStatus": "存续",
+            "type": "集合资产管理计划",
+            "placement": "私募",
+            "saleType": "代销",
+            "risk": "较高风险",
+            "publish": "嘉实基金管理有限公司",
+            "investor": "进取型、激进型的合格投资者",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人投资者"
+          },
+          "record_sha256": "1c4d123019d06e89528aac705182365eda32257708293df9a6b899e68d52b690"
+        },
+        "GRQCJBSJ1201": {
+          "row_index_zero_based": 12280,
+          "record": {
+            "code": "GRQCJBSJ1201",
+            "name": "企惠保·财产基本险（升级版）2.0",
+            "saleStatus": "在售",
+            "type": "保险",
+            "placement": "不适用",
+            "saleType": "代销",
+            "risk": "低风险",
+            "publish": "国任财产保险股份有限公司",
+            "investor": "以保险公司核保规则为准",
+            "charge": "以保险公司核定为准",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的机构投资者"
+          },
+          "record_sha256": "2894ae856cd148bd8c7898aa4468e89f9d44b2f579fef6d13aa024b3b1a9c9d5"
+        },
+        "000014": {
+          "row_index_zero_based": 4,
+          "record": {
+            "code": "000014",
+            "name": "华夏聚利债券A",
+            "saleStatus": "在售",
+            "type": "开放式基金",
+            "placement": "公募",
+            "saleType": "代销",
+            "risk": "R4中高风险",
+            "publish": "华夏基金管理有限公司",
+            "investor": "C4进取型、C5激进型",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人客户"
+          },
+          "record_sha256": "c984be2c9afabd257e991bf6e38bd59b7bc579c64bbe363bd70fde210f5a75ae"
+        },
+        "000015": {
+          "row_index_zero_based": 5,
+          "record": {
+            "code": "000015",
+            "name": "华夏纯债债券A",
+            "saleStatus": "在售",
+            "type": "开放式基金",
+            "placement": "公募",
+            "saleType": "代销",
+            "risk": "R2中低风险",
+            "publish": "华夏基金管理有限公司",
+            "investor": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人客户"
+          },
+          "record_sha256": "1100f534facd33b2c7be32fb8429006cadef5b0ec087610c81c06ac4a220cbbc"
+        },
+        "000016": {
+          "row_index_zero_based": 6,
+          "record": {
+            "code": "000016",
+            "name": "华夏纯债债券C",
+            "saleStatus": "在售",
+            "type": "开放式基金",
+            "placement": "公募",
+            "saleType": "代销",
+            "risk": "R2中低风险",
+            "publish": "华夏基金管理有限公司",
+            "investor": "C2稳健型、C3平衡型、C4进取型、C5激进型",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人客户"
+          },
+          "record_sha256": "1a8443f60fbeb1a6662db7dbc90a1c22982be3223c422c778a44f152d0f7df75"
+        },
+        "GT2KSQ": {
+          "row_index_zero_based": 12285,
+          "record": {
+            "code": "GT2KSQ",
+            "name": "国投泰康信托招福宝L款WZ01号",
+            "saleStatus": "存续",
+            "type": "集合资金信托计划",
+            "placement": "私募",
+            "saleType": "代销",
+            "risk": "中等风险",
+            "publish": "国投泰康信托有限公司",
+            "investor": "稳健型、进取型、激进型的合格投资者",
+            "charge": "详见产品页面",
+            "chargeWay": "详见产品页面",
+            "customerGroupType": "符合资质的个人投资者"
+          },
+          "record_sha256": "c0a262b97445a4acaccefbbd1635e5d1764917c1c5aa9b74075e345dab96bb2e"
+        }
+      },
+      "excluded_previous_round_codes": [
+        "000001",
+        "000006",
+        "000008",
+        "17321D",
+        "GRKYB0301",
+        "B99353"
+      ]
+    },
+    "market": {
+      "path": "outputs/vector-data-adaptation/data-acceptance-market.sqlite3",
+      "sha256": "96747165bd752d4ea696b9899f5ae97a4e24bc9c530415639e4244b57caa24ba",
+      "release_id": "pub-7eadf1a8e8bf13369bc5a9ec523cd9e2d09057e7",
+      "document_count": 52,
+      "selected_originals": {
+        "schnabel": {
+          "document_id": "deb000139a96df943f2657940e6767b0e",
+          "source_id": "market-ecb",
+          "source_url": "https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr260924~bea1dd9824.en.html",
+          "document_version_id": "vf51b3f8a47f65cd9217f82e259c2d6db915c913e",
+          "title": "ECB Executive Board member Isabel Schnabel to resign to take senior role at IMF",
+          "published_on": "2026-09-24",
+          "parsed_sha256": "5b0073ea328dd4d8761eec075f1ce201c85ca1000a1e0313e20e865ff9804ca7",
+          "raw_sha256": "5b0073ea328dd4d8761eec075f1ce201c85ca1000a1e0313e20e865ff9804ca7"
+        },
+        "digital_euro": {
+          "document_id": "da31b32cd9ed3e881ba4a018c4014ed93",
+          "source_id": "market-ecb",
+          "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in261008~3184e7d0d0.en.html",
+          "document_version_id": "vad15df27cf06d4f12af1a958533d1c70cb0ca163",
+          "title": "Interview with Corriere della Sera",
+          "published_on": "2026-10-08",
+          "parsed_sha256": "063c91076fce87b3a95730634d210dba2fc39a8ecd4491ebceb3b53dabbdec71",
+          "raw_sha256": "063c91076fce87b3a95730634d210dba2fc39a8ecd4491ebceb3b53dabbdec71"
+        },
+        "lac": {
+          "document_id": "dfcecf0f32cf361def071e3dc1a19b063",
+          "source_id": "market-ecb",
+          "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in260930~10084a5f3d.en.html",
+          "document_version_id": "vb4ba12895942a597d66a1efad4d24e0d18e973b3",
+          "title": "Interview with La Croix",
+          "published_on": "2026-09-30",
+          "parsed_sha256": "7a4d5a58f9eebe95b80760d9955d54511a183b2f1fe7ee06f34cab3f97c332e9",
+          "raw_sha256": "7a4d5a58f9eebe95b80760d9955d54511a183b2f1fe7ee06f34cab3f97c332e9"
+        },
+        "ansa": {
+          "document_id": "d6a5c2a4d0c888ffc9b8b77c98cff5be9",
+          "source_id": "market-ecb",
+          "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in261006~bc94400297.en.html",
+          "document_version_id": "v9980d25ea5c2068877fe3a7e1c4eb0d37411e3a9",
+          "title": "Interview with Ansa",
+          "published_on": "2026-10-06",
+          "parsed_sha256": "cee8d1cb7fb577ddb0921fb4728e4668bb55b2d12c0bcb57e791035e4aa6da0f",
+          "raw_sha256": "cee8d1cb7fb577ddb0921fb4728e4668bb55b2d12c0bcb57e791035e4aa6da0f"
+        },
+        "temps": {
+          "document_id": "db6d34460f3cb2417baf3aaa3e75306c4",
+          "source_id": "market-ecb",
+          "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in260922~5f89d300ee.en.html",
+          "document_version_id": "v4326f212799391cd7da2548f201a13282dd8ec1b",
+          "title": "Interview with Le Temps",
+          "published_on": "2026-09-22",
+          "parsed_sha256": "64cef05ea0d60f0347bb03d3db8c6adeed7dcbb78e36af1fd1c59360e1d45452",
+          "raw_sha256": "64cef05ea0d60f0347bb03d3db8c6adeed7dcbb78e36af1fd1c59360e1d45452"
+        },
+        "pbc_crossborder": {
+          "document_id": "df7ff0ec79269b530ac909f076424611a",
+          "source_id": "market-pbc",
+          "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026091815494839605/index.html",
+          "document_version_id": "v5bf5a98c1d9fcf174e788b9001193941f5573ef7",
+          "title": "中老跨境数字支付互联互通正式启动",
+          "published_on": "2026-09-17",
+          "parsed_sha256": "ffe19de36047a21e63e9aec77ad08eaac7ad445bf2f625ef89f5b2ad437fdbe6",
+          "raw_sha256": "ffe19de36047a21e63e9aec77ad08eaac7ad445bf2f625ef89f5b2ad437fdbe6"
+        },
+        "pbc_currency": {
+          "document_id": "da27856f3c56dd91e35972d5489074870",
+          "source_id": "market-pbc",
+          "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026100816231113295/index.html",
+          "document_version_id": "v01a53e68e28f96d3928a86d1040d57e52ffa88d3",
+          "title": "中国人民银行关于人民币汇率的政策立场",
+          "published_on": "2026-10-07",
+          "parsed_sha256": "8ffe9895f9427d4392c9d12cd72871ba5ca7b1dca1277f82033a37dd4a1f954d",
+          "raw_sha256": "8ffe9895f9427d4392c9d12cd72871ba5ca7b1dca1277f82033a37dd4a1f954d"
+        }
+      }
+    }
+  },
+  "webank_cases": [
+    {
+      "id": "holdout2-product-000011",
+      "split": "test",
+      "kind": "multi_field",
+      "code": "000011",
+      "query": "华夏大盘精选A，在微众出现是不是说明银行自己发的？请把实际负责的公司和银行卖它的角色分清。",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 6,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "should_no_support": false,
+        "require_all_groups": true,
+        "field_groups": [
+          {
+            "field": "publish",
+            "value": "华夏基金管理有限公司",
+            "paragraph": "productPresentation:000011/publish"
+          },
+          {
+            "field": "saleType",
+            "value": "代销",
+            "paragraph": "productPresentation:000011/saleType"
+          }
+        ],
+        "rationale": "核对原目录多列披露；公司/代理销售关系不推断发行资格，投资者类别不构成买入许可，费用指引不提供具体金额。"
+      }
+    },
+    {
+      "id": "holdout2-product-17322D",
+      "split": "test",
+      "kind": "multi_field",
+      "code": "17322D",
+      "query": "招银理财招睿月添利（平衡）2号固定收益类理财计划，到底归在哪一种产品里，钱是公开向公众募集的还是私下募集的？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 6,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "should_no_support": false,
+        "require_all_groups": true,
+        "field_groups": [
+          {
+            "field": "type",
+            "value": "理财产品",
+            "paragraph": "productPresentation:17322D/type"
+          },
+          {
+            "field": "placement",
+            "value": "公募",
+            "paragraph": "productPresentation:17322D/placement"
+          }
+        ],
+        "rationale": "核对原目录多列披露；公司/代理销售关系不推断发行资格，投资者类别不构成买入许可，费用指引不提供具体金额。"
+      }
+    },
+    {
+      "id": "holdout2-product-07607E",
+      "split": "test",
+      "kind": "multi_field",
+      "code": "07607E",
+      "query": "嘉实基金微享鸿鹄均衡1号，如果不看收益，只看风险描述和被列入的投资者类型，原记录分别怎么写？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 6,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "should_no_support": false,
+        "require_all_groups": true,
+        "field_groups": [
+          {
+            "field": "risk",
+            "value": "较高风险",
+            "paragraph": "productPresentation:07607E/risk"
+          },
+          {
+            "field": "investor",
+            "value": "进取型、激进型的合格投资者",
+            "paragraph": "productPresentation:07607E/investor"
+          }
+        ],
+        "rationale": "核对原目录多列披露；公司/代理销售关系不推断发行资格，投资者类别不构成买入许可，费用指引不提供具体金额。"
+      }
+    },
+    {
+      "id": "holdout2-product-GRQCJBSJ1201",
+      "split": "test",
+      "kind": "multi_field",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，我用公司身份投保的话，客群记录接不接受这种主体，资格又由什么规则审核？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 6,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "should_no_support": false,
+        "require_all_groups": true,
+        "field_groups": [
+          {
+            "field": "customerGroupType",
+            "value": "符合资质的机构投资者",
+            "paragraph": "productPresentation:GRQCJBSJ1201/customerGroupType"
+          },
+          {
+            "field": "investor",
+            "value": "以保险公司核保规则为准",
+            "paragraph": "productPresentation:GRQCJBSJ1201/investor"
+          }
+        ],
+        "rationale": "核对原目录多列披露；公司/代理销售关系不推断发行资格，投资者类别不构成买入许可，费用指引不提供具体金额。"
+      }
+    },
+    {
+      "id": "holdout2-product-000014",
+      "split": "test",
+      "kind": "multi_field",
+      "code": "000014",
+      "query": "华夏聚利债券A，把要收多少和怎么扣款分开说，渠道目录分别交代到了什么程度？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 6,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "should_no_support": false,
+        "require_all_groups": true,
+        "field_groups": [
+          {
+            "field": "charge",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:000014/charge"
+          },
+          {
+            "field": "chargeWay",
+            "value": "详见产品页面",
+            "paragraph": "productPresentation:000014/chargeWay"
+          }
+        ],
+        "rationale": "核对原目录多列披露；公司/代理销售关系不推断发行资格，投资者类别不构成买入许可，费用指引不提供具体金额。"
+      }
+    },
+    {
+      "id": "holdout2-product-000015",
+      "split": "test",
+      "kind": "multi_field",
+      "code": "000015",
+      "query": "华夏纯债债券A，给我同时核一下它的风险档位与个人、对公两种主体中列明面向的那一种。",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 6,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "should_no_support": false,
+        "require_all_groups": true,
+        "field_groups": [
+          {
+            "field": "risk",
+            "value": "R2中低风险",
+            "paragraph": "productPresentation:000015/risk"
+          },
+          {
+            "field": "customerGroupType",
+            "value": "符合资质的个人客户",
+            "paragraph": "productPresentation:000015/customerGroupType"
+          }
+        ],
+        "rationale": "核对原目录多列披露；公司/代理销售关系不推断发行资格，投资者类别不构成买入许可，费用指引不提供具体金额。"
+      }
+    },
+    {
+      "id": "holdout2-product-000016",
+      "split": "test",
+      "kind": "multi_field",
+      "code": "000016",
+      "query": "华夏纯债债券C，登记的管理人全称是什么，募集属性与产品大类各算哪一种？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 6,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "should_no_support": false,
+        "require_all_groups": true,
+        "field_groups": [
+          {
+            "field": "publish",
+            "value": "华夏基金管理有限公司",
+            "paragraph": "productPresentation:000016/publish"
+          },
+          {
+            "field": "placement",
+            "value": "公募",
+            "paragraph": "productPresentation:000016/placement"
+          },
+          {
+            "field": "type",
+            "value": "开放式基金",
+            "paragraph": "productPresentation:000016/type"
+          }
+        ],
+        "rationale": "核对原目录多列披露；公司/代理销售关系不推断发行资格，投资者类别不构成买入许可，费用指引不提供具体金额。"
+      }
+    },
+    {
+      "id": "holdout2-product-GT2KSQ",
+      "split": "test",
+      "kind": "multi_field",
+      "code": "GT2KSQ",
+      "query": "国投泰康信托招福宝L款WZ01号，目录对合格投资者和个人机构身份怎样限定，微众在这里是发行主体还是代为销售？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 6,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "expected": {
+        "should_no_support": false,
+        "require_all_groups": true,
+        "field_groups": [
+          {
+            "field": "investor",
+            "value": "稳健型、进取型、激进型的合格投资者",
+            "paragraph": "productPresentation:GT2KSQ/investor"
+          },
+          {
+            "field": "customerGroupType",
+            "value": "符合资质的个人投资者",
+            "paragraph": "productPresentation:GT2KSQ/customerGroupType"
+          },
+          {
+            "field": "saleType",
+            "value": "代销",
+            "paragraph": "productPresentation:GT2KSQ/saleType"
+          }
+        ],
+        "rationale": "核对原目录多列披露；公司/代理销售关系不推断发行资格，投资者类别不构成买入许可，费用指引不提供具体金额。"
+      }
+    }
+  ],
+  "webank_special_cases": [
+    {
+      "id": "holdout2-conflicting-funds",
+      "split": "test",
+      "kind": "identity_conflict",
+      "code": "000011",
+      "query": "我说的是华夏聚利债券A，帮我把它的客户身份和募集性质核清楚。",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity"
+      ],
+      "request_override": {
+        "product_id": "WEBANK:000011",
+        "channel_id": "WEBANK"
+      },
+      "expected": {
+        "should_no_support": true,
+        "require_empty_citations": true,
+        "topic_support_allowed": false,
+        "required_action": "clarify_or_identity_conflict",
+        "field_groups": [
+          {
+            "field": "customerGroupType",
+            "value": "符合资质的个人客户",
+            "paragraph": "productPresentation:000011/customerGroupType"
+          },
+          {
+            "field": "placement",
+            "value": "公募",
+            "paragraph": "productPresentation:000011/placement"
+          }
+        ],
+        "rationale": "文字对象与结构请求分别是000014与000011；同管理人不允许跨产品代答。"
+      }
+    },
+    {
+      "id": "holdout2-expired-insurance-client",
+      "split": "test",
+      "kind": "expired",
+      "code": "GRQCJBSJ1201",
+      "query": "企惠保·财产基本险（升级版）2.0，现在还把公司列在适用客群里吗？",
+      "as_of": "2026-10-08",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity"
+      ],
+      "request_override": {
+        "product_id": "WEBANK:GRQCJBSJ1201",
+        "channel_id": "WEBANK"
+      },
+      "expected": {
+        "should_no_support": true,
+        "require_empty_citations": true,
+        "topic_support_allowed": false,
+        "required_action": "report_temporal_gap",
+        "field_groups": [
+          {
+            "field": "customerGroupType",
+            "value": "符合资质的机构投资者",
+            "paragraph": "productPresentation:GRQCJBSJ1201/customerGroupType"
+          }
+        ],
+        "rationale": "目录9月30日的客群字段到10月8日已超过7天本地新鲜度，不支持当前资格或可投保状态。"
+      }
+    },
+    {
+      "id": "holdout2-unknown-nav-format",
+      "split": "test",
+      "kind": "unknown_fact",
+      "code": "000016",
+      "query": "华夏纯债债券C，下次公布净值会保留多少位小数？",
+      "as_of": "2026-09-30",
+      "facets": [],
+      "limit": 3,
+      "identity_modes": [
+        "explicit_identity",
+        "text_only"
+      ],
+      "request_override": {},
+      "expected": {
+        "should_no_support": true,
+        "require_empty_citations": false,
+        "topic_support_allowed": true,
+        "required_action": "report_specific_fact_gap",
+        "field_groups": [
+          {
+            "field": "type",
+            "value": "开放式基金",
+            "paragraph": "productPresentation:000016/type"
+          }
+        ],
+        "rationale": "渠道目录只披露产品类型，未保存净值估值或披露精度规则；不能用相似产品惯例补答案。"
+      }
+    }
+  ],
+  "market_cases": [
+    {
+      "id": "holdout2-imf-appointment",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "施纳贝尔离开欧洲央行以后，公告准备让她在国际货币基金组织担任什么职务？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "deb000139a96df943f2657940e6767b0e",
+            "document_version_id": "vf51b3f8a47f65cd9217f82e259c2d6db915c913e",
+            "title": "ECB Executive Board member Isabel Schnabel to resign to take senior role at IMF",
+            "source_url": "https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr260924~bea1dd9824.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-09-24",
+            "parsed_sha256": "5b0073ea328dd4d8761eec075f1ce201c85ca1000a1e0313e20e865ff9804ca7",
+            "required_original_span": "Financial Counsellor and Director of the Monetary and Capital Markets Department",
+            "span_start_char": 144,
+            "span_end_char": 224,
+            "supporting_citation_ids": [
+              "c2940f961e9eda6a70b8cf9e18c07caa1eec4f017"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "holdout2-imf-conflict",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "施纳贝尔在欧洲央行剩余任期里，还能参与涉及国际货币基金组织的事项吗？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "deb000139a96df943f2657940e6767b0e",
+            "document_version_id": "vf51b3f8a47f65cd9217f82e259c2d6db915c913e",
+            "title": "ECB Executive Board member Isabel Schnabel to resign to take senior role at IMF",
+            "source_url": "https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr260924~bea1dd9824.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-09-24",
+            "parsed_sha256": "5b0073ea328dd4d8761eec075f1ce201c85ca1000a1e0313e20e865ff9804ca7",
+            "required_original_span": "Ms Schnabel will not be involved in any matters related to the IMF for the remainder of her term at the ECB.",
+            "span_start_char": 1050,
+            "span_end_char": 1158,
+            "supporting_citation_ids": [
+              "c8f857db495d998e2c7f05ed39ee7421139e38b76"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "holdout2-digital-cash",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "数字欧元推出后，是要让现钞退出使用，还是与现金共存？采访里有没有说个人使用要不要付费？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "da31b32cd9ed3e881ba4a018c4014ed93",
+            "document_version_id": "vad15df27cf06d4f12af1a958533d1c70cb0ca163",
+            "title": "Interview with Corriere della Sera",
+            "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in261008~3184e7d0d0.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-08",
+            "parsed_sha256": "063c91076fce87b3a95730634d210dba2fc39a8ecd4491ebceb3b53dabbdec71",
+            "required_original_span": "The digital euro will complement cash, offering the same high level of security and, let me stress, at no cost to individuals, just like cash today.",
+            "span_start_char": 540,
+            "span_end_char": 688,
+            "supporting_citation_ids": [
+              "c4260b1ad33f852cb688ba9b82909d077246d3a42"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "holdout2-digital-offline",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "数字欧元的离线付款设想里，钱能不能在没有网络和中介时从一个设备转到另一个设备？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "da31b32cd9ed3e881ba4a018c4014ed93",
+            "document_version_id": "vad15df27cf06d4f12af1a958533d1c70cb0ca163",
+            "title": "Interview with Corriere della Sera",
+            "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in261008~3184e7d0d0.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-08",
+            "parsed_sha256": "063c91076fce87b3a95730634d210dba2fc39a8ecd4491ebceb3b53dabbdec71",
+            "required_original_span": "you will still be able to pay offline, without an internet connection or intermediaries. Money will pass from one device to another",
+            "span_start_char": 3088,
+            "span_end_char": 3219,
+            "supporting_citation_ids": [
+              "cf6b081234f0a252676e4c74d698361795195244d"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "holdout2-digital-no-phone",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "没有智能手机的人，欧洲数字货币采访是否还给他们留了支付工具？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "da31b32cd9ed3e881ba4a018c4014ed93",
+            "document_version_id": "vad15df27cf06d4f12af1a958533d1c70cb0ca163",
+            "title": "Interview with Corriere della Sera",
+            "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in261008~3184e7d0d0.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-08",
+            "parsed_sha256": "063c91076fce87b3a95730634d210dba2fc39a8ecd4491ebceb3b53dabbdec71",
+            "required_original_span": "There will be a card too.",
+            "span_start_char": 2907,
+            "span_end_char": 2932,
+            "supporting_citation_ids": [
+              "cd792d6399bcfcdea775bd627580220147ea7797e"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "holdout2-europe-old-pillars",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "拉加德说欧洲过去依赖俄罗斯、中国和美国的地方分别是哪些？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "dfcecf0f32cf361def071e3dc1a19b063",
+            "document_version_id": "vb4ba12895942a597d66a1efad4d24e0d18e973b3",
+            "title": "Interview with La Croix",
+            "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in260930~10084a5f3d.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-09-30",
+            "parsed_sha256": "7a4d5a58f9eebe95b80760d9955d54511a183b2f1fe7ee06f34cab3f97c332e9",
+            "required_original_span": "Europe has long rested on three pillars: cheap energy, notably from Russia, the large Chinese market for its exports and the US security umbrella.",
+            "span_start_char": 1546,
+            "span_end_char": 1692,
+            "supporting_citation_ids": [
+              "c7b13b607531fc88b0d4aa73af10262f53f6ef5ee"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "holdout2-policy-labels",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "拉加德接受La Croix采访时，为什么不愿把自己归进货币政策鹰派或鸽派？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "dfcecf0f32cf361def071e3dc1a19b063",
+            "document_version_id": "vb4ba12895942a597d66a1efad4d24e0d18e973b3",
+            "title": "Interview with La Croix",
+            "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in260930~10084a5f3d.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-09-30",
+            "parsed_sha256": "7a4d5a58f9eebe95b80760d9955d54511a183b2f1fe7ee06f34cab3f97c332e9",
+            "required_original_span": "I don’t take sides in monetary policy. I’m guided by facts and prepared to adjust when circumstances require it.",
+            "span_start_char": 3571,
+            "span_end_char": 3683,
+            "supporting_citation_ids": [
+              "c6ff763a31a24cef3d231d756eedc52685b65d25f"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "holdout2-scenario-not-label",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "莱恩为什么提醒别光看油气涨幅，就给经济落在哪个预设情景贴标签？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "d6a5c2a4d0c888ffc9b8b77c98cff5be9",
+            "document_version_id": "v9980d25ea5c2068877fe3a7e1c4eb0d37411e3a9",
+            "title": "Interview with Ansa",
+            "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in261006~bc94400297.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-06",
+            "parsed_sha256": "cee8d1cb7fb577ddb0921fb4728e4668bb55b2d12c0bcb57e791035e4aa6da0f",
+            "required_original_span": "Because the scenarios are a collection of different assumptions.",
+            "span_start_char": 854,
+            "span_end_char": 918,
+            "supporting_citation_ids": [
+              "c6db755ab9441fea3bc4bf8d55412ba2e06772ebe"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "holdout2-fiscal-boost-duration",
+      "split": "test",
+      "kind": "cross_language",
+      "query": "莱恩在Le Temps访谈中怎样提醒政府支出提振经济的持续性？这种助力能一直维持吗？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "db6d34460f3cb2417baf3aaa3e75306c4",
+            "document_version_id": "v4326f212799391cd7da2548f201a13282dd8ec1b",
+            "title": "Interview with Le Temps",
+            "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in260922~5f89d300ee.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-09-22",
+            "parsed_sha256": "64cef05ea0d60f0347bb03d3db8c6adeed7dcbb78e36af1fd1c59360e1d45452",
+            "required_original_span": "while government spending is providing a temporary boost, this is going to fade out over time.",
+            "span_start_char": 3549,
+            "span_end_char": 3643,
+            "supporting_citation_ids": [
+              "c9e52aeb1acceca784f6596420bcdb460af6084f7"
+            ]
+          }
+        ],
+        "evaluation": "document_recall_and_original_span_support"
+      }
+    },
+    {
+      "id": "holdout2-two-digital-initiatives",
+      "split": "test",
+      "kind": "multi_organization",
+      "query": "请把两类数字支付消息分清：欧洲央行数字欧元说明是否要求用它替掉现金，中老支付互通公告由哪两家央行合作推进？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 8,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "da31b32cd9ed3e881ba4a018c4014ed93",
+            "document_version_id": "vad15df27cf06d4f12af1a958533d1c70cb0ca163",
+            "title": "Interview with Corriere della Sera",
+            "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in261008~3184e7d0d0.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-10-08",
+            "parsed_sha256": "063c91076fce87b3a95730634d210dba2fc39a8ecd4491ebceb3b53dabbdec71",
+            "required_original_span": "The digital euro will complement cash",
+            "span_start_char": 540,
+            "span_end_char": 577,
+            "supporting_citation_ids": [
+              "c4260b1ad33f852cb688ba9b82909d077246d3a42"
+            ]
+          },
+          {
+            "document_id": "df7ff0ec79269b530ac909f076424611a",
+            "document_version_id": "v5bf5a98c1d9fcf174e788b9001193941f5573ef7",
+            "title": "中老跨境数字支付互联互通正式启动",
+            "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026091815494839605/index.html",
+            "source_id": "market-pbc",
+            "published_on": "2026-09-17",
+            "parsed_sha256": "ffe19de36047a21e63e9aec77ad08eaac7ad445bf2f625ef89f5b2ad437fdbe6",
+            "required_original_span": "中国人民银行与老挝人民民主共和国银行在广西南宁联合举办中老跨境数字支付互联互通启动会。",
+            "span_start_char": 11,
+            "span_end_char": 54,
+            "supporting_citation_ids": [
+              "c3d2928d5d1afee18d10a25d3aa13a9e01f9bd31b"
+            ]
+          }
+        ],
+        "rationale": "数字欧元现金关系与中老双边合作是不同政策项目；需并列正确原件，不按一家央行硬过滤。"
+      }
+    },
+    {
+      "id": "holdout2-savings-global-imbalance",
+      "split": "test",
+      "kind": "multi_organization",
+      "query": "欧洲采访谈资本市场联合要把储蓄用到哪里，中国央行谈全球失衡又让顺差国与逆差国各调整什么？请将两边建议分开交代。",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 8,
+      "request_override": {},
+      "expected": {
+        "should_no_support": false,
+        "topic_support": true,
+        "specific_fact_supported": true,
+        "require_all_groups": true,
+        "evidence_groups": [
+          {
+            "document_id": "dfcecf0f32cf361def071e3dc1a19b063",
+            "document_version_id": "vb4ba12895942a597d66a1efad4d24e0d18e973b3",
+            "title": "Interview with La Croix",
+            "source_url": "https://www.ecb.europa.eu/press/inter/date/2026/html/ecb.in260930~10084a5f3d.en.html",
+            "source_id": "market-ecb",
+            "published_on": "2026-09-30",
+            "parsed_sha256": "7a4d5a58f9eebe95b80760d9955d54511a183b2f1fe7ee06f34cab3f97c332e9",
+            "required_original_span": "deepen the capital markets union so that European savings provide more financing for our investment.",
+            "span_start_char": 5989,
+            "span_end_char": 6089,
+            "supporting_citation_ids": [
+              "c47059b06c98726d094c33ab7dd170cd7465a5e67",
+              "c0e32f53d1d552db0bcd31a3d4fe88e48bedb56c2"
+            ]
+          },
+          {
+            "document_id": "da27856f3c56dd91e35972d5489074870",
+            "document_version_id": "v01a53e68e28f96d3928a86d1040d57e52ffa88d3",
+            "title": "中国人民银行关于人民币汇率的政策立场",
+            "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026100816231113295/index.html",
+            "source_id": "market-pbc",
+            "published_on": "2026-10-07",
+            "parsed_sha256": "8ffe9895f9427d4392c9d12cd72871ba5ca7b1dca1277f82033a37dd4a1f954d",
+            "required_original_span": "逆差国应着手进行财政整顿，提高本国储蓄率和产业竞争力；顺差国应推动消费和投资增长。",
+            "span_start_char": 5125,
+            "span_end_char": 5166,
+            "supporting_citation_ids": [
+              "cbf12b08c7a5353807b46d7b2c9907967f8821f21"
+            ]
+          }
+        ],
+        "rationale": "资本市场融资与顺逆差结构调整不同；不能合并组织观点或将其中一份原件代替另一份。"
+      }
+    },
+    {
+      "id": "holdout2-unknown-crossborder-fee",
+      "split": "test",
+      "kind": "unknown_specific_fact",
+      "query": "中老跨境数字支付互通后，我每笔扫码付款的手续费必然是多少？",
+      "as_of": "2026-10-10",
+      "facets": [
+        "general"
+      ],
+      "limit": 5,
+      "request_override": {},
+      "expected": {
+        "should_no_support": true,
+        "topic_support_allowed": true,
+        "specific_fact_supported": false,
+        "require_empty_citations": false,
+        "related_document_ids": [
+          "df7ff0ec79269b530ac909f076424611a"
+        ],
+        "required_action": "report_specific_fact_gap",
+        "rationale": "启动公告没有逐笔收费、扫码产品收费规则或本人合同，数字支付主题命中不能证明具体手续费。"
+      }
+    }
+  ],
+  "counts": {
+    "webank_positive": 8,
+    "webank_special": 3,
+    "market": 12,
+    "market_cross_language_positive": 9,
+    "market_multi_organization": 2,
+    "market_unsupported": 1,
+    "total": 23,
+    "product_count": 8,
+    "market_original_count": 7,
+    "unsupported_identity_freshness_total": 4
+  }
+}

@@ -10,7 +10,7 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--ingest-only',action='store_true');p.add_argument('--scheduled',action='store_true');p.add_argument('--force-check',action='store_true')
     p.add_argument('--reconstruct-history',action='store_true',help='仅按已审核真实材料报道日期补录近30天，不冒充历史实际选稿')
     p.add_argument('--hotspots-only',action='store_true',help='只核验热点并建立每日版次，不改市场周报')
-    p.add_argument('--backfill-weeks',type=int,choices=(1,2),default=2);p.add_argument('--source-limit',type=int,default=15)
+    p.add_argument('--backfill-weeks',type=int,choices=(1,2),default=2);p.add_argument('--source-limit',type=int,default=30)
     p.add_argument('--sources',nargs='+',choices=[i for i,s in REGISTRY.items() if s.enabled],help='仅抽样指定来源；日常刷新省略此参数')
     p.add_argument('--database',help='指定公开资讯数据库；不使用个人银行数据库')
     p.add_argument('--report',default='outputs/market-acceptance/latest-run.json');a=p.parse_args();store=MarketStore(a.database)
@@ -22,7 +22,7 @@ def main():
             result={'status':'complete_with_limits','history':store.reconstruct_daily(run_id='reconstruct-'+uuid.uuid4().hex)}
     else:
         if a.scheduled and not due(store):return 0
-        result=refresh(store,source_limit=max(1,min(a.source_limit,20)),backfill_weeks=a.backfill_weeks,ingest_only=a.ingest_only,force_check=a.force_check,scheduled=a.scheduled,sources=[REGISTRY[i] for i in a.sources] if a.sources else None,hotspots_only=a.hotspots_only)
+        result=refresh(store,source_limit=max(1,min(a.source_limit,40)),backfill_weeks=a.backfill_weeks,ingest_only=a.ingest_only,force_check=a.force_check,scheduled=a.scheduled,sources=[REGISTRY[i] for i in a.sources] if a.sources else None,hotspots_only=a.hotspots_only)
     dest=Path(a.report);dest.parent.mkdir(parents=True,exist_ok=True);fd,tmp=tempfile.mkstemp(dir=dest.parent,prefix='.market-run-')
     with os.fdopen(fd,'w') as f:json.dump(result,f,ensure_ascii=False,indent=2);f.flush();os.fsync(f.fileno())
     os.replace(tmp,dest)

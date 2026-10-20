@@ -48,6 +48,44 @@ class RoundProvider:
     def __getattr__(self, name):
         return getattr(self.provider, name)
 
+    def public_identity_catalog(self, *, limit=64, as_of=None):
+        """Optional bounded capability on this round's exact fixed release."""
+        if type(limit) is not int or not 1 <= limit <= 64:
+            raise ValueError('invalid_limit')
+        method = getattr(self.provider, 'public_identity_catalog', None)
+        if not callable(method) or not self.release_id:
+            return None
+        date_value = as_of or today()
+        value = method(release_id=self.release_id, as_of=date_value, limit=limit)
+        if (type(value) is not dict or set(value) != {'schema', 'release_id', 'as_of', 'entities'}
+                or value['schema'] != 'navren.public-identity-catalog/1'
+                or value['release_id'] != self.release_id or value['as_of'] != date_value
+                or type(value['entities']) is not list or len(value['entities']) > limit):
+            raise KnowledgeError('public_identity_catalog_invalid')
+        rows = value['entities']
+        keys = {'label', 'kind', 'public_ref', 'parent_product_ref', 'citation_id'}
+        if any(type(row) is not dict or set(row) != keys
+               or row['kind'] not in ('product', 'share_class', 'channel')
+               or any(type(row[k]) is not str or not row[k] for k in ('label', 'public_ref', 'citation_id'))
+               or row['parent_product_ref'] is not None and type(row['parent_product_ref']) is not str
+               for row in rows):
+            raise KnowledgeError('public_identity_catalog_invalid')
+        ids = list(dict.fromkeys(row['citation_id'] for row in rows))
+        batch = getattr(self, 'observe_identity_batch', None)
+        if batch is None:
+            batch = self.provider.resolve_public_evidence_batch
+        originals = batch(ids, self.release_id, date_value)
+        retained = []
+        for row in rows:
+            original = originals.get(row['citation_id'])
+            field = {'product': 'product_id', 'share_class': 'share_class_id', 'channel': 'channel_id'}[row['kind']]
+            if (not original or 'general' not in original['facets']
+                    or original[field] != row['public_ref']
+                    or row['kind'] == 'share_class' and original['product_id'] != row['parent_product_ref']):
+                continue
+            retained.append(deepcopy(row))
+        return {**value, 'entities': retained}
+
     def public_catalog(self, *, limit=5000):
         catalog = self.provider.public_catalog(limit=limit)
         terms, ids = list(catalog['terms']), list(catalog['identifiers'])

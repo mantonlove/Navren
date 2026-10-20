@@ -67,8 +67,21 @@ class IndependentPublicHandoff(unittest.TestCase):
         cls.market_module = importlib.import_module("market_content")
         cls.daily = importlib.import_module("market_daily")
         # 仅加载公共消费合同，避免导入Agent编排或模型配置。
-        spec = importlib.util.spec_from_file_location("window_public_knowledge_consumer", ROOT / "agent_runtime/knowledge_retrieval.py")
+        package_name = "window_public_knowledge_consumer"
+        if any(name == package_name or name.startswith(package_name + ".") for name in sys.modules):
+            raise RuntimeError("fresh_public_consumer_package_required")
+        package_spec = importlib.util.spec_from_file_location(package_name, ROOT / "agent_runtime/__init__.py",
+            submodule_search_locations=[str(ROOT / "agent_runtime")])
+        # 只登记真实包路径和元数据，不执行包含Agent编排的__init__。
+        sys.modules[package_name] = importlib.util.module_from_spec(package_spec)
+        def remove_consumer_modules():
+            for name in tuple(sys.modules):
+                if name == package_name or name.startswith(package_name + "."):
+                    sys.modules.pop(name, None)
+        cls.addClassCleanup(remove_consumer_modules)
+        spec = importlib.util.spec_from_file_location(package_name + ".knowledge_retrieval", ROOT / "agent_runtime/knowledge_retrieval.py")
         cls.consumer = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.consumer
         spec.loader.exec_module(cls.consumer)
         if cls.source_code != {name: file_sha(ROOT / name) for name in cls.source_code}:
             raise RuntimeError("source_changed_during_public_import")

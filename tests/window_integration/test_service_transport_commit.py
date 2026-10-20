@@ -7,6 +7,7 @@ import hashlib
 import http.client
 import inspect
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -23,12 +24,14 @@ import test_market_voice_negotiation as _voice
 import test_service_response_guard as _service
 
 from agent_runtime.conversation import ConversationAgent
+from agent_runtime.model_adapters import OpenAICompatibleJsonClient
 from finance_gateway import COOKIE
 from server import PublicationSocket
 from simulated_bank import BankError
 from voice_gateway import SpeechTask
 
 ROOT = _cross.ROOT
+_OFFLINE_WIRE_COMPLETE_JSON = OpenAICompatibleJsonClient.complete_json
 ORACLE_PATH = ROOT / "evaluation/window_integration/service_transport_commit_oracles.json"
 FROZEN_ORACLE_SHA = "a4d52f3d9cab6da7890fb548179524e14ccae232653f40e9974ce0f17d8da772"
 ORACLE = json.loads(ORACLE_PATH.read_text())
@@ -62,12 +65,91 @@ class LocalPrimary(_cross.ScriptedPrimary):
         return response, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
+class _LocalJsonResponse:
+    def __init__(self, value):
+        self.status = 200
+        self.body = json.dumps(value, ensure_ascii=False).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self, limit=-1):
+        return self.body if limit is None or limit < 0 else self.body[:limit]
+
+
 class LocalReviewer(_cross.ScriptedReviewer):
+    """Keep the frozen decision but build/capture the real GLM review wire locally."""
     billing_mode = "unpaid_fixture"
 
-    def review(self, *args, **kwargs):
-        response = super().review(*args, **kwargs)
-        return {**response, "_model_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
+    def __init__(self, verdict="approve", hook=None):
+        super().__init__(verdict=verdict, hook=hook)
+        from agent_runtime import conversation as conversation_module
+        from agent_runtime.conversation import GLMConversationReviewer
+        from agent_runtime.model_adapters import GLM_REVIEW_MODEL
+
+        # CrossModuleIntegrationTests blocks the shared client method globally.
+        # Save its original implementation before per-test guards are installed;
+        # this subclass restores it only for the one client whose urlopen is the
+        # in-process fixture below.
+        class OfflineWireClient(OpenAICompatibleJsonClient):
+            complete_json = _OFFLINE_WIRE_COMPLETE_JSON
+
+        self._conversation_module = conversation_module
+        self._offline_wire_client_class = OfflineWireClient
+
+        self.model_id = GLM_REVIEW_MODEL
+        self._offline_decision = threading.local()
+        self._wire_lock = threading.Lock()
+        self.wire_requests = []
+        local_url = "https://offline-final-review.invalid/v1/chat/completions"
+
+        def local_open(request, *, timeout=None, **kwargs):
+            if (getattr(request, "full_url", None) != local_url
+                    or request.get_method() != "POST"
+                    or not isinstance(getattr(request, "data", None), bytes)):
+                raise ValueError("offline_final_review_request_contract_invalid")
+            payload = json.loads(request.data.decode("utf-8"))
+            if payload.get("model") != GLM_REVIEW_MODEL:
+                raise ValueError("offline_final_review_model_binding_invalid")
+            decision = getattr(self._offline_decision, "value", None)
+            if type(decision) is not dict:
+                raise ValueError("offline_final_review_decision_unbound")
+            with self._wire_lock:
+                self.wire_requests.append({"method": request.get_method(), "url": local_url,
+                    "request_bytes": len(request.data), "request_sha256": hashlib.sha256(request.data).hexdigest(),
+                    "transport": "in_process_fixture_no_network", "billing_mode": "unpaid_fixture"})
+            return _LocalJsonResponse({"id": "offline-final-review", "model": GLM_REVIEW_MODEL,
+                "choices": [{"finish_reason": "stop", "message": {"role": "assistant",
+                    "content": json.dumps(decision, ensure_ascii=False)}}],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}})
+
+        client = OpenAICompatibleJsonClient(provider="ai_ping", model_id=GLM_REVIEW_MODEL,
+            url=local_url, env_name="NAVREN_OFFLINE_FINAL_REVIEW_KEY",
+            keychain_service="CC/NAVREN_OFFLINE_FINAL_REVIEW_KEY", timeout=35, max_retries=0,
+            urlopen=local_open, key_loader=lambda: "offline-fixture-only", log_path=os.devnull)
+        self._wire_reviewer = GLMConversationReviewer(client=client)
+        self._wire_reviewer.billing_mode = "unpaid_fixture"
+
+    def review(self, packet, *args, **kwargs):
+        scripted = super().review(packet, *args)
+        expected = {key: scripted[key] for key in ("verdict", "reason", "issues")}
+        self._offline_decision.value = expected
+        try:
+            # The inner production reviewer reconstructs its client here. Route
+            # that constructor to the subclass that still uses only local_open.
+            with patch.object(self._conversation_module, "OpenAICompatibleJsonClient",
+                              self._offline_wire_client_class):
+                response = self._wire_reviewer.review(packet, *args, **kwargs)
+        finally:
+            self._offline_decision.value = None
+        if any(response.get(key) != value for key, value in expected.items()):
+            raise ValueError("offline_final_review_decision_changed")
+        if not isinstance(response.get("_agent_review_wire"), bytes) or not response["_agent_review_wire"]:
+            raise ValueError("offline_final_review_wire_missing")
+        return response
 
 
 class TwoPieceProvider(_voice.InMemoryAudioProvider):

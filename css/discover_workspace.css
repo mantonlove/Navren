@@ -19,8 +19,15 @@
 @container market-cover (max-width:560px) { html[data-language="en"] .market-history-entry,.mode-senior .market-history-entry { grid-column:1/-1; } }
 @container market-cover (max-width:420px) { .market-history-entry { grid-column:1/-1; } }
 .discover-section-head { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:18px; }
+.discover-catalog-sync { display:flex; align-items:center; flex-wrap:wrap; gap:6px 16px; margin:0 0 12px; color:var(--ink-50); font-size:var(--font-size-xs); line-height:1.7; }
+.discover-catalog-action { display:inline-flex; align-items:center; min-height:28px; margin-left:auto; font-size:var(--font-size-sm); white-space:nowrap; }
+.discover-catalog-sync>.discover-sync-warning,.discover-catalog-sync>.discover-note { flex-basis:100%; }
+.discover-catalog-sync a { color:var(--primary-deep); text-decoration:none; }
+.discover-catalog-sync a:hover { text-decoration:underline; }
+.discover-sync-warning { color:var(--danger); }
 .discover-section-head h2,.discover-section-title { font-size:var(--font-size-base); font-weight:650; margin:0 0 16px; }
 .discover-section-head h2 { margin:0; }
+#researchPreviewHeading,#insurancePreviewHeading { font-size:var(--font-size-xl); line-height:1.35; }
 .discover-page a,.discover-text-action { color:var(--primary-deep); text-underline-offset:4px; }
 .discover-section-head>a { display:inline-flex; align-items:center; min-height:44px; font-size:var(--font-size-sm); }
 .discover-preview-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
@@ -76,14 +83,151 @@
 .discover-weekly-cover:hover { border-color:var(--primary-deep); }
 .discover-weekly-cover .discover-cover-read { display:block; color:var(--primary-deep); padding-top:16px; border-top:1px solid var(--border); }
 .discover-weekly-reader { max-width:920px; margin:0 auto; }
-.discover-weekly-reader .market-panel-section { padding:24px 0; border-top:1px solid var(--border); }
-.discover-weekly-reader .market-panel-section h3 { font-size:var(--font-size-base); line-height:1.7; }
-.discover-weekly-reader p { line-height:2; text-indent:2em; margin:18px 0; overflow-wrap:anywhere; }
+.discover-weekly-reader>h2 { margin:0 0 14px; line-height:1.55; }
+.discover-weekly-reader>p:first-child { margin:0 0 12px; line-height:1.7; }
+/* 阅读页不叠加抽屉的外间距和双向内间距，正文分区保留一条轻分隔。 */
+.discover-weekly-reader .market-panel-section { margin-top:22px; padding:20px 0 0; border-top:1px solid var(--border); }
+.discover-weekly-reader .market-panel-section>h3 { margin:0 0 12px; font-size:var(--font-size-base); line-height:1.7; }
+.discover-weekly-reader p { line-height:1.85; text-indent:2em; margin:12px 0; overflow-wrap:anywhere; }
+.discover-weekly-reader .market-panel-section>p:last-child { margin-bottom:0; }
+.discover-weekly-reader .market-panel-section>strong { display:block; margin:12px 0 6px; }
+.discover-weekly-reader .market-panel-section>strong+p { margin-top:0; }
 .discover-weekly-reader .discover-note,.discover-weekly-reader .market-source { text-indent:0; }
-.discover-weekly-history { margin-top:28px; }
-.discover-weekly-history a { display:block; padding:12px 0; min-height:44px; }
+.discover-weekly-reader .market-panel-section>div>h4 { margin:14px 0 6px; line-height:1.7; }
+.discover-weekly-reader .market-chat-sources { margin:6px 0 0; padding:8px 0 0; }
+.discover-weekly-reader .market-chat-sources h4 { margin:0 0 6px; }
+.discover-weekly-reader .market-source { margin:6px 0 0; }
+.discover-weekly-reader .discover-actions { margin:18px 0; }
+.discover-weekly-reader .discover-weekly-history { margin-top:22px; }
+.discover-weekly-history a { display:block; padding:8px 0; min-height:44px; }
+.mode-senior .discover-weekly-reader p { line-height:1.95; }
 html[data-language="en"] .discover-weekly-reader p { text-indent:0; }
 .mode-senior .discover-action,.mode-senior .discover-back,.mode-senior .discover-field input,.mode-senior .discover-field select { min-height:48px; }
 .mode-senior .discover-preview-grid { grid-template-columns:1fr; }
 @media(max-width:800px) { .discover-preview-grid { grid-template-columns:1fr; } .discover-detail { padding:18px; } .discover-specs { grid-template-columns:minmax(100px,.36fr) minmax(0,1fr); } .discover-weekly-cover { padding:22px; } .discover-compare-wrap { margin:0; } }
 @media(prefers-reduced-motion:reduce) { .discover-page * { scroll-behavior:auto!important; } }
+
+/* 产品收益只在独立片段中呈现，目录风险、业务操作和保险组件保持各自口径。 */
+.discover-preview-link { display:flex; flex-direction:column; gap:12px; text-decoration:none; color:var(--ink)!important; min-width:0; }
+.discover-preview-link .discover-meta { margin:0; }
+.discover-performance { display:flex; flex-direction:column; gap:10px; min-width:0; }
+.discover-preview .discover-performance { margin-top:4px; padding-top:14px; border-top:1px solid var(--border); }
+.discover-performance p,.discover-performance h3 { margin:0; }
+.discover-performance-metric { display:grid; gap:3px; }
+.discover-performance-value { font-size:clamp(26px,3vw,36px); font-weight:650; line-height:1.3; color:var(--ink); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.discover-performance-value.positive { color:var(--danger,#b54842); }
+.discover-performance-value.negative { color:var(--success,#23785b); }
+.discover-performance-value.discover-research-value { color:var(--danger,#b54842); }
+.discover-performance-nav { color:var(--ink-70); font-size:var(--font-size-xs); line-height:1.7; }
+.discover-performance-chart { margin:0; min-width:0; }
+.discover-performance-chart svg { display:block; width:100%; height:150px; color:var(--primary-deep); overflow:visible; }
+.discover-performance-chart.compact svg { height:76px; }
+.discover-performance-chart path { fill:none; stroke:currentColor; stroke-width:2; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+.discover-performance-chart figcaption { font-size:var(--font-size-xs); margin-top:5px; }
+.discover-performance>a { font-size:var(--font-size-xs); line-height:1.7; overflow-wrap:anywhere; }
+.discover-performance-missing { color:var(--ink-50); font-size:var(--font-size-sm); }
+.discover-performance-retry { align-self:flex-start; font-size:var(--font-size-sm); }
+.discover-row-performance { grid-column:2; padding-top:10px; border-top:1px solid var(--border); }
+.discover-row-performance .discover-performance-chart { max-width:480px; }
+.discover-performance-periods { display:flex; flex-wrap:wrap; gap:8px; }
+.discover-performance-periods [aria-pressed="true"] { background:var(--primary-soft); border-color:var(--primary-border); }
+.discover-detail>.discover-performance { margin:20px 0 26px; padding:18px; background:var(--surface-raised); border:1px solid var(--border); border-radius:12px; }
+.discover-performance-comparison { font-size:var(--font-size-sm); line-height:1.8; }
+.discover-performance-state { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.discover-preview .discover-performance-retry { padding:6px 12px; }
+
+/* 首页基金卡片保留决策所需字段，完整披露在原有详情中。 */
+#productPreview .discover-preview { padding:18px; gap:10px; }
+#productPreview .discover-preview-link { gap:6px; }
+#productPreview .discover-preview h3 { line-height:1.45; }
+#productPreview .discover-meta { font-size:var(--font-size-xs); line-height:1.6; }
+#productPreview .discover-performance-preview { margin-top:2px; padding-top:12px; gap:8px; flex:1; }
+#productPreview .discover-performance-preview .discover-performance-metric { gap:4px; }
+#productPreview .discover-performance-preview .discover-performance-value { font-size:clamp(28px,2.6vw,34px); line-height:1.2; color:var(--danger,#b54842); }
+#productPreview .discover-performance-labels { display:flex; align-items:baseline; flex-wrap:wrap; justify-content:space-between; gap:4px 10px; }
+#productPreview .discover-performance-labels .discover-note { font-size:var(--font-size-xs); line-height:1.5; }
+#productPreview .discover-performance-preview .discover-performance-nav { font-size:var(--font-size-xs); line-height:1.6; }
+#productPreview .discover-performance-chart.preview svg { height:64px; }
+#productPreview .discover-performance-chart.preview figcaption { font-size:var(--font-size-xs); line-height:1.5; }
+#productPreview .discover-performance-footer { display:flex; align-items:center; gap:12px; margin-top:auto; min-width:0; }
+#productPreview .discover-performance-footer a { display:inline-flex; align-items:center; min-height:32px; font-size:var(--font-size-xs); white-space:nowrap; }
+#productPreview .discover-performance-footer a:last-of-type { margin-left:auto; }
+#productPreview .discover-performance-stale { color:var(--ink-50); font-size:var(--font-size-xs); white-space:nowrap; }
+.discover-research-heading { display:flex; align-items:center; gap:8px; min-width:0; }
+.discover-research-help { position:relative; }
+.discover-research-help>summary { display:grid; place-items:center; width:28px; height:28px; list-style:none; cursor:pointer; border-radius:50%; color:var(--ink-50); font-size:var(--font-size-xs); }
+.discover-research-help>summary::-webkit-details-marker { display:none; }
+.discover-research-help>summary:hover,.discover-research-help[open]>summary { background:var(--primary-soft); color:var(--primary-deep); }
+.discover-research-help>p { position:absolute; top:34px; left:0; z-index:10; width:min(360px,calc(100vw - 200px)); margin:0; padding:14px 16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-card); box-shadow:var(--shadow-sm); font-size:var(--font-size-sm); line-height:1.7; color:var(--ink-70); }
+@media(max-width:520px) { .discover-research-help>p { left:-100px; width:min(300px,calc(100vw - 120px)); } }
+
+/* 全部产品内页：隐藏选择列不占位，产品资料与操作始终有明确列位。 */
+.discover-research-page { min-width:0; container-type:inline-size; container-name:discover-research-list; }
+.discover-research-page [hidden] { display:none!important; }
+.discover-research-page .discover-research-page-head { display:flex; align-items:center; flex-wrap:wrap; gap:14px 20px; margin-bottom:20px; }
+.discover-research-page .discover-research-page-head .discover-back { margin:0; flex:none; }
+.discover-research-page .discover-research-title { flex:1; min-width:0; }
+.discover-research-page .discover-research-page-head h2 { margin:0; font-size:var(--font-size-xl); font-weight:650; line-height:1.35; }
+.discover-research-page .discover-research-page-head p { margin:5px 0 0; color:var(--ink-50); font-size:var(--font-size-sm); line-height:1.6; }
+.discover-research-page .discover-research-toolbar { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) auto; align-items:end; gap:12px; padding:16px; margin:0 0 20px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-card); }
+.discover-research-page .discover-research-toolbar .discover-field { min-width:0; gap:6px; }
+.discover-research-page .discover-research-toolbar .discover-field.grow { grid-column:1/-1; min-width:0; }
+.discover-research-page .discover-field input,.discover-research-page .discover-field select { min-width:0; min-height:40px; padding:8px 10px; border-radius:var(--r-sm); }
+.discover-research-page .discover-research-filter-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin:0; }
+.discover-research-page .discover-research-toolbar .discover-action { min-height:40px; padding:8px 12px; border-radius:var(--r-sm); font-size:var(--font-size-sm); white-space:nowrap; }
+.discover-research-page .discover-research-results-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px 16px; margin:0 0 12px; }
+.discover-research-page .discover-research-results-head>p { min-width:0; margin:0; font-size:var(--font-size-sm); line-height:1.6; }
+.discover-research-page .discover-research-results-head>.discover-action { min-height:40px; padding:7px 12px; font-size:var(--font-size-sm); border-radius:var(--r-sm); }
+.discover-research-page .discover-research-results-head [aria-pressed="true"] { background:var(--primary-soft); border-color:var(--primary-border); }
+.discover-research-page .discover-results { gap:8px; min-width:0; }
+.discover-research-page .discover-product-row { grid-template-columns:minmax(0,1fr) minmax(155px,190px) auto; column-gap:20px; row-gap:12px; padding:14px 18px; border-radius:12px; }
+.discover-research-page .discover-product-row[data-comparison="true"] { grid-template-columns:36px minmax(0,1fr) minmax(155px,190px) auto; column-gap:14px; }
+.discover-research-page .discover-product-row>.discover-select-cell { grid-column:1; grid-row:1; align-self:center; }
+.discover-research-page .discover-product-row>.discover-product-link { grid-column:1; grid-row:1; display:grid; justify-items:start; align-content:center; gap:4px; min-width:0; min-height:44px; padding:0; }
+.discover-research-page .discover-product-row[data-comparison="true"]>.discover-product-link { grid-column:2; }
+.discover-research-page .discover-product-title-line { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; min-width:0; max-width:100%; }
+.discover-research-page .discover-product-row h3 { margin:0; font-size:var(--font-size-base); font-weight:650; line-height:1.5; overflow-wrap:anywhere; }
+.discover-research-page .discover-product-row .discover-identity { display:inline-flex; align-items:center; max-width:100%; padding:1px 7px; border-radius:6px; background:var(--surface-raised); color:var(--ink-50); font-size:var(--font-size-xs); line-height:1.7; overflow-wrap:anywhere; }
+.discover-research-page .discover-product-row .discover-meta { margin:0; font-size:var(--font-size-xs); line-height:1.7; }
+.discover-research-page .discover-product-row>.discover-row-return { grid-column:2; grid-row:1; display:grid; gap:3px; align-content:center; min-width:0; }
+.discover-research-page .discover-product-row[data-comparison="true"]>.discover-row-return { grid-column:3; }
+.discover-research-page .discover-row-return .discover-research-return-value { color:var(--danger,#b54842); font-size:22px; font-weight:650; line-height:1.35; font-variant-numeric:tabular-nums; }
+.discover-research-page .discover-research-return-state { color:var(--ink-50); font-size:var(--font-size-sm); font-weight:500; line-height:1.5; }
+.discover-research-page .discover-row-return .discover-note { margin:0; font-size:var(--font-size-xs); line-height:1.5; }
+.discover-research-page .discover-product-row>.discover-product-actions { grid-column:3; grid-row:1; display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; min-width:0; }
+.discover-research-page .discover-product-row[data-comparison="true"]>.discover-product-actions { grid-column:4; }
+.discover-research-page .discover-product-actions .discover-action { display:inline-flex; align-items:center; justify-content:center; min-height:40px; padding:8px 12px; border-radius:var(--r-sm); font-size:var(--font-size-sm); line-height:1.5; text-decoration:none; white-space:nowrap; }
+.discover-research-page .discover-product-row>.discover-row-performance { grid-column:1/-1; min-width:0; padding-top:14px; }
+.discover-research-page .discover-row-performance .discover-performance { max-width:720px; }
+.discover-research-page .discover-row-performance .discover-performance-chart { max-width:100%; }
+.discover-research-page .discover-research-pagination { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:12px 18px; margin-top:18px; padding:14px 0 0; border-top:1px solid var(--border); color:var(--ink-50); font-size:var(--font-size-sm); }
+.discover-research-page .discover-research-page-range { min-width:0; margin:0 auto 0 0; line-height:1.6; }
+.discover-research-page .discover-research-pagination label { display:inline-flex; flex-direction:row; align-items:center; flex-wrap:wrap; gap:8px; min-width:0; }
+.discover-research-page .discover-research-pagination select { width:auto; max-width:100%; min-height:40px; padding:7px 10px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--surface-card); color:var(--ink); font:inherit; }
+.discover-research-page .discover-research-pagination>.discover-actions { margin:0; gap:8px; }
+.discover-research-page .discover-research-pagination .discover-action { min-height:40px; padding:8px 12px; border-radius:var(--r-sm); font-size:var(--font-size-sm); }
+.discover-research-page .discover-research-page-number { padding:0 4px; color:var(--ink-70); font-variant-numeric:tabular-nums; white-space:nowrap; }
+@container discover-research-list (max-width:919px) {
+  .discover-research-page .discover-research-toolbar { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+@container discover-research-list (max-width:699px) {
+  .discover-research-page .discover-research-toolbar { grid-template-columns:minmax(0,1fr); }
+}
+@container discover-research-list (max-width:640px) {
+  .discover-research-page .discover-research-toolbar { gap:12px; padding:14px; }
+  .discover-research-page .discover-product-row { grid-template-columns:minmax(0,1fr); padding:14px; column-gap:10px; }
+  .discover-research-page .discover-product-row[data-comparison="true"] { grid-template-columns:36px minmax(0,1fr); column-gap:10px; }
+  .discover-research-page .discover-product-row>.discover-row-return { grid-column:1; grid-row:2; }
+  .discover-research-page .discover-product-row[data-comparison="true"]>.discover-row-return { grid-column:2; }
+  .discover-research-page .discover-product-row>.discover-product-actions { grid-column:1; grid-row:3; justify-content:flex-start; }
+  .discover-research-page .discover-product-row[data-comparison="true"]>.discover-product-actions { grid-column:2; }
+  .discover-research-page .discover-product-actions .discover-action { min-height:44px; }
+  .discover-research-page .discover-research-pagination { align-items:flex-start; justify-content:flex-start; }
+  .discover-research-page .discover-research-page-range { flex-basis:100%; }
+  .discover-research-page .discover-research-pagination>.discover-actions { flex-basis:100%; }
+}
+@container discover-research-list (max-width:360px) {
+  .discover-research-page .discover-research-filter-actions { justify-content:flex-start; }
+  .discover-research-page .discover-product-actions .discover-action { padding-inline:10px; }
+}
+.mode-senior .discover-research-page .discover-action,.mode-senior .discover-research-page .discover-field input,.mode-senior .discover-research-page .discover-field select,.mode-senior .discover-research-page .discover-research-pagination select { min-height:48px; }

@@ -1,4 +1,4 @@
-"""百炼语音代理：同源会话、一次性票据、PCM 流和取消；不保存录音。"""
+"""语音代理：同源会话、一次性票据、PCM 流及已批准助手音频原件归档。"""
 import json
 import math
 import os
@@ -248,8 +248,13 @@ class BrowserSocket:
 
 class VoiceGateway:
     def __init__(self, key=None, url=None, task_factory=SpeechTask, *, allow_cloud_asr=None):
-        self.key = load_key() if key is None else key
-        self.url = endpoint() if url is None else url
+        from local_speech_task import LocalASRConfig, LocalTTSConfig
+        self.local_asr = LocalASRConfig.from_environment()
+        self.local_tts = LocalTTSConfig.from_environment()
+        # 显式本地模式既不取云密钥，也不读取/校验云endpoint；云TTS须明确传key。
+        local_selected = self.local_asr is not None or self.local_tts is not None
+        self.key = ('' if local_selected else load_key()) if key is None else key
+        self.url = ('' if local_selected and not self.key else endpoint()) if url is None else url
         self.task_factory = task_factory
         self.allow_cloud_asr = (os.environ.get('NAVREN_ALLOW_CLOUD_ASR')=='1') if allow_cloud_asr is None else bool(allow_cloud_asr)
         self.tickets = {}
@@ -259,11 +264,30 @@ class VoiceGateway:
     def status(self):
         import importlib.util
         dependencies = all(importlib.util.find_spec(name) for name in ('websocket', 'wsproto'))
-        return {'configured': bool(self.key) and dependencies, 'asr_model': ASR_MODEL, 'tts_model': TTS_MODEL,
-                'asr_available':bool(self.key) and dependencies and self.allow_cloud_asr,
-                'asr_privacy_mode':'explicit_cloud_audio_opt_in' if self.allow_cloud_asr else 'local_asr_required',
-                'voices': VOICES, 'asr_sample_rate': ASR_RATE, 'tts_sample_rate': TTS_RATE,
-                'message': '' if self.key and dependencies else '语音服务尚未配置密钥或安装依赖。'}
+        local_asr_ready = self.local_asr is not None and self.local_asr.ready() and dependencies
+        local_tts_ready = self.local_tts is not None and self.local_tts.ready() and dependencies
+        cloud_ready = bool(self.key) and dependencies
+        asr_ready = local_asr_ready or (self.local_asr is None and cloud_ready and self.allow_cloud_asr)
+        tts_ready = local_tts_ready or (self.local_tts is None and cloud_ready)
+        asr_message = (self.local_asr.error_message if self.local_asr is not None else '')
+        tts_message = (self.local_tts.error_message if self.local_tts is not None else '')
+        local_selected = self.local_asr is not None or self.local_tts is not None
+        message = '; '.join(value for value in (asr_message, tts_message) if value)
+        if not message and local_selected:
+            message = ('本地识别可用' if asr_ready else '本地识别不可用') + '；' + ('本地朗读可用。' if local_tts_ready else '本地朗读未配置。')
+        elif not local_selected:
+            message = '' if cloud_ready else '语音服务尚未配置密钥或安装依赖。'
+        return {'configured': asr_ready or tts_ready,
+                'asr_model': self.local_asr.model_id if self.local_asr is not None else ASR_MODEL,
+                'tts_model': 'macos-say' if self.local_tts is not None else TTS_MODEL,
+                'asr_available': asr_ready, 'tts_available': tts_ready,
+                'asr_streaming': self.local_asr is None,
+                'asr_privacy_mode': ('local_audio_only' if self.local_asr is not None else
+                    'explicit_cloud_audio_opt_in' if self.allow_cloud_asr else 'local_asr_required'),
+                'voices': self.local_tts.voices if self.local_tts is not None else VOICES,
+                'asr_sample_rate': ASR_RATE, 'tts_sample_rate': TTS_RATE,
+                'message': message, 'asr_message': asr_message, 'tts_message': tts_message}
+
 
     def authorize(self, handler):
         finance = handler.server.finance
@@ -280,7 +304,7 @@ class VoiceGateway:
             raise BankError('INVALID_SPEECH_REQUEST','语音请求包含未支持字段。')
         if kind not in ('asr', 'tts'):
             raise BankError('INVALID_SPEECH_KIND', '语音任务类型无效。')
-        if kind=='asr' and not self.allow_cloud_asr:
+        if kind=='asr' and not self.status()['asr_available']:
             raise BankError('LOCAL_ASR_REQUIRED','语音输入需要本地识别服务，目前请使用文字输入。',403)
         workspace,_=handler.server.finance.identity(handler)
         receipt=data.get('speech_receipt') if kind=='tts' else None
@@ -292,15 +316,16 @@ class VoiceGateway:
         elif data.get('purpose') is not None:
             raise BankError('INVALID_SPEECH_REQUEST','语音用途无效。')
         if kind=='tts':handler.server.finance.resolve_speech(workspace,receipt,token)
-        if not self.status()['configured']:
-            raise BankError('SPEECH_NOT_CONFIGURED', self.status()['message'], 503)
+        if kind=='tts' and not self.status()['tts_available']:
+            raise BankError('SPEECH_NOT_CONFIGURED', self.status()['message'] or '朗读服务尚未配置。', 503)
         ticket = secrets.token_urlsafe(32)
         with self.lock:
             now = time.monotonic()
             self.tickets = {k: v for k, v in self.tickets.items() if v[2] > now}
             if len(self.tickets) >= 64:
                 raise BankError('SPEECH_BUSY', '语音服务繁忙，请稍后重试。', 429)
-            self.tickets[ticket] = (token, kind, now + 30, workspace, receipt)
+            self.tickets[ticket] = (token, kind, now + 30, workspace, receipt,
+                                    kind == 'tts' and data.get('purpose') != 'voice_preview')
         return {'path': '/api/speech/ws?ticket=' + ticket, 'kind': kind}
 
     def socket(self, handler):
@@ -317,6 +342,7 @@ class VoiceGateway:
             raise BankError('SPEECH_BUSY', '语音服务繁忙，请稍后重试。', 429)
         browser, task, receiver = None, None, None
         ended = threading.Event()
+        generated_audio = bytearray()
         deadline, audio_bytes = time.monotonic() + 120, 0
         try:
             browser = BrowserSocket(handler)
@@ -336,7 +362,14 @@ class VoiceGateway:
                     if entry[1]=='tts':
                         with handler.server.finance.speech_guard(entry[3],entry[4],token) as approved_text:
                             value={**value,'text':approved_text}
-                            task = self.task_factory(entry[1], value, self.key, self.url)
+                            if self.local_tts is not None:
+                                from local_speech_task import LocalTTSTask
+                                task = LocalTTSTask(entry[1], value, '', '', config=self.local_tts)
+                            else:
+                                task = self.task_factory(entry[1], value, self.key, self.url)
+                    elif self.local_asr is not None:
+                        from local_speech_task import LocalSpeechTask
+                        task = LocalSpeechTask(entry[1], value, '', '', config=self.local_asr)
                     else:task = self.task_factory(entry[1], value, self.key, self.url)
                     browser.send({'type': 'ready', 'kind': entry[1], 'sample_rate':
                                   ASR_RATE if entry[1] == 'asr' else TTS_RATE})
@@ -362,22 +395,39 @@ class VoiceGateway:
                                         finance.demo_sessions.validate(token,entry[3])
                                         browser.send(value)
                                 if isinstance(message, bytes):
+                                    if entry[1] == 'tts' and len(generated_audio) + len(message) > 25 * 1024 * 1024:
+                                        raise BankError('CHAT_MEDIA_TOO_LARGE', '这段朗读超过原件保存上限，请分段朗读。', 413)
                                     publish(message)
+                                    if entry[1] == 'tts': generated_audio.extend(message)
                                     continue
                                 event = message.get('header', {}).get('event')
                                 if event == 'result-generated' and entry[1] == 'asr':
-                                    # 使用阿里官方SDK结果适配器，兼容供应商识别事件。
-                                    from dashscope.audio.asr import RecognitionResult
-                                    from dashscope.api_entities.dashscope_response import RecognitionResponse
                                     output=message.get('payload', {}).get('output', {})
-                                    response=RecognitionResponse(status_code=200,request_id=task.id,output=output)
-                                    sentence = RecognitionResult(response).get_sentence() or {}
+                                    if getattr(task, 'local_only', False):
+                                        sentence = output.get('sentence') or {}
+                                    else:
+                                        from dashscope.audio.asr import RecognitionResult
+                                        from dashscope.api_entities.dashscope_response import RecognitionResponse
+                                        response=RecognitionResponse(status_code=200,request_id=task.id,output=output)
+                                        sentence = RecognitionResult(response).get_sentence() or {}
                                     if not sentence.get('heartbeat'):
                                         publish({'type': 'transcript', 'text': sentence.get('text', ''),
                                                       'final': bool(sentence.get('sentence_end')),
                                                       'sentence_id': sentence.get('sentence_id', sentence.get('begin_time', 0))})
                                 elif event == 'task-finished':
-                                    publish({'type': 'done'})
+                                    completed = {'type': 'done'}
+                                    finance = handler.server.finance
+                                    media = getattr(finance, 'chat_media', None)
+                                    if (entry[1] == 'tts' and entry[5] and generated_audio and media is not None
+                                            and getattr(finance, 'registered_mode', False)):
+                                        # 媒体包装沿用原 speech_guard，并绑定同一次采集授权；
+                                        # 退出该银行发布锁后才提交，提交端复验会话/原文/隐私。
+                                        with finance.demo_sessions.request(token, entry[3]), media.assistant_speech_guard(entry[3], entry[4], token):
+                                            permit = media.prepare_assistant_audio(entry[3], bytes(generated_audio), 'audio/pcm',
+                                                speech_receipt=entry[4], session_token=token,
+                                                audio_format={'encoding': 'pcm_s16le', 'sample_rate': TTS_RATE, 'channels': 1})
+                                        completed['media'] = media.commit_assistant_audio(permit)
+                                    publish(completed)
                                     break
                         except Exception as error:
                             try:
@@ -385,6 +435,7 @@ class VoiceGateway:
                             except Exception:
                                 pass
                         finally:
+                            generated_audio.clear()
                             ended.set()
                     receiver = threading.Thread(target=pump, daemon=True)
                     receiver.start()
@@ -423,4 +474,4 @@ def safe_error(error):
     if isinstance(error, BankError):
         return {'type': 'error', 'code': error.code, 'message': error.message}
     return {'type': 'error', 'code': 'SPEECH_UNAVAILABLE',
-            'message': '语音连接暂不可用，请检查网络、百炼地域与模型权限后重试。'}
+            'message': '语音连接暂不可用，请稍后重试或使用文字输入。'}

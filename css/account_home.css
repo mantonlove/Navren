@@ -1,4 +1,4 @@
-/* 账户首页。所有颜色跟随全站浅色／深色主题。 */
+/* 账户首页。银行卡使用固定银行配色，其余内容跟随全站主题。 */
 .account-workspace:has(#accountHome:not([hidden])){max-width:1240px;padding-top:26px}
 #accountHome{display:flex;flex-direction:column;gap:34px;padding-bottom:32px}
 #accountHome[hidden]{display:none}
@@ -7,8 +7,8 @@
 #accountHome .ah-section-heading h2{margin:0;font-size:var(--font-size-lg,22px);font-weight:650;letter-spacing:.01em}
 #accountHome a{color:var(--primary-deep);text-decoration:none}
 #accountHome .ah-text-link,#accountHome #accountFundsAll,#accountHome .ah-section-heading>a{display:inline-flex;align-items:center;min-height:40px;font-size:var(--font-size-sm,14px);font-weight:550}
-.ah-assets-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.2fr);gap:24px;align-items:start}
-#accountHome #assetOverview{display:flex;flex-direction:column;gap:24px;padding:28px;border:1px solid var(--primary-border,var(--border));border-radius:24px;background:linear-gradient(150deg,var(--primary-soft),var(--surface-card) 68%);min-width:0}
+.ah-assets-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(300px,1.1fr);gap:clamp(32px,4vw,64px);align-items:center;padding:28px;border:1px solid var(--primary-border,var(--border));border-radius:24px;background:linear-gradient(150deg,var(--primary-soft),var(--surface-card) 68%)}
+#accountHome #assetOverview{display:flex;flex-direction:column;gap:24px;min-width:0}
 .ah-total{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
 .ah-total>span,.ah-stat>span,.ah-total>small{font-size:var(--font-size-sm,14px);color:var(--ink-50)}
 .ah-total>.ah-amount{font-size:clamp(30px,3vw,43px);letter-spacing:-.025em;line-height:1.2;color:var(--ink);font-weight:650}
@@ -24,27 +24,114 @@
 .ah-basis p{margin:8px 0;line-height:1.75}
 .ah-exact{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 16px;margin:14px 0 0}
 .ah-exact dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.ah-cards-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
+.ah-cards{display:flex;flex-direction:column;min-width:0;min-height:0}
+.ah-cards-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;flex-shrink:0}
+.ah-cards-label{display:flex;align-items:center;gap:10px;min-width:0}
+.ah-cards-count{color:var(--ink-50);font-size:var(--font-size-xs,12px);white-space:nowrap}
 .ah-cards-heading h3{margin:0;font-size:var(--font-size-base,18px);font-weight:600}
 .ah-cards-heading a{font-size:var(--font-size-sm,14px);min-height:36px;display:inline-flex;align-items:center}
-#accountHome #accountCardsPreview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-#accountHome .ah-bank-card{display:flex;flex-direction:column;gap:15px;position:relative;padding:20px 22px;min-width:0;border:1px solid var(--primary-border,var(--border));border-radius:20px;background:linear-gradient(130deg,var(--primary-soft),var(--surface-card));color:var(--ink);box-shadow:0 6px 18px color-mix(in srgb,var(--ink) 4%,transparent);transition:border-color .18s,transform .18s}
-#accountHome .ah-bank-card:hover{border-color:var(--primary);transform:translateY(-2px)}
-#accountHome .ah-bank-card[data-card-type=credit]{background:linear-gradient(130deg,var(--surface-raised),var(--surface-card))}
-.ah-card-head,.ah-card-identity,.ah-card-holdings{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
-.ah-card-head strong{font-size:var(--font-size-sm,14px);font-weight:600}
-.ah-card-status{font-size:var(--font-size-xs,12px);color:var(--primary-deep);white-space:nowrap}
-.ah-card-identity{font-size:var(--font-size-xs,12px);color:var(--ink-50);font-variant-numeric:tabular-nums;letter-spacing:.02em}
-.ah-card-primary{margin-block:3px}.ah-card-primary>.ah-amount{font-size:clamp(21px,2vw,28px)}
-.ah-card-holdings{font-size:var(--font-size-xs,12px);color:var(--ink-50);padding-top:12px;border-top:1px solid var(--border)}
-.ah-card-holdings>.ah-amount{font-size:var(--font-size-sm,14px);text-align:right}
-.ah-card-products{display:flex;flex-direction:column;gap:6px;font-size:var(--font-size-xs,12px);color:var(--ink-50)}.ah-card-products>div{display:flex;justify-content:space-between;gap:12px}.ah-card-products>div>span:last-child{font-variant-numeric:tabular-nums;text-align:right}
-.ah-card-account{font-size:var(--font-size-xs,12px);color:var(--ink-50);padding-right:22px}
-.ah-card-arrow{position:absolute;right:20px;bottom:18px;color:var(--primary-deep)}
+#accountHome .ah-cards-all{justify-content:center;gap:10px;padding:6px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-card);line-height:1.3;white-space:nowrap}
+#accountHome .ah-cards-all:hover{background:var(--surface-raised)}
+#accountHome #accountCardsPreview{display:flex;flex-direction:column;flex:1;gap:0;min-width:0;min-height:0;width:100%;max-width:420px;margin:0 auto}
+.ah-card-stack{--ah-card-step:36px;--ah-card-height:228px;position:relative;flex:none;width:100%;max-width:420px;height:calc(var(--ah-card-height) + var(--ah-card-step) * var(--ah-card-peeks));margin:0 auto;isolation:isolate}
+.ah-card-navigation{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:18px}
+.ah-card-navigation[hidden],#accountHome .ah-bank-card[hidden]{display:none!important}
+.ah-card-counter{color:var(--ink-50);font-size:var(--font-size-xs,12px);font-variant-numeric:tabular-nums;min-width:48px;text-align:center}
+.ah-card-nav-button{display:grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid var(--border);border-radius:50%;background:var(--surface-card);color:var(--ink-70);font:inherit;font-size:24px;line-height:1;cursor:pointer}
+.ah-card-nav-button:hover{background:var(--surface-raised);color:var(--primary-deep)}
+#accountHome .ah-bank-card{--ah-bank-brand:#315c88;--ah-bank-glow:#7b9dbf;--ah-bank-mid:#24496e;--ah-bank-deep:#132d48;--ah-card-ink:#f4f9ff;--ah-card-muted:#c1d7ef;position:absolute;isolation:isolate;top:0;left:var(--ah-card-inset,0px);right:var(--ah-card-inset,0px);transform:translateY(var(--ah-card-offset,0px));border-radius:24px;margin:0;min-width:0;font-size:14px;line-height:1.4;box-shadow:0 2px 0 color-mix(in srgb,var(--ah-bank-deep) 85%,#000),0 5px 7px -4px #05080e80,0 16px 25px -12px #090e1899,0 27px 40px -20px #090e1866}
+#accountHome .ah-bank-card[data-bank-theme=boc]{--ah-bank-brand:#a51c30;--ah-bank-glow:#db6c76;--ah-bank-mid:#871a2c;--ah-bank-deep:#490c1b;--ah-card-ink:#fff5f6;--ah-card-muted:#f0cbd0}
+#accountHome .ah-bank-card[data-bank-theme=ccb]{--ah-bank-brand:#005bac;--ah-bank-glow:#5b95cf;--ah-bank-mid:#124d8a;--ah-bank-deep:#102c4d;--ah-card-ink:#f4f9ff;--ah-card-muted:#c1d7ef}
+#accountHome .ah-bank-card[data-bank-theme=abc]{--ah-bank-brand:#008577;--ah-bank-glow:#67b8a8;--ah-bank-mid:#096456;--ah-bank-deep:#073c35;--ah-card-ink:#f1fff9;--ah-card-muted:#c0e1d7}
+#accountHome .ah-bank-card[data-bank-theme=icbc]{--ah-bank-brand:#bc2434;--ah-bank-glow:#e78387;--ah-bank-mid:#9b1e2c;--ah-bank-deep:#570f20;--ah-card-ink:#fff5f6;--ah-card-muted:#f4d0d4}
+#accountHome .ah-bank-card[data-bank-theme=cmb]{--ah-bank-brand:#bd1532;--ah-bank-glow:#dc6b88;--ah-bank-mid:#8e163b;--ah-bank-deep:#490f29;--ah-card-ink:#fff5f8;--ah-card-muted:#efc8d5}
+#accountHome .ah-bank-card[data-bank-theme=psbc]{--ah-bank-brand:#007c45;--ah-bank-glow:#70b888;--ah-bank-mid:#13623d;--ah-bank-deep:#103e2b;--ah-card-ink:#f3fff5;--ah-card-muted:#c7e5cd}
+.ah-card-physical{box-sizing:border-box;display:flex;flex-direction:column;position:relative;isolation:isolate;height:var(--ah-card-height);overflow:hidden;padding:16px 20px 18px;border-radius:inherit;color:var(--ah-card-ink);background:radial-gradient(ellipse at 8% 0%,color-mix(in srgb,var(--ah-bank-glow) 65%,transparent),transparent 60%),linear-gradient(120deg,var(--ah-bank-brand) 0%,var(--ah-bank-mid) 40%,var(--ah-bank-deep) 100%);border:1px solid #ffffff17;border-top-color:#ffffff38;border-bottom-color:#00000025;box-shadow:inset 0 1px 0 #ffffff22,inset 0 -1px 0 #00000016}
+.ah-card-physical::before{content:"";position:absolute;inset:0;z-index:-1;opacity:.4;background:repeating-linear-gradient(105deg,#ffffff08 0,#ffffff08 1px,#ffffff00 1px,#ffffff00 4px);pointer-events:none}
+.ah-card-physical::after{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:linear-gradient(130deg,#ffffff12,#ffffff00 38%,#ffffff00 68%,#ffffff11);pointer-events:none}
+.ah-card-wave{position:absolute;z-index:-1;width:420px;height:420px;right:-286px;top:-72px;border-radius:46%;background:linear-gradient(150deg,#ffffff14 5%,color-mix(in srgb,var(--ah-bank-glow) 30%,transparent) 33%,#ffffff26 45%,#ffffff3d 47%,#00000028 52%,#ffffff18 75%);box-shadow:inset 2px 1px 1px #ffffff26,-22px 0 0 #ffffff0a,-52px 0 0 #ffffff0b,-82px 0 0 #ffffff07;pointer-events:none}
+.ah-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:26px;flex-shrink:0}
+.ah-card-bank{display:flex;align-items:center;gap:8px;min-width:0;color:var(--ah-card-ink);font-size:15px;font-weight:600;letter-spacing:.025em;text-shadow:0 1px 1px #00000070,0 -1px 0 #ffffff1a}
+.ah-card-bank svg{width:23px;height:23px;flex-shrink:0}.ah-card-bank>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ah-card-type,.ah-card-peek{font-size:13px;color:var(--ah-card-muted);letter-spacing:.04em;white-space:nowrap}.ah-card-peek{display:none;font-variant-numeric:tabular-nums}
+.ah-card-body{display:flex;flex-direction:column;flex:1;min-height:0}
+.ah-card-chip-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:12px}
+.ah-card-chip-group{display:flex;align-items:center;gap:10px;color:var(--ah-card-muted)}.ah-card-chip-group svg{width:22px;height:22px}
+.ah-card-chip{position:relative;width:34px;height:28px;flex-shrink:0;overflow:hidden;border-radius:7px;border:1px solid #e4d8ae;background:linear-gradient(125deg,#98845a 0%,#ece4bb 18%,#cab686 42%,#f4edcc 49%,#b69b65 73%,#e2d3a8 100%);box-shadow:inset 0 1px 1px #fffbeaeb,inset 0 -1px 1px #6d572cb3,0 1px 2px #020a2080}
+.ah-card-chip::before{content:"";position:absolute;inset:6px 11px;border:1px solid #7e693d99;border-radius:4px;box-shadow:0 0 1px #fffcdd}
+.ah-card-chip::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#ffffff00 26%,#806b4280 26%,#806b4280 28%,#ffffff00 28%,#ffffff00 71%,#806b4280 71%,#806b4280 73%,#ffffff00 73%),linear-gradient(#ffffff00 45%,#806b4280 45%,#806b4280 48%,#ffffff00 48%)}
+.ah-card-number{color:var(--ah-card-ink);font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:.08em;white-space:nowrap;text-shadow:0 1px 1px #02040aa6,0 -1px 0 #ffffff1a}
+.ah-card-balance{flex:1;margin-top:14px}.ah-card-balance-label{display:block;font-size:12px;color:var(--ah-card-muted);margin-bottom:6px}
+.ah-card-value{display:flex;align-items:baseline;gap:8px;color:var(--ah-card-ink);font-variant-numeric:tabular-nums;letter-spacing:-.025em;text-shadow:0 2px 2px #0714267a,0 -1px 0 #ffffff21}
+.ah-card-unit{font-size:18px;color:var(--ah-card-muted);letter-spacing:0}.ah-card-value strong{font-size:clamp(26px,2.5vw,32px);line-height:1.2;font-weight:600;overflow-wrap:anywhere}.ah-card-decimal{font-size:22px;font-weight:500}
+.ah-card-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:12px;padding-top:12px;border-top:1px solid #ffffff26;box-shadow:0 -1px 0 #030e231f}
+.ah-card-foot-label{font-size:12px;color:var(--ah-card-muted);white-space:nowrap}.ah-card-foot-value{display:flex;align-items:center;gap:10px;min-width:0;color:var(--ah-card-ink);font-size:16px;font-weight:500;font-variant-numeric:tabular-nums;text-align:right}.ah-card-foot-value>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ah-card-foot-value svg{width:18px;height:18px;flex-shrink:0}#accountHome .ah-card-foot-value .ah-amount{font-size:16px;color:var(--ah-card-ink)}
+#accountHome :is(.ah-card-select,.ah-card-open){position:absolute;inset:0;width:100%;height:100%;box-sizing:border-box;padding:0;border:0;border-radius:inherit;background:transparent;color:transparent;cursor:pointer;box-shadow:none;text-decoration:none}
+#accountHome .ah-bank-card:not([data-rank="0"]) .ah-card-body{visibility:hidden}
+#accountHome .ah-bank-card:not([data-rank="0"]) .ah-card-physical{padding-top:8px}
+#accountHome .ah-bank-card:not([data-rank="0"]) .ah-card-type{display:none}
+#accountHome .ah-bank-card:not([data-rank="0"]) .ah-card-peek{display:inline}
+#accountHome .ah-bank-card:not([data-rank="0"]) .ah-card-select{bottom:auto;height:var(--ah-card-step)}
+#accountHome .ah-bank-card [hidden]{display:none!important}
+#accountHome :is(.ah-card-select,.ah-card-open):focus-visible{outline:2px solid var(--ah-card-ink);outline-offset:-5px}
+.ah-card-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#accountAssetsSupplement{display:flex;flex-direction:column;gap:10px;margin-top:24px}
+#accountAssetsSupplement:empty{display:none}
+#accountAssetsSupplement .ah-unlinked{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px;padding:0}
+#accountAssetsSupplement .ah-unlinked h4{grid-column:1/-1;margin-bottom:8px}
+#accountHome #accountAssetsSupplement .ah-unlinked-row{margin:0;padding-inline:10px}
+.ah-funds-identity{display:flex;flex-direction:column;gap:3px;min-width:0;line-height:1.5}
+.ah-funds-identity small{color:var(--ink-50);font-size:var(--font-size-xs,12px);font-weight:400}
+.ah-assets-footnote{display:flex;align-items:center;justify-content:space-between;gap:16px}
+#accountHome .ah-assets-footnote .ah-text-link{min-height:30px}
+.ah-assets-footnote .ah-report-basis{margin:0;text-align:right}
+@media(max-width:740px){#accountAssetsSupplement .ah-unlinked{grid-template-columns:1fr}.ah-assets-footnote{align-items:flex-start;flex-direction:column;gap:8px}.ah-assets-footnote .ah-report-basis{text-align:left}}
 .ah-card-empty{grid-column:1/-1;border:1px dashed var(--border);background:var(--surface-card);border-radius:18px;padding:24px;color:var(--ink-50);font-size:var(--font-size-sm,14px)}
 .ah-unlinked{grid-column:1/-1;padding:8px 2px}.ah-unlinked h4{font-size:var(--font-size-xs,12px);font-weight:500;color:var(--ink-50);margin:0 0 6px}
 #accountHome .ah-unlinked-row{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;align-items:center;gap:12px;padding:13px 12px;margin:0 -10px;border-bottom:1px solid var(--border);border-radius:10px;color:var(--ink);font-size:var(--font-size-sm,14px)}
 #accountHome .ah-unlinked-row:hover{background:var(--surface-card)}.ah-unlinked-row .ah-amount{font-size:var(--font-size-sm,14px)}
+#accountAssetsSupplement .ah-funds-banners{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px}
+#accountAssetsSupplement .ah-funds-banners h4{margin-bottom:0}
+#accountHome .ah-funds-banner{--ah-funds-brand:#476486;--ah-funds-ink:#24354b;position:relative;isolation:isolate;display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;gap:12px;min-width:0;box-sizing:border-box;margin:0;padding:14px 18px;border:1px solid color-mix(in srgb,var(--ah-funds-brand) 15%,#fff);border-radius:16px;background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--ah-funds-brand) 7%,transparent),transparent 70%),#fff;box-shadow:0 3px 12px #17365005;color:var(--ah-funds-ink);transition:transform .18s,box-shadow .18s,border-color .18s}
+#accountHome .ah-funds-banner[data-funds-theme=citic]{--ah-funds-brand:#d20a10}
+#accountHome .ah-funds-banner[data-funds-theme=alipay]{--ah-funds-brand:#1677ff}
+#accountHome .ah-funds-banner[data-funds-theme=wechat]{--ah-funds-brand:#22ac38}
+.ah-funds-banner-head{display:flex;align-items:center;gap:12px;min-width:0}
+.ah-funds-logo{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:46px;height:46px;box-sizing:border-box;border:1px solid color-mix(in srgb,var(--ah-funds-brand) 10%,#fff);border-radius:12px;background:#fff;color:var(--ah-funds-brand)}
+.ah-funds-symbol{display:block;position:relative;width:32px;height:32px;overflow:hidden}
+.ah-funds-symbol img{display:block;position:absolute;left:0;top:0;width:auto;height:32px;max-width:none;max-height:none}
+.ah-funds-symbol svg{display:block;width:32px;height:32px}
+[data-funds-theme=wechat] .ah-funds-symbol{width:36px;height:32px}
+[data-funds-theme=wechat] .ah-funds-symbol img{width:36px;height:32px}
+.ah-funds-brand-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ah-funds-brand-name{font-size:var(--font-size-sm,14px);font-weight:600;line-height:1.4;color:#24354b}
+.ah-funds-purpose{font-size:var(--font-size-xs,12px);line-height:1.5;color:#667789;min-width:0}
+.ah-funds-banner-detail{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--ah-funds-brand) 9%,#fff)}
+#accountHome .ah-funds-banner .ah-amount{font-size:clamp(21px,1.6vw,24px);font-weight:600;line-height:1.2;white-space:nowrap;color:#24354b;letter-spacing:-.025em}
+.ah-funds-binding{font-size:18px;font-weight:550;line-height:1.6;color:#667789}
+.ah-funds-banner[data-binding-state=loading] .ah-funds-binding,.ah-funds-banner[data-binding-state=unknown] .ah-funds-binding{font-size:var(--font-size-sm,14px);font-weight:500}
+.ah-funds-arrow{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:24px;height:24px;border-radius:7px;color:var(--ah-funds-brand);font-size:23px;line-height:1;background:color-mix(in srgb,var(--ah-funds-brand) 6%,#fff)}
+#accountHome .ah-funds-banner:hover{border-color:color-mix(in srgb,var(--ah-funds-brand) 32%,#fff);box-shadow:0 6px 18px color-mix(in srgb,var(--ah-funds-brand) 9%,transparent);transform:translateY(-2px)}
+#accountHome .ah-funds-banner:focus-visible{outline:2px solid var(--ah-funds-brand);outline-offset:3px}
+@media(max-width:1040px){#accountAssetsSupplement .ah-funds-banners{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:740px){#accountAssetsSupplement .ah-funds-banners{grid-template-columns:1fr;gap:12px}#accountHome .ah-funds-banner{padding:16px 18px;gap:12px}}
+@media(prefers-reduced-motion:reduce){#accountHome .ah-funds-banner{transition:none}#accountHome .ah-funds-banner:hover{transform:none}}
+.cd-payment-platform{--cd-platform-brand:#1677ff}
+.cd-payment-platform[data-platform=wechat]{--cd-platform-brand:#22ac38}
+.cd-platform-heading{display:flex;align-items:center;gap:18px;padding:0 0 22px;border-bottom:1px solid var(--border)}
+.cd-platform-heading h2{margin:0 0 6px;font-size:var(--font-size-xl,28px);font-weight:600;color:var(--ink)}
+.cd-platform-status{display:inline-flex;align-items:center;padding:3px 9px;border:1px solid var(--border);border-radius:7px;color:var(--ink-50);background:var(--surface);font-size:var(--font-size-xs,12px);line-height:1.6}
+.cd-platform-status[data-state=bound]{color:var(--primary-deep);border-color:var(--primary-border,var(--border));background:var(--primary-soft)}
+.cd-platform-logo{position:relative;display:flex;align-items:center;justify-content:center;width:64px;height:64px;flex-shrink:0;border:1px solid color-mix(in srgb,var(--cd-platform-brand) 16%,#fff);border-radius:17px;background:#fff}
+.cd-platform-symbol{position:relative;display:block;width:40px;height:40px;overflow:hidden}
+.cd-platform-symbol img{position:absolute;top:0;left:0;display:block;height:40px;width:auto;max-width:none}
+[data-platform=wechat] .cd-platform-symbol img{width:40px;object-fit:contain}
+.cd-payment-state{display:flex;flex-direction:column;align-items:center;gap:12px;padding:36px 24px;text-align:center;border:1px solid var(--border);border-radius:20px;background:var(--surface-card)}
+.cd-payment-state h3{margin:0;font-size:var(--font-size-lg,22px);font-weight:600;color:var(--ink)}
+.cd-payment-state p{max-width:440px;margin:0;color:var(--ink-50);font-size:var(--font-size-sm,14px);line-height:1.8}
+.cd-payment-state .account-view-link{display:inline-flex;align-items:center;justify-content:center;min-height:38px;margin-top:6px;padding:8px 16px;border:1px solid var(--primary-border,var(--border));border-radius:10px;background:var(--primary-soft);color:var(--primary-deep);font-size:var(--font-size-sm,14px);font-weight:550;text-decoration:none}
+.cd-payment-platform>.account-view-link{display:inline-flex;align-items:center;align-self:flex-start;min-height:36px;padding:7px 12px;border:1px solid var(--primary-border,var(--border));border-radius:10px;background:var(--primary-soft);color:var(--primary-deep);font-size:var(--font-size-sm,14px);font-weight:550;text-decoration:none}
+@media(max-width:560px){.cd-platform-heading{gap:14px;padding-bottom:18px}.cd-platform-heading h2{font-size:24px}.cd-payment-state{padding:28px 20px}}
 #accountCardsPreview>.ah-basis{grid-column:1/-1}
 .ah-panel{padding:24px 28px;background:var(--surface-card);border:1px solid var(--border);border-radius:22px;min-width:0}
 #accountHome .ah-action-card{border:1px solid var(--border);border-radius:20px;background:var(--surface-card);box-shadow:0 3px 14px color-mix(in srgb,var(--ink) 3%,transparent);min-width:0}
@@ -101,22 +188,67 @@
 @media(max-width:920px){#accountHome .ah-remittance-form{grid-template-columns:repeat(2,minmax(0,1fr))}.ah-money-field{grid-column:1/-1}.ah-remittance-method{grid-column:span 1}.ah-action-heading>span{display:none}#accountHome .ah-remittance-form .ah-remittance-method>select{display:block;max-width:none;width:100%;margin:8px 0 0}.ah-money-shell{grid-template-columns:minmax(120px,1fr) minmax(0,1fr)}}
 @media(max-width:560px){#accountHome .ah-action-card>summary{padding:16px 18px;min-height:40px}.ah-action-heading h2{font-size:20px}.ah-action-body{padding:0 18px 18px}#accountHome .ah-remittance-form{grid-template-columns:1fr;gap:14px}.ah-money-field,.ah-remittance-method{grid-column:1/-1}.ah-money-shell{grid-template-columns:1fr}.ah-money-uppercase{justify-content:flex-start;padding:0 12px 10px}.ah-money-uppercase output{text-align:left}.ah-form-footer{align-items:flex-start;flex-direction:column;gap:12px}.ah-form-buttons{align-self:flex-end}.ah-method-choices{display:flex}.ah-method-choice{flex:1;justify-content:center;padding-inline:10px}.ah-aa-table{min-width:420px}.ah-aa-heading>div{align-items:flex-start;flex-direction:column;gap:6px}.ah-remittance-dialog{padding:22px 20px}.ah-review-fields>div{grid-template-columns:92px minmax(0,1fr);gap:10px}}
 @media(prefers-reduced-motion:reduce){.ah-disclosure i,.ah-action-button{transition:none}}
-#accountHome .ah-month-picker{display:inline-flex;align-items:center;gap:10px;color:var(--ink-50);font-size:var(--font-size-sm,14px)}
-#accountHome .ah-month-picker input{font:inherit;color:var(--ink);border:1px solid var(--border);background:var(--surface-card);border-radius:12px;min-height:42px;padding:8px 12px;width:164px;box-sizing:border-box;color-scheme:var(--color-scheme,light)}
-.ah-month-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
-.ah-history-chart{margin:24px 0 12px;color:var(--primary-deep)}
-.ah-history-chart figcaption{font-size:var(--font-size-xs,12px);color:var(--ink-50);margin-bottom:12px}
-.ah-history-chart svg{width:100%;height:128px;display:block;background:linear-gradient(180deg,transparent,var(--primary-soft));border-bottom:1px solid var(--border)}
-.ah-chart-axis{display:flex;align-items:center;justify-content:space-between;font-size:var(--font-size-xs,12px);color:var(--ink-50);margin-top:8px}
+.ah-month-picker{display:inline-flex;align-items:center;gap:10px;color:var(--ink-50);font-size:var(--font-size-sm,14px)}
+#accountHome .ah-month-picker>span:not(.navren-month-field){display:none}
+#accountHome #accountMonthlyReport{padding:24px 28px 18px;border-color:var(--primary-border,var(--border));background:linear-gradient(135deg,color-mix(in srgb,var(--primary-soft) 35%,var(--surface-card)),var(--surface-card) 42%);box-shadow:0 7px 24px color-mix(in srgb,var(--ink) 3%,transparent)}
+.ah-month-summary{padding-bottom:20px;border-bottom:1px solid var(--border)}
+.ah-month-stats{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(2,minmax(0,1fr));gap:24px;align-items:center}
+#accountMonthlyReport .ah-month-stats .ah-stat{gap:8px;padding-left:24px;border-left:1px solid var(--border)}
+#accountMonthlyReport .ah-month-stats .ah-stat>span{font-size:var(--font-size-xs,12px)}
+#accountMonthlyReport .ah-month-stats .ah-amount{font-size:clamp(18px,1.65vw,23px);letter-spacing:-.02em}
+#accountMonthlyReport .ah-month-stats .ah-month-primary{padding-left:0;border:0}
+#accountMonthlyReport .ah-month-primary .ah-amount{font-size:clamp(25px,2.4vw,35px);color:var(--primary-deep);font-weight:650;letter-spacing:-.035em}
+.ah-month-period{margin:10px 0 0;color:var(--ink-50);font-size:var(--font-size-xs,12px);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.ah-month-content{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:28px;padding-block:22px;align-items:start}
+.ah-month-plot{min-width:0}.ah-month-plot>.ah-report-basis{margin-top:12px}
+.ah-history-chart{position:relative;margin:0;color:var(--primary-deep)}
+.ah-history-chart figcaption{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.ah-history-chart figcaption strong{font-size:var(--font-size-base,16px);font-weight:600;color:var(--ink-70)}
+.ah-history-chart figcaption span{font-size:var(--font-size-xs,12px);color:var(--ink-50)}
+.ah-chart-frame{overflow-x:auto;overscroll-behavior-x:contain;min-width:0;border:1px solid color-mix(in srgb,var(--border) 72%,transparent);border-radius:14px;background:linear-gradient(180deg,color-mix(in srgb,var(--primary-soft) 15%,var(--surface-card)),var(--surface-card));scrollbar-width:thin}
+.ah-history-chart svg{width:100%;min-width:560px;height:auto;aspect-ratio:680/300;display:block;font-family:inherit}
+.ah-chart-grid{stroke:var(--border);stroke-width:1;stroke-opacity:.6;vector-effect:non-scaling-stroke}
+.ah-chart-unit,.ah-chart-tick{fill:var(--ink-50);font-size:11px;font-variant-numeric:tabular-nums}
+.ah-chart-unit{font-size:11px}.ah-chart-gradient-top{stop-color:var(--primary-deep);stop-opacity:.14}.ah-chart-gradient-bottom{stop-color:var(--primary-deep);stop-opacity:.015}
+.ah-chart-line{fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.ah-chart-dot{fill:var(--surface-card);stroke:currentColor;stroke-width:2;vector-effect:non-scaling-stroke}
+.ah-chart-point[data-last=true] .ah-chart-dot{fill:currentColor;stroke:var(--surface-card);stroke-width:1.5}
+.ah-chart-hit{fill:transparent;stroke:none}.ah-chart-halo{fill:currentColor;fill-opacity:0;pointer-events:none;transition:fill-opacity .15s ease}.ah-chart-point{cursor:pointer}.ah-chart-point[data-active=true] .ah-chart-halo,.ah-chart-point:focus-visible .ah-chart-halo{fill-opacity:.1}
+.ah-chart-value{opacity:1;pointer-events:none}.ah-chart-value text{fill:var(--primary-deep);font-size:12px;font-weight:550;font-variant-numeric:tabular-nums;paint-order:stroke;stroke:var(--surface-card);stroke-width:4px;stroke-linejoin:round}
+.ah-chart-leader{stroke:var(--ink-30,var(--border));stroke-width:.75;vector-effect:non-scaling-stroke}
+.ah-chart-point:focus{outline:none}.ah-chart-point:focus-visible .ah-chart-dot{stroke:var(--ink-50);stroke-width:2.5}
+.ah-chart-range{fill:currentColor;fill-opacity:.045;pointer-events:none}.ah-chart-cursor{stroke:currentColor;stroke-width:1;stroke-opacity:.35;stroke-dasharray:3 4;vector-effect:non-scaling-stroke;pointer-events:none}
+.ah-chart-range[hidden],.ah-chart-cursor[hidden],.ah-chart-tooltip[hidden]{display:none}
+.ah-chart-hint{margin:9px 0 0;color:var(--ink-50);font-size:var(--font-size-xs,12px);line-height:1.5}
+.ah-chart-tooltip{position:absolute;z-index:40;box-sizing:border-box;width:310px;max-width:100%;padding:17px 18px;border:1px solid var(--border);border-radius:14px;background:var(--surface-card);color:var(--ink);box-shadow:0 12px 36px color-mix(in srgb,var(--ink) 13%,transparent);font-size:12px;line-height:1.5;pointer-events:none}
+.ah-chart-tip-heading{display:flex;flex-direction:column;gap:3px;margin-bottom:12px}.ah-chart-tip-heading strong{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}.ah-chart-tip-heading span,.ah-chart-tip-note{color:var(--ink-50)}
+.ah-chart-tooltip dl{margin:0}.ah-chart-tooltip dl>div{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:3px 0}.ah-chart-tooltip dt{color:var(--ink-50)}.ah-chart-tooltip dd{margin:0;font-variant-numeric:tabular-nums;text-align:right;font-weight:500;overflow-wrap:anywhere}
+.ah-chart-tip-change{display:grid;grid-template-columns:1fr auto;gap:2px 14px;margin:10px 0;padding:9px 11px;border-radius:8px;background:var(--primary-soft);color:var(--primary-deep)}.ah-chart-tip-change strong{font-size:14px;font-weight:600}.ah-chart-tip-percent{grid-column:2;text-align:right;font-size:11px;font-variant-numeric:tabular-nums}
+.ah-chart-tip-composition{padding-top:8px!important;border-top:1px solid var(--border)}.ah-chart-tip-flow{margin-top:11px;padding-top:11px;border-top:1px solid var(--border)}.ah-chart-tip-flow h4{margin:0 0 6px;font-size:12px;font-weight:600}.ah-chart-tip-note{margin:8px 0;font-size:11px}
+@media(prefers-reduced-motion:reduce){.ah-chart-halo{transition:none}}
 .ah-report-basis,.ah-muted{color:var(--ink-50);font-size:var(--font-size-sm,14px);line-height:1.7;margin:0 0 12px}
 .ah-report-basis{font-size:var(--font-size-xs,12px);margin:12px 0 20px}
-.ah-cash-month{padding-top:20px;border-top:1px solid var(--border)}
-.ah-cash-month h3{font-size:var(--font-size-sm,14px);font-weight:600;margin:0 0 18px}
-.ah-flow-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
-.ah-flow-stats .ah-amount{font-size:var(--font-size-base,18px)}
-.ah-cash-endpoints{display:flex;flex-wrap:wrap;gap:12px 32px;margin-top:20px;font-size:var(--font-size-xs,12px)}
-.ah-cash-endpoints .ah-stat{flex-direction:row;align-items:center;gap:12px}.ah-cash-endpoints .ah-amount{font-size:var(--font-size-sm,14px)}
-.ah-cash-month>.ah-text-link{margin-top:16px}
+.ah-cash-month{min-width:0;padding-left:26px;border-left:1px solid var(--border)}
+.ah-cash-month h3{font-size:var(--font-size-sm,14px);font-weight:600;color:var(--ink-70);margin:0 0 10px}
+#accountMonthlyReport .ah-flow-stats{display:flex;flex-direction:column;gap:0}
+#accountMonthlyReport .ah-flow-stats .ah-stat{flex-direction:row;align-items:center;justify-content:space-between;gap:14px;min-height:43px;padding:8px 0;border-bottom:1px solid var(--border);box-sizing:border-box}
+#accountMonthlyReport .ah-flow-stats .ah-stat>span{font-size:var(--font-size-xs,12px)}
+#accountMonthlyReport .ah-flow-stats .ah-amount{font-size:clamp(16px,1.4vw,19px);text-align:right;letter-spacing:-.015em}
+#accountMonthlyReport .ah-flow-stats .ah-stat:last-child{margin-top:9px;padding:11px 12px;border:0;border-radius:11px;background:var(--primary-soft)}
+#accountMonthlyReport .ah-flow-stats .ah-stat:last-child .ah-amount{color:var(--primary-deep)}
+.ah-month-footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-top:18px;border-top:1px solid var(--border)}
+.ah-cash-endpoints{display:flex;flex-wrap:wrap;gap:16px 32px;min-width:0;font-size:var(--font-size-xs,12px)}
+#accountMonthlyReport .ah-cash-endpoints .ah-stat{gap:4px}
+#accountMonthlyReport .ah-cash-endpoints .ah-stat>span{font-size:var(--font-size-xs,12px)}
+.ah-cash-endpoints .ah-amount{font-size:var(--font-size-sm,14px);font-weight:550}
+#accountHome .ah-report-link{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:38px;padding:8px 14px;box-sizing:border-box;border:1px solid var(--primary-border,var(--border));border-radius:10px;background:var(--surface-card);color:var(--primary-deep);font-size:var(--font-size-xs,12px);font-weight:550;white-space:nowrap;transition:background .15s,border-color .15s}
+#accountHome .ah-report-link::after{content:'›';font-size:20px;line-height:1;font-weight:400}
+#accountHome .ah-report-link:hover{background:var(--primary-soft);border-color:var(--primary)}
+.ah-month-notes{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:12px}
+.ah-month-notes .ah-report-basis{margin:0;font-size:var(--font-size-xs,12px);line-height:1.6}
+@media(max-width:920px){.ah-month-content{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:20px}.ah-cash-month{padding-left:20px}#accountMonthlyReport .ah-month-stats .ah-stat{padding-left:18px}.ah-month-stats{gap:18px}.ah-history-chart figcaption{align-items:flex-start;flex-direction:column;gap:4px}}
+@media(max-width:740px){#accountHome #accountMonthlyReport{padding:20px 20px 16px}#accountMonthlyReport .ah-month-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}#accountMonthlyReport .ah-month-stats .ah-month-primary{grid-column:1/-1;align-items:flex-start;flex-direction:column}#accountMonthlyReport .ah-month-stats .ah-stat{padding:0;border:0;align-items:flex-start;flex-direction:column}#accountMonthlyReport .ah-month-stats .ah-amount{font-size:20px}#accountMonthlyReport .ah-month-primary .ah-amount{font-size:31px}.ah-month-content{grid-template-columns:1fr;gap:18px;padding-block:18px}.ah-history-chart figcaption{align-items:center;flex-direction:row}.ah-cash-month{padding:16px 0 0;border-left:0;border-top:1px solid var(--border)}#accountMonthlyReport .ah-flow-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}#accountMonthlyReport .ah-flow-stats .ah-stat{flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;min-height:65px}#accountMonthlyReport .ah-flow-stats .ah-stat:last-child{margin-top:0;padding-inline:12px}.ah-month-footer{gap:16px}.ah-cash-endpoints{gap:12px 24px}}
+@media(max-width:480px){#accountMonthlyReport .ah-month-stats .ah-amount{font-size:18px}#accountMonthlyReport .ah-month-primary .ah-amount{font-size:29px}.ah-month-footer{align-items:stretch;flex-direction:column;gap:14px}.ah-month-footer .ah-report-link{align-self:flex-end}.ah-cash-endpoints{justify-content:space-between;gap:12px}.ah-history-chart figcaption span{font-size:11px}.ah-month-notes{gap:6px}}
 .ah-table-scroll{overflow:auto}.ah-transactions{width:100%;border-collapse:collapse;font-size:var(--font-size-sm,14px);color:var(--ink-70);text-align:left}
 .ah-transactions th{font-weight:500;color:var(--ink-50);font-size:var(--font-size-xs,12px);padding:0 16px 14px;border-bottom:1px solid var(--border)}
 .ah-transactions td{padding:16px;border-bottom:1px solid var(--border);line-height:1.55}.ah-transactions td:first-child{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--ink-50)}
@@ -124,7 +256,57 @@
 .ah-transactions-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:12px;font-size:var(--font-size-xs,12px);color:var(--ink-50)}
 .ah-small-button{min-height:40px;padding:8px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--primary-deep);font:inherit;cursor:pointer}
 #accountHome :is(a,button,input,select,summary):focus-visible{outline:2px solid var(--primary);outline-offset:3px}
-@media(max-width:1050px){.ah-assets-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}#accountHome #accountCardsPreview{grid-template-columns:1fr}.ah-month-stats{gap:16px}.ah-flow-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:740px){.account-workspace:has(#accountHome:not([hidden])){padding-top:18px}#accountHome{gap:26px}.ah-assets-grid{grid-template-columns:1fr;gap:20px}#accountHome #assetOverview{padding:22px;gap:20px}#accountHome #accountCardsPreview{grid-template-columns:repeat(2,minmax(0,1fr))}.ah-panel{padding:20px}.ah-section-heading h2{font-size:20px}.ah-month-stats{grid-template-columns:1fr;gap:18px}.ah-month-stats .ah-stat{flex-direction:row;justify-content:space-between;align-items:center}.ah-transactions th,.ah-transactions td{padding-inline:10px}.ah-transactions{min-width:540px}#accountHome .ah-transfer-main{gap:16px}.ah-total>.ah-amount{font-size:34px}}
-@media(max-width:480px){#accountHome #accountCardsPreview{grid-template-columns:1fr}#accountHome .ah-transfer-main{grid-template-columns:1fr}#accountHome .ah-transfer-main>button{width:100%}.ah-panel{padding:18px}.ah-month-picker>span{display:none}#accountHome .ah-month-picker input{width:146px}.ah-stats{gap:18px 12px}.ah-stat>.ah-amount{font-size:18px}.ah-available{align-items:flex-start}.ah-available>.ah-amount{font-size:19px}}
-@media(prefers-reduced-motion:reduce){#accountHome .ah-bank-card{transition:none}}
+@media(max-width:1050px){.ah-assets-grid{grid-template-columns:minmax(0,.9fr) minmax(280px,1.1fr);gap:28px;padding:24px}#accountHome #accountCardsPreview{grid-template-columns:1fr}.ah-month-stats{gap:16px}.ah-flow-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.ah-assets-grid{grid-template-columns:1fr;gap:28px;padding:22px}}
+@media(max-width:740px){.account-workspace:has(#accountHome:not([hidden])){padding-top:18px}#accountHome{gap:26px}#accountHome #assetOverview{gap:20px}#accountHome #accountCardsPreview{grid-template-columns:repeat(2,minmax(0,1fr))}.ah-panel{padding:20px}.ah-section-heading h2{font-size:20px}.ah-month-stats{grid-template-columns:1fr;gap:18px}.ah-month-stats .ah-stat{flex-direction:row;justify-content:space-between;align-items:center}.ah-transactions th,.ah-transactions td{padding-inline:10px}.ah-transactions{min-width:540px}#accountHome .ah-transfer-main{gap:16px}.ah-total>.ah-amount{font-size:34px}}
+@media(max-width:480px){#accountHome #accountCardsPreview{grid-template-columns:1fr}#accountHome .ah-transfer-main{grid-template-columns:1fr}#accountHome .ah-transfer-main>button{width:100%}.ah-panel{padding:18px}.ah-month-picker>span:not(.navren-month-field){display:none}.ah-stats{gap:18px 12px}.ah-stat>.ah-amount{font-size:18px}.ah-available{align-items:flex-start}.ah-available>.ah-amount{font-size:19px}}
+@media(max-width:480px){.ah-card-stack{--ah-card-step:36px;--ah-card-height:228px}.ah-card-physical{padding:16px 14px 18px}.ah-card-bank{font-size:14px;gap:7px}.ah-card-bank svg{width:23px;height:23px}.ah-card-chip-row{margin-top:12px;gap:8px}.ah-card-chip-group{gap:7px}.ah-card-chip{width:34px;height:28px}.ah-card-number{font-size:12px;letter-spacing:.015em}.ah-card-value strong{font-size:31px}.ah-card-decimal{font-size:21px}.ah-card-unit{font-size:18px}.ah-card-foot{gap:10px}.ah-card-foot-value,#accountHome .ah-card-foot-value .ah-amount{font-size:14px;gap:6px}#accountHome .ah-bank-card:not([data-rank="0"]) .ah-card-physical{padding-inline:13px}#accountHome .ah-bank-card:not([data-rank="0"]) .ah-card-bank{font-size:14px;gap:5px}.ah-card-peek{font-size:12px}}
+
+/* 汇款表单单独收紧；字段焦点由控件边框与柔和光晕表示。 */
+#accountHome #accountRemittanceCard{border-radius:18px;box-shadow:0 2px 10px color-mix(in srgb,var(--ink) 2%,transparent)}
+#accountHome #accountRemittanceCard>summary{box-sizing:border-box;min-height:58px;padding:12px 20px;gap:16px}
+#accountRemittanceCard .ah-action-heading{gap:14px}
+#accountRemittanceCard .ah-action-heading h2{font-size:var(--font-size-lg,22px);line-height:1.35}
+#accountHome #accountRemittanceCard>.ah-action-body{padding:14px 20px 18px}
+#accountRemittanceCard .ah-action-body>.ah-form-note{margin-bottom:12px;line-height:1.55}
+#accountHome #accountRemittanceCard .ah-remittance-form{gap:12px 18px}
+#accountRemittanceCard .ah-remittance-field{gap:6px;line-height:1.45}
+#accountRemittanceCard .ah-remittance-method{grid-column:span 1;line-height:1.45}
+#accountRemittanceCard .ah-remittance-method legend{margin-bottom:6px}
+#accountHome #accountRemittanceCard .ah-remittance-form :is(input:not([type=radio]),select){min-height:42px;padding:9px 12px;border-radius:9px;line-height:1.45;transition:border-color .16s,box-shadow .16s,background .16s}
+#accountHome #accountRemittanceCard .ah-remittance-form :is(input:not([type=radio]),select):focus{outline:0;border-color:var(--primary);background:var(--surface-card);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 12%,transparent)}
+#accountRemittanceCard .ah-money-shell{border-radius:9px;transition:border-color .16s,box-shadow .16s,background .16s}
+#accountRemittanceCard .ah-money-shell:focus-within{outline:0;border-color:var(--primary);background:var(--surface-card);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 12%,transparent)}
+#accountHome #accountRemittanceCard .ah-money-shell input:not([type=radio]){border:0;border-radius:0;background:transparent}
+#accountHome #accountRemittanceCard .ah-remittance-form .ah-money-shell input:not([type=radio]):focus{outline:0;box-shadow:none;background:transparent}
+#accountRemittanceCard .ah-method-choices{display:flex;width:100%;padding:3px;gap:3px;border-radius:9px;min-height:42px}
+#accountRemittanceCard .ah-method-choice{flex:1;justify-content:center;gap:6px;padding:7px 8px;border-radius:6px;white-space:normal;text-align:center;line-height:1.45}
+#accountRemittanceCard .ah-method-choice input{flex-shrink:0}
+#accountHome #accountRemittanceCard .ah-remittance-method>select{display:block;width:100%;max-width:none;margin:8px 0 0}
+#accountRemittanceCard .ah-form-note{line-height:1.55}
+#accountRemittanceCard .ah-form-footer{gap:12px;padding-top:12px}
+#accountRemittanceCard .ah-form-buttons{gap:8px}
+#accountRemittanceCard .ah-action-button{min-height:40px;padding:8px 16px;border-radius:9px}
+#accountRemittanceCard .ah-action-button.is-primary{box-shadow:0 2px 6px color-mix(in srgb,var(--primary) 14%,transparent)}
+@media(max-width:1099px){#accountHome #accountRemittanceCard .ah-remittance-form{grid-template-columns:repeat(2,minmax(0,1fr))}#accountRemittanceCard .ah-money-field{grid-column:1/-1}}
+@media(min-width:561px) and (max-width:1499px){html[lang^="en"] #accountHome #accountRemittanceCard .ah-remittance-form,body.mode-senior #accountHome #accountRemittanceCard .ah-remittance-form{grid-template-columns:repeat(2,minmax(0,1fr))}html[lang^="en"] #accountRemittanceCard .ah-money-field,body.mode-senior #accountRemittanceCard .ah-money-field{grid-column:1/-1}}
+@media(max-width:560px){#accountHome #accountRemittanceCard>summary{padding:12px 16px;min-height:56px}#accountRemittanceCard .ah-action-heading h2{white-space:normal;overflow-wrap:anywhere}#accountHome #accountRemittanceCard>.ah-action-body{padding:14px 16px 16px}#accountHome #accountRemittanceCard .ah-remittance-form{grid-template-columns:1fr;gap:12px}#accountRemittanceCard .ah-remittance-method{grid-column:1/-1}#accountRemittanceCard .ah-form-footer{gap:10px}#accountRemittanceCard .ah-form-buttons{align-self:stretch;justify-content:flex-end}}
+@media(prefers-reduced-motion:reduce){#accountHome #accountRemittanceCard .ah-remittance-form :is(input:not([type=radio]),select),#accountRemittanceCard .ah-money-shell{transition:none}}
+.cd-table-footer.cd-statement-footer{justify-content:flex-end;gap:12px;flex-wrap:wrap;min-height:44px}
+.cd-statement-footer .cd-page-total{margin-right:4px}
+.cd-page-size{display:flex;align-items:center;gap:8px;color:var(--ink-50);font-size:var(--font-size-xs,12px)}
+.cd-page-number{min-width:48px;text-align:center;font-variant-numeric:tabular-nums}
+.cd-choice-button{display:inline-flex;align-items:center;justify-content:space-between;gap:14px;min-height:36px;padding:7px 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface-card);color:var(--ink-70);font:inherit;font-size:var(--font-size-xs,12px);cursor:pointer;white-space:nowrap}
+.cd-choice-button::after{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg) translateY(-2px);opacity:.65}
+.cd-choice-button:hover,.cd-choice-button[aria-expanded=true]{background:var(--primary-soft);border-color:var(--primary-border)}
+.cd-choice-button:focus-visible,.cd-choice-option:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.cd-type-filter{padding:5px 8px;margin:-5px -8px;border-color:transparent;background:transparent;min-height:30px;color:inherit}
+.cd-type-filter.is-filtered{color:var(--primary-deep)}
+.cd-choice-menu{position:fixed;z-index:1500;width:230px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;padding:5px;border:1px solid var(--border);border-radius:12px;background:var(--surface-card);box-shadow:0 8px 30px rgba(26,51,77,.12)}
+.cd-choice-menu[hidden]{display:none}
+.cd-choice-option{display:flex;align-items:center;width:100%;gap:12px;min-height:36px;padding:8px 10px;border:0;border-radius:7px;background:transparent;color:var(--ink-70);font:inherit;font-size:var(--font-size-xs,12px);text-align:left;cursor:pointer}
+.cd-choice-option::after{content:'';margin-left:auto;width:5px;height:9px;border-bottom:1.5px solid transparent;border-right:1.5px solid transparent;transform:rotate(45deg)}
+.cd-choice-option:hover,.cd-choice-option:focus-visible{background:var(--primary-soft)}
+.cd-choice-option[aria-checked=true]{color:var(--primary-deep);background:var(--primary-soft)}
+.cd-choice-option[aria-checked=true]::after{border-color:currentColor}
+@media(max-width:600px){.cd-table-footer.cd-statement-footer{gap:8px}.cd-statement-footer .ah-small-button{padding:7px 10px}.cd-statement-footer .cd-page-total{flex-basis:100%;text-align:right}}

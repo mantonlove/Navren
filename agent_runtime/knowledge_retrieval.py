@@ -29,12 +29,16 @@ from typing import Any, Protocol
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
+from .knowledge_semantics import SEMANTIC_GAP_CODES, consumer_projection
+
 
 SCHEMA_VERSION = 1
 MAX_HITS = 8
 MAX_QUERY_CHARS = 500
 MAX_EXCERPT_CHARS = 1200
 MAX_GAPS = 32
+# 输入缺口仍最多32；回查、维度和语义复验会追加最多57条固定缺口。
+MAX_OUTPUT_GAPS = 96
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 FACETS = frozenset({"fees", "liquidity", "risk", "strategy", "eligibility",
                     "sale_status", "returns", "general", "terms"})
@@ -166,6 +170,9 @@ def _provider_gaps(value: Any) -> list[dict[str, Any]]:
     for item in value:
         if not isinstance(item, Mapping) or not isinstance(item.get("code"), str):
             raise _ContractError("invalid_search_response")
+        # 对象和角色关联需要成功回查的引文，稍后由窄合同重算。
+        if item["code"] in SEMANTIC_GAP_CODES:
+            continue
         # 不输出提供方错误消息/任意上下文，避免路径、账户或私有输入通过缺口泄露。
         code = item["code"] if item["code"] in GAP_MESSAGES else "provider_reported_gap"
         facet = item.get("facet") if item.get("facet") in FACETS else None
@@ -177,11 +184,12 @@ def _unique_gaps(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen = set()
     output = []
     for item in items:
-        key = (item["code"], item.get("citation_id"), item.get("facet"))
+        key = (item["code"], item.get("citation_id"), item.get("facet"),
+               item.get("product_id"), item.get("role"), item.get("field"))
         if key not in seen:
             seen.add(key)
             output.append(item)
-        if len(output) == MAX_GAPS:
+        if len(output) == MAX_OUTPUT_GAPS:
             break
     return output
 
@@ -441,6 +449,10 @@ class KnowledgeRetrieval:
         gaps.extend(_gap("facet_uncovered", facet=facet) for facet in request["facets"] if facet not in covered)
         if not result["hits"]:
             gaps.append(_gap("no_verified_evidence"))
+        semantic = consumer_projection(raw, result["hits"], release_id, request=request)
+        gaps.extend(semantic["coverage_gaps"])
+        if semantic.get("semantic_coverage") is not None:
+            result["semantic_coverage"] = semantic["semantic_coverage"]
         result["coverage_gaps"] = _unique_gaps(gaps)
         result["status"] = ("partial" if result["hits"] and result["coverage_gaps"]
                             else "ready" if result["hits"] else "empty")

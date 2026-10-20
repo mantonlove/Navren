@@ -257,7 +257,12 @@ class FinancialGraph:
             timeline=self.g.cashflow_timeline(w,90)
             for slot in timeline['timeline']:
                 for e in slot['events']:
-                    eid=node('event:'+e['id'],e['title'],'event',amount_minor=e['amount_minor'],currency=e['currency'],metric_family='future_obligation',date=e['date'],certainty=e['certainty'],evidence_refs=[ref(e['source_table'],e['evidence_id'])])
+                    derivation='confirmed' if e['certainty']=='confirmed' else 'candidate'
+                    eid=node('event:'+e['id'],e['title'],'event',amount_minor=e['amount_minor'],currency=e['currency'],metric_family='future_obligation',date=e['date'],certainty=e['certainty'],
+                             derivation_type=derivation,status='active' if derivation=='confirmed' else 'candidate',
+                             account_id=e['account_id'],cash_delta_minor=e['cash_delta_minor'],event_type=e['kind'],
+                             source_table=e['source_table'],source_id=e['evidence_id'],
+                             evidence_refs=[ref(e['source_table'],e['evidence_id'],occurred_at=e['date'])])
                     edge('account:'+e['account_id'],eid,'预计到账' if e['cash_delta_minor']>0 else '释放预留' if e['cash_delta_minor']==0 else '应付' if e['certainty']=='confirmed' else '可能扣费',nodes[eid]['evidence_refs'],abs(e['cash_delta_minor']),e['currency'],'confirmed' if e['certainty']=='confirmed' else 'candidate',occurred_at=e['date'])
             for a in timeline['accounts']:
                 insights.append({'id':key('liquidity',a['account_id']),'view':'liquidity','title':a['account_name']+'未来90天可用资金','node_ids':['account:'+a['account_id']], 'amount_minor':a['minimum_available_after_confirmed_minor'],'candidate_minimum_minor':a['minimum_available_if_candidates_occur_minor'],'currency':a['currency'], 'coverage':'bank_timeline', 'evidence_refs':[ref('accounts',a['account_id'])]+[ref(e['source_table'],e['evidence_id']) for s in timeline['timeline'] for e in s['events'] if e['account_id']==a['account_id']], 'notice':timeline['notice']})
@@ -482,10 +487,29 @@ class FinancialGraph:
             else:raise BankError('GRAPH_EVIDENCE','证据类型无效。')
         elif p['source']=='simulation':
             archive=self.g.bank.customer_archive(w)
-            allowed={'accounts','transactions','subscriptions','wealth_goals','loans','relationships','loan_installments','credit_statements','credit_statement_lines','cards','mandates','scheduled_payments','orders','fund_holds','investment_lots'}
+            allowed={'accounts','transactions','subscriptions','wealth_goals','loans','relationships','loan_installments','credit_statements','credit_statement_lines','cards','mandates','scheduled_payments','orders','fund_holds','investment_lots','recurring_obligations'}
             if p['table'] not in allowed:raise BankError('GRAPH_EVIDENCE','证据类型无效。')
             rows=archive['accounts'] if p['table']=='accounts' else archive['records'].get(p['table'],[])
             if p['table']=='transactions':rows=rows+archive['records'].get('archived_transactions',[])
+            if p['table']=='recurring_obligations':
+                # 预测来自当前工作区登记的演示快照；历史原件必须仍存在且属于同一主体。
+                # 不从旧图投影或审计正文恢复已经移除、已付或失效的候选。
+                rows=[{**r,'id':r.get('obligation_id',r.get('id'))} for r in rows
+                      if r.get('status')=='forecast_not_paid']
+                if 'recurring_obligations' not in archive['records'] and self.g.demo_accounts.is_demo(w):
+                    from demo_accounts import SOURCE
+                    demos=self.g.demo_accounts
+                    current=demos.current(w)
+                    forecasts=current.get('recurring_obligations',current.get('forecasts',[]))
+                    candidate=next((r for r in forecasts if r.get('obligation_id')==p['id']
+                                    and r.get('status')=='forecast_not_paid' and r.get('source')==SOURCE),None)
+                    if candidate:
+                        record=demos._record(w)
+                        with closing(demos._history_connection(record)) as db:
+                            rows=[dict(r) for r in db.execute('''SELECT obligation_id AS id,category,
+                                amount_minor,frequency,next_due_on,status FROM recurring_obligations
+                                WHERE user_id=? AND obligation_id=? AND status='forecast_not_paid'
+                                  AND source=?''',(record['user_id'],p['id'],SOURCE))]
         else:raise BankError('GRAPH_EVIDENCE','证据来源无效。')
         row=next((r for r in rows if r['id']==p['id']),None)
         if row is None:raise BankError('GRAPH_NOT_FOUND','原记录已删除或不属于当前账户。',404)
@@ -497,7 +521,7 @@ class FinancialGraph:
         elif p['table']=='profile_observations' and p['source']=='user_confirmed':
             if row['status']!='confirmed' or not row['source_verified']:
                 raise BankError('GRAPH_EVIDENCE_UNVERIFIED','待核实画像不能当作本人确认事实。',409)
-        allowed={'id','choice','reason','alternatives','feedback','execution_ids','evidence_refs','name','title','display_name','relationship','outstanding_minor','loan_type','start_on','budget_minor','plan_name','merchant','category','value','quote','status','occurred_at','amount_minor','delta_minor','kind','currency','balance_minor','target_minor','saved_minor','due_on','next_renewal_on','cycle','principal_minor','interest_minor','fees_minor','paid_minor','total_due_minor','source_node_id','target_node_id','relation','goal_id','account_id','confirmed_at','remaining_minor','original_minor','acquired_on','locked_until','product_id'}
+        allowed={'id','choice','reason','alternatives','feedback','execution_ids','evidence_refs','name','title','display_name','relationship','outstanding_minor','loan_type','start_on','budget_minor','plan_name','merchant','category','value','quote','status','occurred_at','amount_minor','delta_minor','kind','currency','balance_minor','target_minor','saved_minor','due_on','next_renewal_on','cycle','principal_minor','interest_minor','fees_minor','paid_minor','total_due_minor','source_node_id','target_node_id','relation','goal_id','account_id','confirmed_at','remaining_minor','original_minor','acquired_on','locked_until','product_id','frequency','next_due_on'}
         return {'record':{k:v for k,v in row.items() if k in allowed},'source':p['source'],'table':p['table'],'version':self._version(w),'notice':'原记录只读；不读取删除资料的审计正文。'}
 
     def decision(self,w,p):

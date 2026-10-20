@@ -3,13 +3,15 @@ name: calendar
 description: 用户查看每日收支、待付事项、理财损益或明确创建修改删除生活事件时，读取共享财务日历并准备可确认的事件草案。
 metadata:
   role: advisor
-  tools: [calendar_query, calendar_day, calendar_item, calendar_budget_scenario, calendar_prepare_event, account_summary, business_records, wealth_versions, prepare_operation, operation_status, answer_facts, answer_reviewed]
+  tools: [calendar_query, calendar_day, calendar_item, calendar_budget_scenario, calendar_prepare_event, presentation_query, presentation_detail, account_summary, business_records, wealth_versions, prepare_operation, operation_status, answer_facts, answer_reviewed]
   delivery: native
 ---
 
 # 财务日历与生活安排
 
 ## 已有数据与确认约束
+
+完整资金展示可用 `presentation_query(intent=funds)` 读取受信基座本轮发行的组件和完整指标批次；详情只用本轮实际发行标识调用 `presentation_detail`。终结仅选一份展示，全部值槽、条件、缺项及实际发行的建议共同接受审核，正文金额只能绑定该批次，不能用同值其他对象或未核实未来收入替代。未装配提供器时如实说明不可用，不自造展示。这个只读入口不替代原日历事件确认或金融操作授权。
 
 使用 calendar_query 获取同一账户来源的日历，period 可表达相对业务期间；from/to 必须同时明确，不与 period 混用。每次最多93天。查询产生组件，用终结工具 widget_ids 引用；不是返回模型编写的HTML。
 已记录收支、确认待付、候选续费、用户预算、理财损益分别解释。无记录不等于零消费。收益缺净值、持仓数量或完整交易时不可计算，本金解锁不等于现金到账。导入流水与模拟账户独立。

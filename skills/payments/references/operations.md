@@ -4,7 +4,7 @@
 
 | 用户任务 | action与必需业务字段 | 核对要点 |
 |---|---|---|
-| 即时转账 | `transfer`；account_id、beneficiary_id、amount_minor | 已核验收款人；当前模拟转账只支持人民币；金额、限额、应急与预留由后端复核 |
+| 即时转账 | `transfer`；account_id、beneficiary_id、amount_minor | 已核验收款人；当前模拟转账只支持人民币；后端核对账本余额、实际冻结/预留和限额；应急目标与预计账单为提示，本轮明确的留款规划约束仍需遵守 |
 | 定时转账 | `schedule_transfer`；account_id、beneficiary_id、amount_minor、frequency、next_due_on | frequency为once/monthly；首次日期不早于业务日；end_on仅每月计划可选；日期推进到期才执行 |
 | 取消计划 | `cancel_scheduled_payment`；account_id、scheduled_payment_id | 计划属于该账户且仍active；不取消已发生转账 |
 | 提交AA请求 | `request_split`；account_id、split_id | 只处理已有draft账单；分摊份额由后端核对，不凭聊天新建账单或参与人 |

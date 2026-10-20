@@ -1,0 +1,288 @@
+#!/usr/bin/env python3
+"""The explicit network entry point for the pinned cross-language alignment model.
+
+Run explicitly once, before enabling semantic indexing. The query runtime never
+downloads a model. A complete directory is published only after all hashes match.
+"""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.parse
+import urllib.request
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_knowledge import query_translation as _EMBEDDINGS
+MODEL_REPOSITORY = _EMBEDDINGS.MODEL_REPOSITORY
+MODEL_REVISION = _EMBEDDINGS.MODEL_REVISION
+MODEL_ARTIFACTS = _EMBEDDINGS.MODEL_ARTIFACTS
+_BASE = 'https://huggingface.co'
+_USER_AGENT = 'Navren-query-feature-provision/1'
+
+
+class ProvisionError(RuntimeError):
+    pass
+
+
+class _PublicModelRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, url):
+        parsed = urllib.parse.urlparse(url)
+        host = parsed.hostname or ''
+        if (parsed.scheme != 'https' or parsed.username or parsed.password
+                or not any(host == suffix or host.endswith('.' + suffix)
+                           for suffix in ('huggingface.co', 'hf.co', 'xethub.hf.co'))):
+            raise ProvisionError('model_redirect_rejected')
+        return super().redirect_request(request, response, code, message, headers, url)
+
+
+def _fsync_directory(directory: Path) -> None:
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _download(opener, url: str, deadline: float, *, path: Path | None = None,
+              expected: dict | None = None) -> bytes | None:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ProvisionError('model_download_timeout')
+    request = urllib.request.Request(url, headers={'User-Agent': _USER_AGENT})
+    limit = expected['size'] if expected else 2 * 1024 * 1024
+    digest = hashlib.sha256()
+    received = 0
+    fragments = []
+    with opener.open(request, timeout=min(20, remaining)) as response:
+        if response.status != 200:
+            raise ProvisionError('model_download_failed')
+        if expected and response.headers.get('Content-Length'):
+            if int(response.headers['Content-Length']) != expected['size']:
+                raise ProvisionError('model_download_size_mismatch')
+        stream = path.open('xb') if path else None
+        try:
+            while True:
+                if time.monotonic() >= deadline:
+                    raise ProvisionError('model_download_timeout')
+                data = response.read(min(256 * 1024, limit - received + 1))
+                if not data:
+                    break
+                received += len(data)
+                if received > limit:
+                    raise ProvisionError('model_download_size_mismatch')
+                digest.update(data)
+                if stream:
+                    stream.write(data)
+                else:
+                    fragments.append(data)
+            if expected and (received != expected['size']
+                             or digest.hexdigest() != expected['sha256']):
+                raise ProvisionError('model_download_hash_mismatch')
+            if stream:
+                stream.flush()
+                os.fsync(stream.fileno())
+        finally:
+            if stream:
+                stream.close()
+    return b''.join(fragments) if path is None else None
+
+
+def _worker(stage: Path, timeout_seconds: float) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    opener = urllib.request.build_opener(_PublicModelRedirect())
+    metadata_bytes = _download(
+        opener, f'{_BASE}/api/models/{MODEL_REPOSITORY}/revision/{MODEL_REVISION}?blobs=true',
+        deadline,
+    )
+    metadata = json.loads(metadata_bytes)
+    if metadata.get('sha') != MODEL_REVISION:
+        raise ProvisionError('model_revision_mismatch')
+    siblings = {item.get('rfilename'): item for item in metadata.get('siblings', [])}
+    for name, expected in MODEL_ARTIFACTS.items():
+        item = siblings.get(name, {})
+        if item.get('size') != expected['size']:
+            raise ProvisionError('model_metadata_mismatch')
+        if name.endswith('.onnx') and item.get('lfs', {}).get('sha256') != expected['sha256']:
+            raise ProvisionError('model_metadata_mismatch')
+        path = stage / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            if path.stat().st_size != expected['size'] or hashlib.sha256(path.read_bytes()).hexdigest() != expected['sha256']:
+                raise ProvisionError('model_download_hash_mismatch')
+            continue
+        _download(opener, f'{_BASE}/{MODEL_REPOSITORY}/resolve/{MODEL_REVISION}/{name}',
+                  deadline, path=path, expected=expected)
+    _fsync_directory(stage / 'onnx')
+    _fsync_directory(stage)
+
+
+def provision(destination: Path, timeout_seconds: float, replace: bool = False,
+              local_only: bool = False) -> dict:
+    """A bounded child handles downloads; the parent owns cleanup and publication."""
+    destination = destination.expanduser().absolute()
+    if destination.is_symlink():
+        raise ProvisionError('model_destination_rejected')
+    if destination.exists():
+        try:
+            _EMBEDDINGS._load_verified_artifacts(destination)
+            return {'status': 'already_verified', 'revision': MODEL_REVISION,
+                    'artifacts': len(MODEL_ARTIFACTS), 'network_requests': 0}
+        except _EMBEDDINGS.TranslationError:
+            if not replace:
+                raise ProvisionError('model_existing_directory_invalid') from None
+        if not destination.is_dir():
+            raise ProvisionError('model_destination_rejected')
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    stage = Path(tempfile.mkdtemp(prefix='.navren-query-feature-stage-', dir=destination.parent))
+    os.chmod(stage, 0o700)
+    backup = None
+    try:
+        # Reuse only exact already-provisioned public bytes, never queries/data.
+        # A local-only policy refresh may reuse all pinned bytes without network.
+        if destination.is_dir():
+            for name, expected in MODEL_ARTIFACTS.items():
+                existing = destination / name
+                if (existing.is_file() and not existing.is_symlink()
+                        and existing.stat().st_size == expected['size']
+                        and hashlib.sha256(existing.read_bytes()).hexdigest() == expected['sha256']):
+                    target = stage / name; target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(existing, target)
+        if local_only and any(not (stage / name).is_file() for name in MODEL_ARTIFACTS):
+            raise ProvisionError('model_local_artifacts_invalid')
+        command = [sys.executable, str(Path(__file__).resolve()), '--worker-stage', str(stage),
+                   '--timeout-seconds', str(timeout_seconds)]
+        # subprocess timeout kills and waits for the child before removing staging;
+        # even a stuck DNS/read cannot make provisioning run indefinitely.
+        completed = None
+        if not local_only:
+            try:
+                completed = subprocess.run(command, capture_output=True, text=True,
+                                           timeout=timeout_seconds, check=False)
+            except subprocess.TimeoutExpired:
+                raise ProvisionError('model_download_timeout') from None
+        if completed is not None and completed.returncode:
+            allowed_codes = {
+                'model_download_timeout', 'model_redirect_rejected', 'model_download_failed',
+                'model_download_size_mismatch', 'model_download_hash_mismatch',
+                'model_revision_mismatch', 'model_metadata_mismatch',
+            }
+            code = completed.stdout.strip()
+            raise ProvisionError(code if code in allowed_codes else 'model_download_failed')
+        manifest = {
+            'format_version': 1, 'complete': True,
+            'repository': MODEL_REPOSITORY, 'revision': MODEL_REVISION,
+            'dimension': _EMBEDDINGS.DIMENSION,
+            'algorithm_policy': _EMBEDDINGS.ALGORITHM_POLICY,
+            'profile_id': _EMBEDDINGS.translation_profile_metadata()['profile_id'],
+            'artifacts': {
+                name: {**values, 'source_url':
+                       f'{_BASE}/{MODEL_REPOSITORY}/resolve/{MODEL_REVISION}/{name}'}
+                for name, values in MODEL_ARTIFACTS.items()
+            },
+            'license': {
+                'upstream_declared_license': 'CC-BY-4.0',
+                'upstream_model': _EMBEDDINGS.UPSTREAM_REPOSITORY,
+                'upstream_revision': _EMBEDDINGS.UPSTREAM_REVISION,
+                'upstream_model_card': f'{_BASE}/{_EMBEDDINGS.UPSTREAM_REPOSITORY}/blob/{_EMBEDDINGS.UPSTREAM_REVISION}/README.md',
+                'conversion_repository': f'{_BASE}/{MODEL_REPOSITORY}/tree/{MODEL_REVISION}',
+                'conversion_declared_license': None,
+                'conversion_model_card': f'{_BASE}/{MODEL_REPOSITORY}/blob/{MODEL_REVISION}/README.md',
+                'notice': 'Helsinki-NLP upstream card declares CC-BY-4.0; Xenova ONNX conversion card has no license field. Do not infer a separately declared conversion license.',
+            },
+            'query_feature_policy': {
+                'source_language': 'zh', 'target_language': 'en',
+                'authority': False, 'query_only': True, 'translate_evidence': False,
+                'decoding': 'greedy argmax, num_beams=1 (upstream default num_beams=6)',
+                'max_input_characters': _EMBEDDINGS.MAX_INPUT_CHARACTERS,
+                'max_input_tokens': _EMBEDDINGS.MAX_INPUT_TOKENS,
+                'max_generated_tokens': _EMBEDDINGS.MAX_GENERATED_TOKENS,
+                'max_output_characters': _EMBEDDINGS.MAX_OUTPUT_CHARACTERS,
+                'max_call_seconds': _EMBEDDINGS.MAX_CALL_SECONDS,
+                'max_run_seconds': _EMBEDDINGS.MAX_RUN_SECONDS,
+                'special_token_ids': _EMBEDDINGS.SPECIAL_TOKEN_IDS,
+                'decoder_start_token_id': _EMBEDDINGS.DECODER_START_TOKEN_ID,
+                'numeric_policy': _EMBEDDINGS.NUMERIC_POLICY,
+                'calendar_literal_guard': _EMBEDDINGS.CALENDAR_GUARD_POLICY,
+                'unknown_policy': 'reject tokenizer pieces absent from the actual pinned vocabulary',
+                'tokenizer_adapter': 'source.spm actual nmt_nfkc charmap + source32000 Unigram scores; map pieces to shared Marian65001 IDs; no null charmap/unk2-comma merged tokenizer',
+                'persistence': 'none', 'query_network_requests': 0,
+            },
+            'provisioned_at': datetime.now(timezone.utc).isoformat(),
+            'inference': {'provider': 'CPUExecutionProvider', 'intra_op_threads': 2,
+                          'inter_op_threads': 1, 'max_batch': 1,
+                          'query_network_requests': 0},
+        }
+        with (stage / 'manifest.json').open('x', encoding='utf-8') as stream:
+            json.dump(manifest, stream, ensure_ascii=False, indent=2, sort_keys=True)
+            stream.write('\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        _EMBEDDINGS._load_verified_artifacts(stage)
+        _fsync_directory(stage)
+        if destination.exists():
+            # Recheck at publication time: never overwrite a concurrent provision.
+            if not replace:
+                raise ProvisionError('model_destination_changed')
+            backup = destination.parent / (stage.name + '-previous')
+            os.replace(destination, backup)
+        try:
+            os.replace(stage, destination)
+            _fsync_directory(destination.parent)
+        except Exception:
+            if backup and backup.exists() and not destination.exists():
+                os.replace(backup, destination)
+            raise
+        if backup and backup.exists():
+            shutil.rmtree(backup)
+        return {'status': 'provisioned', 'revision': MODEL_REVISION,
+                'artifacts': len(MODEL_ARTIFACTS),
+                'bytes': sum(item['size'] for item in MODEL_ARTIFACTS.values()),
+                'algorithm_policy': _EMBEDDINGS.ALGORITHM_POLICY,
+                'profile_id': _EMBEDDINGS.translation_profile_metadata()['profile_id'],
+                'local_only': local_only,
+                'network_requests': 0 if local_only else None}
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description='显式准备固定Marian本地查询特征模型；查询阶段不联网。')
+    parser.add_argument('--destination', type=Path, default=_EMBEDDINGS.default_model_directory())
+    parser.add_argument('--timeout-seconds', type=float, default=540)
+    parser.add_argument('--replace', action='store_true', help='替换校验失败的已有模型目录')
+    parser.add_argument('--refresh-manifest-local', action='store_true',
+                        help='仅重验本地全部固定资产并重建策略manifest；缺失或损坏即失败，不联网')
+    parser.add_argument('--worker-stage', type=Path, help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if not 10 <= args.timeout_seconds <= 600:
+        parser.error('--timeout-seconds 必须在 10 到 600 秒之间')
+    try:
+        if args.worker_stage:
+            _worker(args.worker_stage, args.timeout_seconds)
+        else:
+            print(json.dumps(provision(args.destination, args.timeout_seconds,
+                                       args.replace or args.refresh_manifest_local,
+                                       local_only=args.refresh_manifest_local),
+                             ensure_ascii=False, sort_keys=True))
+        return 0
+    except ProvisionError as error:
+        print(str(error) if args.worker_stage else json.dumps({'status': 'failed', 'code': str(error)}))
+        return 1
+    except Exception:
+        print('model_download_failed' if args.worker_stage else
+              json.dumps({'status': 'failed', 'code': 'model_provision_failed'}))
+        return 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

@@ -1,8 +1,13 @@
 import json
+import hashlib
+import sqlite3
 import tempfile
 import unittest
+from copy import deepcopy
 from contextlib import closing
+from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 from finance_gateway import FinanceGateway
 from financial_graph import classify, liquidity_scenario, local_day
 from simulated_bank import BankError
@@ -159,8 +164,121 @@ class GraphTests(unittest.TestCase):
         r=self.query(view='liquidity',**{'from':'2026-09-01','to':'2026-09-30'})
         for e in r['links']:
             if e.get('occurred_at'):self.assertEqual(e['period']['from'],e['occurred_at'])
+    def test_future_occurrences_retain_dates_certainty_and_signed_cash_effect(self):
+        from cashflow_timeline import build_cashflow_timeline
+        archive=self.g.bank.customer_archive(self.w)
+        account=next(a for a in archive['accounts'] if a['id'].endswith('-main'))
+        asof=date.fromisoformat(archive['as_of'])
+        archive['records']['recorded_forecasts']=[{'obligation_id':'periodic-evidence','category':'个人日常支出',
+            'scope':'personal','amount_minor':12000,'frequency':'monthly','next_due_on':archive['as_of'],
+            'status':'forecast_not_paid'}]
+        archive['records']['orders'].append({'id':'settlement-evidence','status':'pending_settlement',
+            'account_id':account['id'],'amount_minor':25000,'settlement_date':(asof+timedelta(days=7)).isoformat()})
+        archive['records']['fund_holds'].append({'id':'release-evidence','status':'held',
+            'account_id':account['id'],'amount_minor':500,'expires_on':archive['as_of']})
+        expected=build_cashflow_timeline(archive,90,self.w)
+        pristine=deepcopy(expected)
+        with patch.object(self.g,'cashflow_timeline',return_value=expected):
+            result=self.query(view='plans',**{'from':'2026-09-01','to':'2026-09-30'})
+        self.assertEqual(result['timeline'],pristine)
+        events={e['id']:e for slot in expected['timeline'] for e in slot['events']}
+        projected=[n for n in result['nodes'] if n['id'].startswith('event:') and n['id'][6:] in events]
+        self.assertEqual(len(projected),len(events))
+        forecasts=[n for n in projected if n['source_id']=='periodic-evidence']
+        self.assertGreaterEqual(len(forecasts),3)
+        self.assertEqual(len({n['id'] for n in forecasts}),len(forecasts))
+        self.assertEqual(len({n['date'] for n in forecasts}),len(forecasts))
+        self.assertEqual(len({n['label'] for n in forecasts}),1)
+        for n in projected:
+            original=events[n['id'][6:]]
+            for field in ('account_id','date','certainty','cash_delta_minor','amount_minor','currency','source_table'):
+                self.assertEqual(n[field],original[field])
+            self.assertEqual(n['source_id'],original['evidence_id'])
+            self.assertEqual(n['event_type'],original['kind'])
+            self.assertEqual(n['derivation_type'],original['certainty'])
+            self.assertEqual(n['status'],'candidate' if original['certainty']=='candidate' else 'active')
+            self.assertEqual(n['evidence_refs'][0]['occurred_at'],original['date'])
+        self.assertTrue(any(n['cash_delta_minor']>0 and n['certainty']=='confirmed' for n in projected))
+        self.assertTrue(any(n['cash_delta_minor']==0 and n['certainty']=='confirmed' for n in projected))
+        self.assertTrue(all(n['cash_delta_minor']==-12000 and n['certainty']=='candidate' for n in forecasts))
     def test_public_concepts_are_separate_from_personal_exposure(self):
         r=self.query(view='risk');self.assertTrue(r['related_knowledge']);self.assertFalse(any(n.get('role')=='industry_exposure'for n in r['nodes']))
+
+
+class RecurringEvidenceTests(unittest.TestCase):
+    """临时注册表和只读历史副本；不读取或修改现有演示数据库。"""
+    def setUp(self):
+        from demo_accounts import SOURCE
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        self.g=FinanceGateway(Path(self.tmp.name)/'bank')
+        self.w,_=self.g.create_session();self.other,_=self.g.create_session()
+        self.history=Path(self.tmp.name)/'history.sqlite3'
+        self.forecast={'obligation_id':'own-periodic','user_id':'tycoon','category':'个人日常支出',
+            'scope':'personal','amount_minor':12000,'frequency':'monthly','next_due_on':'2026-10-08',
+            'status':'forecast_not_paid','source':SOURCE}
+        self.other_forecast={**self.forecast,'obligation_id':'other-periodic','user_id':'grain_farmer'}
+        with closing(sqlite3.connect(self.history)) as db:
+            db.executescript('''CREATE TABLE recurring_obligations(obligation_id TEXT PRIMARY KEY,user_id TEXT,
+                category TEXT,scope TEXT,amount_minor INTEGER,frequency TEXT,next_due_on TEXT,status TEXT,source TEXT);
+                CREATE TABLE cash_transactions(transaction_id TEXT,user_id TEXT,occurred_at TEXT);''')
+            for row in (self.forecast,self.other_forecast):
+                db.execute('INSERT INTO recurring_obligations VALUES(?,?,?,?,?,?,?,?,?)',tuple(row.values()))
+            db.commit()
+        digest=hashlib.sha256(self.history.read_bytes()).hexdigest()
+        with self.g.bank.transaction() as db:
+            db.execute('''CREATE TABLE navren_demo_accounts(user_id TEXT PRIMARY KEY,workspace_id TEXT UNIQUE,
+                display_name TEXT,as_of TEXT,source_version TEXT,history_path TEXT,history_sha256 TEXT,
+                source_snapshot TEXT,account_mapping TEXT,status TEXT,import_version TEXT)''')
+            for workspace,user_id,forecast in ((self.w,'tycoon',self.forecast),(self.other,'grain_farmer',self.other_forecast)):
+                snapshot={'recurring_obligations':[forecast],'latest_balances':[],
+                          'start_date':'2016-10-04','end_date':'2026-10-03'}
+                db.execute('INSERT INTO navren_demo_accounts VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                    (user_id,workspace,user_id,'2026-10-08','fixture-v1',str(self.history),digest,
+                     json.dumps(snapshot),'{}','ready','fixture-v1'))
+    def evidence(self,workspace=None,source_id=None):
+        return self.g.financial_graph.evidence(workspace or self.w,
+            {'source':'simulation','table':'recurring_obligations','id':source_id or self.forecast['obligation_id']})
+    def set_forecasts(self,forecasts):
+        with self.g.bank.transaction() as db:
+            snapshot=json.loads(db.execute('SELECT source_snapshot FROM navren_demo_accounts WHERE workspace_id=?',(self.w,)).fetchone()[0])
+            snapshot['recurring_obligations']=forecasts
+            db.execute('UPDATE navren_demo_accounts SET source_snapshot=? WHERE workspace_id=?',(json.dumps(snapshot),self.w))
+    def test_current_workspace_forecast_evidence_is_readonly_and_bounded(self):
+        before=self.history.read_bytes()
+        record=self.evidence()['record']
+        self.assertEqual(record,{'id':'own-periodic','category':'个人日常支出','amount_minor':12000,
+            'frequency':'monthly','next_due_on':'2026-10-08','status':'forecast_not_paid'})
+        self.assertEqual(self.history.read_bytes(),before)
+        self.assertNotIn('user_id',record);self.assertNotIn('workspace_id',record);self.assertNotIn('scope',record)
+        with self.assertRaises(BankError) as error:
+            self.g.financial_graph.evidence(self.w,{'source':'simulation','table':'navren_demo_accounts','id':'tycoon'})
+        self.assertEqual(error.exception.code,'GRAPH_EVIDENCE')
+    def test_forecast_cannot_be_read_across_workspaces_even_with_copied_candidate(self):
+        with self.assertRaises(BankError) as error:self.evidence(self.other)
+        self.assertEqual(error.exception.code,'GRAPH_NOT_FOUND')
+        self.set_forecasts([self.forecast,self.other_forecast])
+        with self.assertRaises(BankError) as error:self.evidence(source_id='other-periodic')
+        self.assertEqual(error.exception.code,'GRAPH_NOT_FOUND')
+        self.assertEqual(self.evidence(self.other,'other-periodic')['record']['id'],'other-periodic')
+    def test_removed_or_paid_forecast_does_not_reappear_from_history(self):
+        for forecasts in ([],[{**self.forecast,'status':'paid'}]):
+            with self.subTest(forecasts=forecasts):
+                self.set_forecasts(forecasts)
+                with self.assertRaises(BankError) as error:self.evidence()
+                self.assertEqual(error.exception.code,'GRAPH_NOT_FOUND')
+    def test_deleted_original_is_rejected_even_if_candidate_snapshot_remains(self):
+        with closing(sqlite3.connect(self.history)) as db:
+            db.execute('DELETE FROM recurring_obligations WHERE obligation_id=?',(self.forecast['obligation_id'],));db.commit()
+        digest=hashlib.sha256(self.history.read_bytes()).hexdigest()
+        with self.g.bank.transaction() as db:
+            db.execute('UPDATE navren_demo_accounts SET history_sha256=? WHERE workspace_id=?',(digest,self.w))
+        with self.assertRaises(BankError) as error:self.evidence()
+        self.assertEqual(error.exception.code,'GRAPH_NOT_FOUND')
+    def test_explicitly_empty_archive_does_not_fall_back_to_old_demo_forecast(self):
+        with patch.object(self.g.bank,'customer_archive',return_value={'accounts':[],
+                           'records':{'recurring_obligations':[]}}):
+            with self.assertRaises(BankError) as error:self.evidence()
+        self.assertEqual(error.exception.code,'GRAPH_NOT_FOUND')
 
 
 class Counterexamples(unittest.TestCase):

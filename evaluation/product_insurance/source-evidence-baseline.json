@@ -1,0 +1,100 @@
+{
+  "schema": "navren.product-insurance.source-evidence-baseline/1",
+  "observed_date": "2026-10-18",
+  "catalog_extract_date": "2026-10-14",
+  "catalog_rows": {
+    "002604": {
+      "code": "002604",
+      "name": "华夏新起点混合A",
+      "publish": "华夏基金管理有限公司",
+      "risk": "R4中高风险",
+      "charge": "详见产品页面",
+      "chargeWay": "详见产品页面",
+      "saleStatus": "在售",
+      "customerGroupType": "符合资质的个人客户"
+    },
+    "008213": {
+      "code": "008213",
+      "name": "华夏新起点混合C",
+      "publish": "华夏基金管理有限公司",
+      "risk": "R4中高风险",
+      "charge": "详见产品页面",
+      "chargeWay": "详见产品页面",
+      "saleStatus": "在售",
+      "customerGroupType": "符合资质的个人客户"
+    },
+    "003003": {
+      "code": "003003",
+      "name": "华夏现金增利证券投资基金A/E",
+      "publish": "易方达基金管理有限公司",
+      "risk": "低风险",
+      "saleStatus": "在售"
+    },
+    "000581": {
+      "code": "000581",
+      "name": "嘉实活钱包货币市场基金A",
+      "publish": "易方达基金管理有限公司",
+      "risk": "低风险",
+      "saleStatus": "在售"
+    },
+    "001001": {
+      "code": "001001",
+      "name": "华夏债券AB",
+      "publish": "华夏基金管理有限公司",
+      "risk": "R2中低风险",
+      "saleStatus": "在售"
+    },
+    "ZA260501": {
+      "code": "ZA260501",
+      "name": "众民保·中高端医疗险2026版",
+      "publish": "众安在线财产保险股份有限公司",
+      "risk": "低风险",
+      "charge": "以保险公司核定为准",
+      "investor": "以保险公司核保规则为准",
+      "saleStatus": "在售",
+      "customerGroupType": "符合资质的个人投资者"
+    }
+  },
+  "manager_page_markers": {
+    "002604": [
+      "华夏新起点混合A（基金代码：002604）",
+      "中风险(R3)",
+      "净值（2026-10-16）",
+      "0.984",
+      "交易状态开放申购"
+    ],
+    "008213": [
+      "华夏新起点混合C（基金代码：008213）",
+      "中风险(R3)",
+      "净值（2026-10-16）",
+      "0.958",
+      "交易状态开放申购"
+    ]
+  },
+  "jsfund_identity_markers": [
+    "000581/002917嘉实活钱包A"
+  ],
+  "zhongan_pdf_version_markers": [
+    "更新日期：2026年6月",
+    "启用/执行日期：2026年6月23日下午17:00:00"
+  ],
+  "source_sha256": {
+    "outputs/product-insurance-design-research-20261018/raw/catalog.jsonp": "e5ac446799355ed211655050e7f4dc1a6cdfa47acb1ea0ce31b037d10a6c899e",
+    "outputs/product-insurance-design-research-20261018/catalog-audit-report.json": "6304158b7a8ec03b63dc59c9343a394fb4ed2973261b2258e62e27c5046fb33b",
+    "outputs/product-insurance-design-research-20261018/http-source-receipts.json": "1581c406283234a50619ed7553a6f23b432ead7065d3811fc28d58b8d8868f98",
+    "outputs/product-insurance-design-research-20261018/document-source-receipts.json": "9e909037602babbd077cce56b8a7dabdc518fd638d3b0c0d71b7e2be6f742933",
+    "outputs/product-insurance-design-research-20261018/raw/chinaamc-002604.html": "378800f16a9aeaa96dc36696d22f7492aed013bcd5a61f4cd76c2cddcc39fd24",
+    "outputs/product-insurance-design-research-20261018/raw/chinaamc-008213.html": "9ee29a7263fe48036068753092b41408936730b1492930539d90923422e9d60a",
+    "outputs/product-insurance-design-research-20261018/raw/chinaamc-003003-summary.pdf": "b3ab911f3b34a957100221b9b943e84e356e319f4fa81ceec444aa01e572bf6c",
+    "outputs/product-insurance-design-research-20261018/raw/jsfund-money.html": "c246ae6dc43c802b77e74d853a85224e7b8549f1e2a2dc4e10c03bec58f64e17",
+    "outputs/product-insurance-design-research-20261018/raw/zhongan-medical-drugs-2026.pdf": "e672c6f2bf698a393a69106576da226230ff3c5eaba6b3775194ad617233f849"
+  },
+  "limitations": [
+    "目录销售状态只对2026-10-14快照有效，不证明当前购买资格。",
+    "渠道费率字段是占位，当前目录审计无具体数字费率。",
+    "管理人页面日期只证明页面披露日；抓取时刻不是净值事实日。",
+    "003003管理人PDF页1与目录publish冲突，不能静默修正目录。",
+    "000581嘉实官方帮助页只作名称/代码交叉核验，不证明当前微众渠道申购上限或赎回规则。",
+    "众安PDF是药械范围补充清单，不是ZA260501完整主合同、投保须知或费率。"
+  ]
+}

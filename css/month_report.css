@@ -1,0 +1,214 @@
+/* 月报限定样式：一张整体卡片，按现金、日常收支、投资和贷款分区。 */
+.fd-month-report {
+  container: fd-month-report / inline-size;
+  min-width: 0;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface-card);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+.fd-month-report .fd-month-report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 22px;
+}
+.fd-month-report .fd-month-report-head h2 {
+  margin: 0;
+  font-size: var(--font-size-xl, 25px);
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -.025em;
+}
+.fd-month-report .fd-month-report-scope {
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--ink-50);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.fd-month-report .fd-month-cash {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 20px 22px;
+  border: 1px solid var(--primary-border, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--primary-soft) 35%, var(--surface-card));
+}
+.fd-month-report .fd-month-metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  padding-inline: 20px;
+}
+.fd-month-report .fd-month-metric:first-child { padding-left: 0; }
+.fd-month-report .fd-month-metric:last-child { padding-right: 0; }
+.fd-month-report .fd-month-metric + .fd-month-metric { border-left: 1px solid var(--border); }
+.fd-month-report .fd-month-metric-label {
+  color: var(--ink-50);
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.5;
+}
+.fd-month-report .fd-month-metric-value {
+  display: block;
+  min-width: 0;
+  color: var(--ink-70);
+  font-size: calc(var(--font-size-lg, 19px) + 3px);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -.025em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fd-month-report .fd-month-metric:first-child .fd-month-metric-value {
+  color: var(--ink);
+  font-size: calc(var(--font-size-xl, 25px) + 3px);
+}
+.fd-month-report .fd-month-metric[data-direction="unknown"] .fd-month-metric-value { color: var(--ink-50); }
+.fd-month-report .fd-month-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 26px;
+}
+.fd-month-report .fd-month-group {
+  --fd-group-accent: var(--primary-deep);
+  min-width: 0;
+  padding-inline: 24px;
+}
+.fd-month-report .fd-month-group:first-child { padding-left: 0; }
+.fd-month-report .fd-month-group:last-child { padding-right: 0; }
+.fd-month-report .fd-month-group + .fd-month-group { border-left: 1px solid var(--border); }
+.fd-month-report .fd-month-group[data-kind="investment"] { --fd-group-accent: var(--accent-water); }
+.fd-month-report .fd-month-group[data-kind="debt"] { --fd-group-accent: var(--state-warning); }
+.fd-month-report .fd-month-group-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 13px;
+}
+.fd-month-report .fd-month-group-head h3,
+.fd-month-report .fd-month-selected h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--font-size-base, 15px);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.fd-month-report .fd-month-group-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fd-group-accent) 9%, var(--surface-card));
+  color: var(--fd-group-accent);
+}
+.fd-month-report .fd-month-group-icon svg { width: 18px; height: 18px; }
+.fd-month-report .fd-month-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  min-width: 0;
+}
+.fd-month-report .fd-month-field {
+  display: grid;
+  grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr);
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 0;
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.6;
+}
+.fd-month-report .fd-month-field dt {
+  margin: 0;
+  color: var(--ink-50);
+  overflow-wrap: anywhere;
+}
+.fd-month-report .fd-month-field dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink-70);
+  text-align: right;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fd-month-report .fd-month-field[data-emphasis="true"] {
+  margin-top: 5px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.fd-month-report .fd-month-field[data-emphasis="true"] dt,
+.fd-month-report .fd-month-field[data-emphasis="true"] dd { color: var(--ink); font-weight: 600; }
+.fd-month-report .fd-month-selected {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.fd-month-report .fd-month-selected h3 { margin-bottom: 10px; }
+.fd-month-report .fd-month-selected .fd-month-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 28px;
+}
+.fd-month-report .fd-month-report-note {
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--ink-50);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.fd-month-report .fd-month-report-note + .fd-month-report-note { margin-top: 8px; padding-top: 0; border-top: 0; }
+.fd-month-report .fd-month-report-note[data-variant="partial"] { color: var(--state-warning); }
+.mode-senior .fd-month-report .fd-month-metric-value { font-size: var(--font-size-xl, 28px); }
+.mode-senior .fd-month-report .fd-month-field { font-size: var(--font-size-base, 18px); }
+.mode-senior .fd-month-report .fd-month-report-scope,
+.mode-senior .fd-month-report .fd-month-report-note { font-size: var(--font-size-sm, 16px); }
+@container fd-month-report (max-width: 800px) {
+  .fd-month-report .fd-month-cash { padding: 18px; }
+  .fd-month-report .fd-month-metric { padding-inline: 14px; }
+  .fd-month-report .fd-month-metric-value { font-size: var(--font-size-lg, 19px); }
+  .fd-month-report .fd-month-metric:first-child .fd-month-metric-value { font-size: calc(var(--font-size-lg, 19px) + 3px); }
+  .fd-month-report .fd-month-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 20px; }
+  .fd-month-report .fd-month-group { padding-inline: 18px; }
+  .fd-month-report .fd-month-group[data-kind="debt"] { grid-column: 1 / -1; padding: 18px 0 0; border-left: 0; border-top: 1px solid var(--border); }
+  .fd-month-report .fd-month-group[data-kind="debt"] .fd-month-field { max-width: 360px; }
+}
+@container fd-month-report (max-width: 560px) {
+  .fd-month-report .fd-month-cash { grid-template-columns: 1fr; padding: 18px; }
+  .fd-month-report .fd-month-metric,
+  .fd-month-report .fd-month-metric:first-child,
+  .fd-month-report .fd-month-metric:last-child { padding: 12px 0; }
+  .fd-month-report .fd-month-metric:first-child { padding-top: 0; }
+  .fd-month-report .fd-month-metric:last-child { padding-bottom: 0; }
+  .fd-month-report .fd-month-metric + .fd-month-metric { border-left: 0; border-top: 1px solid var(--border); }
+  .fd-month-report .fd-month-groups { grid-template-columns: 1fr; gap: 18px; margin-top: 22px; }
+  .fd-month-report .fd-month-group,
+  .fd-month-report .fd-month-group:first-child,
+  .fd-month-report .fd-month-group:last-child { padding: 0; }
+  .fd-month-report .fd-month-group + .fd-month-group { padding-top: 18px; border-left: 0; border-top: 1px solid var(--border); }
+  .fd-month-report .fd-month-group[data-kind="debt"] .fd-month-field { max-width: none; }
+  .fd-month-report .fd-month-selected .fd-month-fields { grid-template-columns: 1fr; }
+  .fd-month-report .fd-month-field { grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); }
+}
+@media (max-width: 600px) {
+  .fd-month-report { padding: 20px; border-radius: 18px; }
+}

@@ -1,0 +1,47 @@
+/* This cue exists only while an eligible back gesture is in progress. */
+.navren-back-gesture {
+  position: fixed;
+  z-index: 900;
+  left: max(10px, env(safe-area-inset-left));
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  box-sizing: border-box;
+  border: 1px solid var(--border, #d4e0ef);
+  border-color: color-mix(in srgb, var(--border, #d4e0ef) 72%, transparent);
+  border-radius: 50%;
+  background: var(--surface-card, #f7faff);
+  background: color-mix(in srgb, var(--surface-card, #f7faff) 94%, transparent);
+  color: var(--ink-70, #3e4a5c);
+  box-shadow: 0 2px 12px rgb(20 34 53 / .10);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+  user-select: none;
+  opacity: calc(.3 + var(--gesture-progress, 0) * .7);
+  transform: translate(calc(-8px + var(--gesture-progress, 0) * 24px), -50%);
+  transition: opacity 120ms ease-out, transform 120ms ease-out, background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.navren-back-gesture svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.navren-back-gesture[data-ready="true"] {
+  color: var(--primary-deep, #285b96);
+  background: var(--primary-soft, #e1edfa);
+  border-color: var(--primary-border, #cfdef0);
+}
+.navren-back-gesture[hidden] { display: none; }
+.navren-welcome { overscroll-behavior-x: none; }
+/* The shared handler owns horizontal back navigation; preserve vertical scrolling. */
+html.navren-shell,html.navren-shell body,.navren-shell .page-scroll{overscroll-behavior-x:none}
+@media (prefers-reduced-motion: reduce) {
+  .navren-back-gesture { transition: none; transform: translateY(-50%); }
+}

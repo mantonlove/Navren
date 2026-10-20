@@ -13,7 +13,7 @@ const ALLOCATION_TEMPLATES = {
 
 function assembleProfile() {
   const risk = Storage.get('qingzhou_riskProfile');
-  const userInfo = Storage.get('qingzhou_userInfo');
+  const userInfo = window.NavrenPersonalProfile?.current?.();
   const profile = Storage.get('qingzhou_userProfile');
   const preferences = Storage.get('qingzhou_preferences');
   const allocation = Storage.get('qingzhou_allocation');
@@ -37,8 +37,7 @@ function assembleProfile() {
     },
 
     account: userInfo ? {
-      nickname: userInfo.nickname,
-      level: userInfo.level
+      nickname: userInfo.nickname
     } : null,
 
     preferences: preferences || DEFAULTS[STORAGE_KEYS.PREFERENCES],

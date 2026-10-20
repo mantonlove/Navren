@@ -41,6 +41,7 @@ class Builder:
     def __init__(self,db,source,profiles):
         self.db,self.source,self.profiles=db,source,profiles
         self.txs=[];self.balances={};self.account_meta={};self.cards={};self.counter=0
+        self.card_sequence=0
         self.synthetic_expense_components=0
 
     def insert(self,table,**v):
@@ -67,10 +68,10 @@ class Builder:
         self.txs.append(row);self.balances[account]+=signed
         return ident
 
-    def transfer(self,uid,from_id,to_id,amount,stamp,reason):
+    def transfer(self,uid,from_id,to_id,amount,stamp,reason,scope='personal'):
         if not amount:return
         group=uid+'::transfer:'+str(self.counter+1)
-        common={'transfer_group_id':group,'economic_event_id':group,'details':{'reconstruction':'deterministic_purpose_funding','reason':reason,'expense_counted':False}}
+        common={'transfer_group_id':group,'economic_event_id':group,'scope':scope,'details':{'reconstruction':'deterministic_purpose_funding','reason':reason,'expense_counted':False}}
         self.tx(uid,from_id,stamp,-amount,'internal_transfer',reason,**common)
         self.tx(uid,to_id,stamp,amount,'internal_transfer',reason,**common)
 
@@ -106,13 +107,20 @@ class Builder:
                 self.insert('credit_facilities',subject_id=uid,facility_id=facility,account_id=account,
                             limit_minor=500000000 if uid=='tycoon' else 20000000,outstanding_minor=0)
             else:facility=None
-            if typ in ('bank_settlement','credit_card') and role!='reserve':
+            if typ in ('bank_settlement','credit_card'):
+                if role=='reserve':
+                    # 新增储备卡使用独立尾号，不改变原有卡片及历史流水的卡号。
+                    number=sorted(CONFIG).index(uid)+1
+                    old_tail,new_tail=7000+number,8000+number
+                else:
+                    self.card_sequence+=1
+                    old_tail,new_tail=1000+self.card_sequence,2000+self.card_sequence
                 old_card=uid+'::card:'+role+':2016';new_card=uid+'::card:'+role+':2021'
                 self.insert('cards',subject_id=uid,card_id=old_card,account_id=account,card_type='credit' if facility else 'debit',
-                            masked_number='SIM-****-'+str(len(self.cards)+1001),status='replaced',issued_on=START,
+                            masked_number='SIM-****-'+str(old_tail),status='replaced',issued_on=START,
                             closed_on='2021-10-03',replaces_card_id=None,facility_id=facility,role='primary')
                 self.insert('cards',subject_id=uid,card_id=new_card,account_id=account,card_type='credit' if facility else 'debit',
-                            masked_number='SIM-****-'+str(len(self.cards)+2001),status='active',issued_on='2021-10-04',
+                            masked_number='SIM-****-'+str(new_tail),status='active',issued_on='2021-10-04',
                             closed_on=None,replaces_card_id=old_card,facility_id=facility,role='primary')
                 self.cards[account]=[old_card,new_card]
         # 同账户副卡只连一次授信；挂失状态不影响账户active。
@@ -268,6 +276,10 @@ class Builder:
                         expense_minor=remaining if r['kind']=='expense' else -remaining if r['kind']=='refund' else loan_interest.get(r['event_id'],0) if r['kind']=='loan_repayment' else 0,
                         details={'source':SOURCE,'source_category':r['category'],'reconstructed_channel':True},**common)
                     event_targets[r['event_id']]=ident;event_accounts[r['event_id']]=account
+                    if uid=='retired_entrepreneur' and account==aid(uid,'shop_wallet') and r['kind']=='income' and r['signed_minor']>0:
+                        # 演示商户收款先进入支付钱包，再以配对调拨结算到本人经营银行卡。
+                        self.transfer(uid,account,aid(uid,'operating'),remaining,r['occurred_at'],
+                                      '经营收款结算至本人经营账户（合成演示）',scope='self_employed')
                 for policy,amount,pcontract,mandate in pieces:
                     self.tx(uid,account,r['occurred_at'],-amount,'insurance_premium','合成保险保费',expense_minor=amount,
                         **{**common,'contract_id':pcontract,'mandate_id':mandate},details={'policy_id':policy,'allocation':'explicit_synthetic_component',

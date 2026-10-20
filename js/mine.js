@@ -6,37 +6,24 @@ let currentMode = 'classic';
 // FONT_SIZE_MAP, MODE_DEFAULT_FONT, applyFontSize 定义在 storage.js（共享模块）
 
 document.addEventListener('DOMContentLoaded', () => {
-  const params = new URLSearchParams(window.location.search);
-  // 优先使用 localStorage 记住用户最后选择
-  // URL 参数优先（用户显式选择），localStorage 兜底
   currentMode = getInterfaceMode();
-  Storage.set('qingzhou_mode', currentMode);
   document.body.className = 'mode-' + currentMode;
 
   // 应用字体大小
   const savedFontSize = getModeFont(currentMode);
   applyFontSize(savedFontSize);
 
-  renderModeSelector();
+  renderThemeSelector();
   renderFontSize();
   renderVoiceToggle();
   renderVoicePresets();
   renderPrefs();
+  renderMemoryConsentHelp();
+  Storage.ready().then(() => { refreshAccountPreferences(); return showContextualTip('mine'); }).catch(() => refreshAccountPreferences());
 
   // 私人资料由当前视图按需读取；不提前挂载旧画像或后台图谱。
 
-  // 恢复昵称
-  const userInfo = Storage.get('qingzhou_userInfo');
-  if (userInfo?.nickname) {
-    const name=document.getElementById('profileName');if(name)name.textContent=userInfo.nickname;
-  }
-  // 恢复头像
-  if (userInfo?.avatar) {
-    renderLocalAvatar(userInfo.avatar);
-  }
-
-  // 场景引导
-  if (typeof showContextualTip === 'function') showContextualTip('mine');
+  // 个人资料由 NavrenPersonalProfile 核对当前账户后读取。
 
   // 恢复已保存的账户安全信息(已移至account.html)
   const phoneEl = document.getElementById('accountPhone');
@@ -54,14 +41,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+function refreshAccountPreferences() {
+  currentMode = getInterfaceMode();
+  renderThemeSelector();
+  renderFontSize();
+  renderVoiceToggle();
+  renderVoicePresets();
+  renderPrefs();
+  renderBookmarks();
+}
+function accountRestoreText(label='设置') { return Storage.accountStatus()==='unavailable' ? '账号'+label+'暂未读取，请刷新重试。' : '正在恢复账号'+label+'…'; }
+window.addEventListener('navren:account-state', refreshAccountPreferences);
 
 
-// ── Mode Selector ──
-const MODE_ICONS = {
-  classic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 18v-7"/><path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z"/><path d="M14 18v-7"/><path d="M18 18v-7"/><path d="M3 22h18"/><path d="M6 18v-7"/></svg>',
-  senior: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.414 14.414C21 12.828 22 11.5 22 9.5a5.5 5.5 0 0 0-9.591-3.676.6.6 0 0 1-.818.001A5.5 5.5 0 0 0 2 9.5c0 2.3 1.5 4 3 5.5l5.535 5.362a2 2 0 0 0 2.879.052 2.12 2.12 0 0 0-.004-3 2.124 2.124 0 1 0 3-3 2.124 2.124 0 0 0 3.004 0 2 2 0 0 0 0-2.828l-1.881-1.882a2.41 2.41 0 0 0-3.409 0l-1.71 1.71a2 2 0 0 1-2.828 0 2 2 0 0 1 0-2.828l2.823-2.762"/></svg>',
-  youth: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>'
-};
 
 // ── 画像完善度 ──
 function renderProfileCompletion() {
@@ -99,66 +91,134 @@ function renderProfileCompletion() {
   container.replaceChildren(bar);
 }
 
-// ── Mode Selector ──
-function renderModeSelector() {
-  const container = document.getElementById('modeSelector');
-  const modes = [
-    { id: 'classic', name: '经典版' },
-    { id: 'senior', name: '关怀版' },
-    { id: 'youth', name: '青春版' }
-  ];
-  container.innerHTML = '';
-  modes.forEach(m => {
-    const div = document.createElement('button');
-    div.type = 'button';
-    div.className = 'mode-opt' + (currentMode === m.id ? ' active' : '');
-    div.setAttribute('aria-pressed', String(currentMode === m.id));
-    div.innerHTML = `<div class="m-icon">${MODE_ICONS[m.id]}</div><div class="m-label">${m.name}</div>`;
-    div.onclick = () => {
-      NavrenDesign.switchMode(m.id);
-    };
-    container.appendChild(div);
+// ── Memory Consent Help ──
+function renderMemoryConsentHelp() {
+  const host = document.getElementById('memoryConsentHelpHost');
+  if (!host || !window.NavrenHelp) return;
+  NavrenHelp.registry.memoryConsent = ['数据与记忆授权',
+    '开启后，Navren 可在已接入的资金分析中参考匹配记忆，并将本人陈述整理为待核实资料。关闭后保留已保存内容，旧对话上下文立即失效。记忆不会改变账户余额或交易权限；你可在“我的”修改或删除。'];
+  const help = NavrenHelp.button('memoryConsent');
+  help.addEventListener('click', () => {
+    const panel = document.querySelector('.navren-help-popover[aria-label="数据与记忆授权"]');
+    if (!panel) return;
+    panel.classList.add('memory-consent-popover');
+    const rect = help.getBoundingClientRect();
+    const rightSpace = innerWidth - rect.right - 28;
+    const showRight = rightSpace >= 360;
+    panel.style.width = Math.min(620, showRight ? rightSpace : innerWidth - 32) + 'px';
+    panel.style.left = (showRight ? rect.right + 12 : Math.max(16, Math.min(rect.left, innerWidth - panel.offsetWidth - 16))) + 'px';
+    panel.style.top = Math.max(16, Math.min(showRight ? rect.top : rect.bottom + 8, innerHeight - panel.offsetHeight - 16)) + 'px';
   });
+  host.replaceChildren(help);
+}
+
+// ── Theme Selector ──
+function renderThemeSelector() {
+  const container = document.getElementById('settingsThemeSelector');
+  if (!container) return;
+  container.replaceChildren();
+  if (!Storage.accountReady()) { container.textContent = accountRestoreText(); return; }
+  for (const [id, label] of [['light', '浅色'], ['dark', '深色']]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'settings-theme-choice';
+    button.dataset.themeChoice = id;
+    button.setAttribute('role', 'radio');
+    const preview = document.createElement('span');
+    preview.className = 'settings-theme-preview preview-' + id;
+    preview.setAttribute('aria-hidden', 'true');
+    const name = document.createElement('span');
+    name.dataset.themeLabel = '';
+    name.textContent = label;
+    button.append(preview, name);
+    button.onclick = () => NavrenDesign.applyTheme({id});
+    container.append(button);
+  }
+  function sync() {
+    const selected = NavrenDesign.theme.id;
+    for (const button of container.children) {
+      const checked = button.dataset.themeChoice === selected;
+      button.setAttribute('aria-checked', String(checked));
+      button.tabIndex = checked ? 0 : -1;
+    }
+  }
+  container.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const choices = [...container.children];
+    const index = choices.indexOf(document.activeElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (Math.max(0, index) + (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1) + choices.length) % choices.length;
+    choices[next].click();
+    choices[next].focus();
+  });
+  if (!container.__syncTheme) { container.__syncTheme = sync; window.addEventListener('navren:theme', sync); }
+  sync();
 }
 
 // ── Font Size ──
 function renderFontSize() {
   const row = document.getElementById('fontSizeRow');
-  const sizes = [
-    { id: 'small', label: '小' },
-    { id: 'medium', label: '中' },
-    { id: 'large', label: '大' }
-  ];
-  const current = getModeFont(currentMode);
-  row.innerHTML = '';
-  sizes.forEach(s => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'font-opt' + (current === s.id ? ' active' : '');
-    btn.setAttribute('aria-pressed', String(current === s.id));
-    btn.textContent = s.label;
-    btn.onclick = () => {
-      setModeFont(currentMode, s.id);
-      applyFontSize(s.id);
-      renderFontSize();
-    };
-    row.appendChild(btn);
+  if (!row) return;
+  if (!Storage.accountReady()) { row.textContent = accountRestoreText(); return; }
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.id = 'fontSizeSlider';
+  slider.min = String(FONT_SIZE_MIN);
+  slider.max = String(FONT_SIZE_MAX);
+  slider.step = '1';
+  slider.value = String(fontSizeInPixels(getModeFont(currentMode)) ?? 16);
+  slider.setAttribute('aria-label', '字体大小');
+  slider.setAttribute('aria-describedby', 'fontSizeValue');
+  const output = document.createElement('output');
+  output.id = 'fontSizeValue';
+  output.setAttribute('for', slider.id);
+  output.setAttribute('aria-live', 'off');
+  const ends = [14, 22].map(size => {
+    const label = document.createElement('span');
+    label.className = 'font-size-end';
+    label.textContent = 'A';
+    label.style.fontSize = size + 'px';
+    label.setAttribute('aria-hidden', 'true');
+    return label;
   });
+  function preview() {
+    const size = Number(slider.value);
+    applyFontSize(size);
+    output.value = size + ' px';
+    slider.style.setProperty('--font-progress', (size - FONT_SIZE_MIN) / (FONT_SIZE_MAX - FONT_SIZE_MIN) * 100 + '%');
+  }
+  slider.addEventListener('input', preview);
+  slider.addEventListener('change', async () => {
+    preview();
+    slider.disabled = true;
+    try { await setModeFont(currentMode, Number(slider.value)); }
+    catch (_) { applyFontSize(getModeFont(currentMode)); renderFontSize(); showToast('字号未保存，请重试。'); }
+    finally { if (slider.isConnected) slider.disabled = !Storage.accountReady(); }
+  });
+  row.replaceChildren(ends[0], slider, ends[1], output);
+  preview();
 }
 
 // ── Voice Toggle ──
 function renderVoiceToggle() {
   const toggle = document.getElementById('voiceToggle');
   if (!toggle) return;
+  toggle.disabled = !Storage.accountReady();
+  toggle.hidden = toggle.disabled;
+  toggle.style.visibility = toggle.disabled ? 'hidden' : '';
+  if (toggle.disabled) { toggle.classList.remove('on'); toggle.removeAttribute('aria-checked'); return; }
   const enabled = Boolean(Storage.get('qingzhou_voiceEnabled'));
   toggle.classList.toggle('on', enabled);
   toggle.setAttribute('aria-checked', String(enabled));
 }
-function toggleVoice() {
+async function toggleVoice() {
   const toggle = document.getElementById('voiceToggle');
+  if (!Storage.accountReady() || toggle.disabled) return;
   const enabled = !Storage.get('qingzhou_voiceEnabled');
-  Storage.set('qingzhou_voiceEnabled', enabled);
-  renderVoiceToggle();
+  toggle.disabled = true;
+  try { await Storage.set('qingzhou_voiceEnabled', enabled); }
+  catch (_) { showToast('自动朗读设置未保存，请重试。'); }
+  finally { renderVoiceToggle(); }
 }
 
 // ── 用户主动维护的本地财务记忆 ──
@@ -170,35 +230,54 @@ const MEMORY_CATEGORIES = {
   knowledge_preference: '信息说明偏好'
 };
 let financialMemoryState = { enabled: false, items: [] };
+let financialMemoryBinding = null;
+const memoryBindingFields = ['registered_user_id','workspace_id','privacy_revision','auth_subject','session_generation','csrf','auth_expires_at','lease_expires_at'];
+
+function renderConfirmedFinancialMemories() {
+  const identity = BankClient.identity();
+  if (!financialMemoryBinding || !identity?.registered_user_id ||
+      !Number.isFinite(identity.lease_expires_at) || Date.now() / 1000 >= identity.lease_expires_at ||
+      memoryBindingFields.some(key => identity[key] !== financialMemoryBinding[key])) return false;
+  renderFinancialMemories();
+  return true;
+}
 
 let memoryReadSequence = 0;
-async function loadFinancialMemories() {
+async function loadFinancialMemories(options = {}) {
   const list = document.getElementById('financialMemoryList');
   if (!list) return;
+  if (options?.reuseConfirmed === true && renderConfirmedFinancialMemories()) return financialMemoryState;
   const sequence = ++memoryReadSequence;
+  let guard = null;
   list.replaceChildren(memoryMessage('正在核对记忆来源…'));
   try {
     await BankClient.ensure();
-    const guard = await BankClient.guard();
+    guard = await BankClient.guard();
     const result = await BankClient.get('/memories');
     if (sequence !== memoryReadSequence || !guard.valid(result)) return;
     financialMemoryState = result;
+    financialMemoryBinding = { ...BankClient.identity() };
     renderFinancialMemories();
     return result;
   } catch (error) {
-    if (sequence !== memoryReadSequence) return;
+    if (sequence !== memoryReadSequence || (guard && !guard.valid())) return;
+    financialMemoryBinding = null;
     list.replaceChildren(memoryMessage('记忆暂未取得。已保存内容的状态尚未核实。'));
     const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'p-btn';
     retry.textContent = '重新读取记忆'; retry.onclick = loadFinancialMemories; list.append(retry);
     const status = document.getElementById('memoryStatus');
     if (status) status.textContent = error.message;
+    const consent = document.getElementById('mineConsentStatus');
+    if (consent) consent.textContent = '授权状态暂未取得，请刷新重试。';
   }
 }
 async function acceptMemoryMutation(result) {
   await BankClient.refreshIdentity();
   const identity = BankClient.identity();
   if (!identity || result.workspace_id !== identity.workspace_id || result.privacy_revision !== identity.privacy_revision) return false;
+  memoryReadSequence++;
   financialMemoryState = result;
+  financialMemoryBinding = { ...identity };
   renderFinancialMemories();
   window.dispatchEvent(new Event('navren:memory-updated'));
   return true;
@@ -207,6 +286,7 @@ window.NavrenMineMemory = { state: () => financialMemoryState, load: loadFinanci
 window.addEventListener('navren:privacy-reset', () => {
   memoryReadSequence++;
   financialMemoryState = { enabled: false, items: [] };
+  financialMemoryBinding = null;
   document.getElementById('financialMemoryList')?.replaceChildren(memoryMessage('资料权限已变化，正在重新核验。'));
   document.getElementById('archiveContent')?.replaceChildren();
   document.getElementById('riskDetail')?.replaceChildren();
@@ -230,13 +310,13 @@ function renderFinancialMemories() {
   toggle.classList.toggle('on', Boolean(financialMemoryState.enabled));
   toggle.setAttribute('aria-checked', String(Boolean(financialMemoryState.enabled)));
   status.textContent = financialMemoryState.enabled
-    ? '已开启：只在已接入的资金时间轴分析中参考匹配内容；不会改变余额或计算结果。'
-    : '仅保存：对话读取已关闭。你仍可主动查看、修改或删除已保存内容。';
+    ? '已允许在资金分析中参考记忆'
+    : '读取已关闭，保存内容仍可管理';
   const consent = document.getElementById('mineConsentStatus');
-  if (consent) consent.textContent = status.textContent;
+  if (consent) consent.textContent = '';
   list.replaceChildren();
   if (!financialMemoryState.items?.length) {
-    list.append(memoryMessage('暂未保存财务记忆。你可以手动添加目标、已确认的大额支出或资金偏好；Navren 不会从消费流水自动推断。'));
+    list.append(memoryMessage('暂无已保存记忆。可添加目标、支出安排或资金偏好。'));
     return;
   }
   financialMemoryState.items.forEach(item => {
@@ -315,21 +395,105 @@ function renderFinancialMemories() {
   });
 }
 
+let memoryTogglePending = false;
+
+function confirmFinancialMemoryReading() {
+  return new Promise(resolve => {
+    const t = text => window.NavrenI18n?.t?.(text) ?? text;
+    const node = (tag, text, className) => {
+      const element = document.createElement(tag);
+      if (text) element.textContent = t(text);
+      if (className) element.className = className;
+      return element;
+    };
+    const dialog = node('dialog', null, 'memory-consent-dialog');
+    dialog.setAttribute('aria-labelledby', 'memoryConsentTitle');
+    dialog.setAttribute('aria-describedby', 'memoryConsentIntro');
+    dialog.tabIndex = -1;
+    const header = node('header', null, 'memory-consent-head');
+    const symbol = node('span', null, 'memory-consent-symbol');
+    symbol.setAttribute('aria-hidden', 'true');
+    symbol.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8.5 11.5 2.5 2.5 4.5-5"/></svg>';
+    const title = node('h2', '允许读取财务记忆？');
+    title.id = 'memoryConsentTitle';
+    const close = node('button', '×', 'memory-consent-close');
+    close.type = 'button'; close.setAttribute('aria-label', t('关闭'));
+    header.append(symbol, title, close);
+    const body = node('div', null, 'memory-consent-body');
+    const intro = node('p', '在已接入的资金分析中读取匹配记忆，并整理对话中的本人陈述为待核实资料。', 'memory-consent-intro');
+    intro.id = 'memoryConsentIntro';
+    const points = node('dl', null, 'memory-consent-points');
+    points.append(
+      node('dt', '内容保存在你的账号中'), node('dd', '可在“我的”随时修改或删除。'),
+      node('dt', '关闭后仍保留已保存内容'), node('dd', '旧对话上下文会立即失效。')
+    );
+    body.append(intro, points);
+    const footer = node('footer', null, 'memory-consent-actions');
+    const cancel = node('button', '暂不开启', 'p-btn');
+    const allow = node('button', '允许读取', 'p-btn memory-consent-allow');
+    cancel.type = allow.type = 'button';
+    footer.append(cancel, allow);
+    dialog.append(header, body, footer);
+    const overflow = document.documentElement.style.overflow;
+    const events = ['navren:privacy-reset', 'navren:account-switched', 'navren:view', 'pagehide'];
+    let settled = false;
+    function finish(accepted) {
+      if (settled) return;
+      settled = true;
+      events.forEach(name => window.removeEventListener(name, invalidate));
+      document.documentElement.style.overflow = overflow;
+      if (dialog.open) dialog.close();
+      dialog.remove();
+      resolve(accepted);
+    }
+    const invalidate = () => finish(false);
+    close.onclick = cancel.onclick = invalidate;
+    allow.onclick = () => finish(true);
+    dialog.addEventListener('cancel', event => { event.preventDefault(); finish(false); });
+    dialog.addEventListener('close', invalidate);
+    dialog.addEventListener('click', event => {
+      if (event.target !== dialog) return;
+      const bounds = dialog.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) finish(false);
+    });
+    events.forEach(name => window.addEventListener(name, invalidate));
+    document.body.append(dialog);
+    try {
+      document.documentElement.style.overflow = 'hidden';
+      dialog.showModal();
+      dialog.focus({preventScroll: true});
+    } catch (error) { finish(false); }
+  });
+}
+
 window.toggleFinancialMemory = async function() {
-  const next = !financialMemoryState.enabled;
-  const expectedRevision = financialMemoryState.personal_revision;
-  if (next && !confirm('允许 Navren 在已接入的资金分析中读取匹配记忆，并整理对话中的本人陈述为待核实资料？内容保存在本机工作区；关闭后保留保存内容，可在“我的”修改或删除，旧对话上下文立即失效。')) return;
   const toggle = document.getElementById('memoryToggle');
+  if (!toggle || memoryTogglePending) return;
+  const state = financialMemoryState;
+  const next = !state.enabled;
+  const expectedRevision = state.personal_revision;
+  const sequence = memoryReadSequence;
+  const guard = BankClient.guard();
+  const previousFocus = document.activeElement;
+  memoryTogglePending = true;
   toggle.disabled = true;
-  window.dispatchEvent(new Event('navren:privacy-reset'));
   try {
     requireMemoryRevision(expectedRevision);
+    if (!guard.valid()) return;
+    if (next && !await confirmFinancialMemoryReading()) return;
+    // 确认只属于打开弹窗时的用户、工作区和资料版本。
+    if (!guard.valid() || sequence !== memoryReadSequence || state !== financialMemoryState || expectedRevision !== financialMemoryState.personal_revision) return;
+    window.dispatchEvent(new Event('navren:privacy-reset'));
     const result = await BankClient.post('/memories/settings', { enabled: next, expected_revision: expectedRevision });
     if (await acceptMemoryMutation(result)) showToast(next ? '已允许在已接入的资金分析中参考记忆' : '已撤销读取授权，保存内容仍可管理');
   } catch (error) {
     showToast('授权设置未更新：' + error.message);
     await loadFinancialMemories();
-  } finally { toggle.disabled = false; }
+  } finally {
+    memoryTogglePending = false;
+    toggle.disabled = false;
+    if (guard.valid() && document.activeElement === document.body && previousFocus?.isConnected) previousFocus.focus({preventScroll: true});
+  }
 };
 
 function requireMemoryRevision(revision) {
@@ -420,7 +584,7 @@ function openFinancialMemoryEditor(item = null, expectedRevision = financialMemo
     try {
       requireMemoryRevision(expectedRevision);
       const result = await BankClient.post(path, payload);
-      closeModal(); if (await acceptMemoryMutation(result)) showToast(item ? '记忆已修改，旧上下文已失效' : '记忆已保存到本机工作区');
+      closeModal(); if (await acceptMemoryMutation(result)) showToast(item ? '记忆已修改，旧上下文已失效' : '记忆已保存到你的账号');
     } catch (error) {
       showToast('财务记忆未保存：' + error.message);
     }
@@ -498,25 +662,28 @@ const PREF_ITEMS = [
 function renderPrefs() {
   const container = document.getElementById('prefsBody');
   if (!container) return;
-  const prefs = {marketHotVisible:true,weeklyReport:true,...(Storage.get('qingzhou_preferences') || {})};
+  if (!Storage.accountReady()) { container.textContent = accountRestoreText(); return; }
+  const prefs = Storage.get('qingzhou_preferences') || {};
   container.innerHTML = PREF_ITEMS.map(p => `
     <div class="trow">
       <div class="tl">${p.label}</div>
       <button type="button" role="switch" aria-label="${p.label}" aria-checked="${!!prefs[p.key]}" class="toggle${prefs[p.key] ? ' on' : ''}" onclick="togglePref('${p.key}',this)"></button>
     </div>
   `).join('');
-  const note=document.createElement('p');note.className='market-limit';note.textContent='展示开关不订阅推送。市场提醒服务尚未接入。';container.append(note);
 }
 
-window.togglePref = function(key, el) {
-  const prefs = {marketHotVisible:true,weeklyReport:true,...(Storage.get('qingzhou_preferences') || {})};
+window.togglePref = async function(key, el) {
+  if (!Storage.accountReady() || el.disabled || !PREF_ITEMS.some(item => item.key === key)) return;
+  const prefs = Storage.get('qingzhou_preferences') || {};
   prefs[key] = !prefs[key];
-  Storage.set('qingzhou_preferences', prefs);
-  el.classList.toggle('on', prefs[key]); el.setAttribute('aria-checked', String(prefs[key]));
+  el.disabled = true;
+  try { await Storage.set('qingzhou_preferences', prefs); }
+  catch (_) { showToast('展示偏好未保存，请重试。'); }
+  finally { renderPrefs(); }
 };
 
 // ── Account Actions ──
-async function switchAccount() {
+async function createIndependentDemoAccount() {
   if (!confirm('创建一个独立的本机演示账户？原工作区的数据仍保留，新账户不继承原账户的权限、目标或记忆。')) return;
   try { await BankClient.post('/session/reset', {confirmed:true}); window.dispatchEvent(new Event('navren:privacy-reset')); NavrenApp.navigate('chat.html'); }
   catch (error) { showToast('独立演示账户未创建：' + error.message); }
@@ -525,8 +692,27 @@ async function switchAccount() {
 // 旧本机档案只维护自己的历史，不清空有效对话，也不写入新画像。
 window._notifyProfileChanged = function() {};
 
-function logout() {
-  showToast('本机演示没有真实银行登录。可创建独立演示账户，或在数据授权中撤销记忆读取。');
+function accountAccessStatus(message) {
+  const status = document.getElementById('accountAccessStatus');
+  if (status) status.textContent = message;
+}
+function switchLoginAccount() {
+  accountAccessStatus('正在打开账号选择…');
+  if (typeof window.NavrenWelcomeSession?.returnToExperienceSelection === 'function') {
+    window.NavrenWelcomeSession.returnToExperienceSelection();
+  } else {
+    window.location.assign('/?view=experience');
+  }
+}
+async function logout(button) {
+  if (typeof window.NavrenWelcomeSession?.logout !== 'function') {
+    accountAccessStatus('暂时无法连接登录服务，请刷新后重试。');
+    return false;
+  }
+  accountAccessStatus('正在退出登录…');
+  const complete = await window.NavrenWelcomeSession.logout(button);
+  if (!complete) accountAccessStatus('退出未完成，请重试。');
+  return complete;
 }
 
 // ── Modal Helpers ──
@@ -559,27 +745,11 @@ function renderLocalAvatar(value) {
   const image = document.createElement('img'); image.src=value; image.alt='本机头像';avatar.replaceChildren(image);
 }
 function handleAvatarUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  if (!['image/png','image/jpeg','image/webp','image/gif'].includes(file.type) || file.size > 5 * 1024 * 1024) {showToast('请选择5MB以内的PNG、JPEG、WebP或GIF图片。');event.target.value='';return;}
-  const reader = new FileReader();
-  reader.onload = (e) => {const dataUrl=e.target.result;const info=Storage.get('qingzhou_userInfo')||{};info.avatar=dataUrl;Storage.set('qingzhou_userInfo',info);renderLocalAvatar(dataUrl);showToast('本机头像已更新');};
-  reader.readAsDataURL(file);
+  return window.NavrenPersonalProfile?.upload(event);
 }
 
 function editProfile() {
-  const currentName = document.getElementById('profileName').textContent;
-  openModal('编辑个人资料', [
-    { label: '昵称', value: currentName, placeholder: '输入您的昵称' }
-  ], (name) => {
-    if (name && name.trim()) {
-      const info = Storage.get('qingzhou_userInfo') || {};
-      info.nickname = name.trim();
-      Storage.set('qingzhou_userInfo', info);
-      document.getElementById('profileName').textContent = name.trim();
-      showToast('昵称已更新');
-    }
-  });
+  return window.NavrenPersonalProfile?.open();
 }
 
 
@@ -645,6 +815,7 @@ function editArchiveField(key, label, currentValue) {
 function renderBookmarks() {
   const list = document.getElementById('bookmarksList');
   if (!list) return;
+  if (!Storage.accountReady()) { list.textContent = accountRestoreText('收藏'); return; }
   const bookmarks = Storage.get('qingzhou_bookmarks') || [];
   const identity = BankClient.identity?.();
   const categories = {chat_message:'对话收藏',market_news:'市场资讯',market_weekly:'市场周报',recommendation:'备选方案'};
@@ -656,7 +827,11 @@ function renderBookmarks() {
     const section = document.createElement('section'); const h = document.createElement('h2'); h.textContent = label + ' · ' + rows.length; section.append(h);
     for (const {item,index} of rows.reverse()) {
       const publicItem = ['market_news','market_weekly'].includes(category);
-      const readable = publicItem || (identity && item.workspace_id === identity.workspace_id && item.privacy_revision === identity.privacy_revision);
+      // 已核验账号快照中的本人工作区收藏可继续只读；旧隐私版本不授予模型或业务权限。
+      const readable = publicItem || (identity?.registered_user_id && item.workspace_id === identity.workspace_id &&
+        (item.registered_user_id == null || item.registered_user_id === identity.registered_user_id) &&
+        Number.isSafeInteger(item.privacy_revision) && item.privacy_revision >= 0 &&
+        Number.isSafeInteger(identity.privacy_revision) && item.privacy_revision <= identity.privacy_revision);
       const row = document.createElement('article'); row.className = 'mine-saved-item';
       const text = document.createElement('p'); text.textContent = readable ? item.text || '未命名收藏' : '历史收藏身份或授权版本无法核验，正文已隐藏。';
       if(readable){text.setAttribute('translate','no');text.dataset.i18nSkip='';}
@@ -669,34 +844,159 @@ function renderBookmarks() {
         if(href){const open=document.createElement('a');open.className='p-btn';open.textContent='查看保存对象与版本';open.id='mine-bookmark-'+index;open.href=href;actions.append(open);}
         else actions.append(memoryMessage('保存的来源或历史版本不完整，请重新核对。'));
       }
-      const remove = document.createElement('button'); remove.type='button'; remove.className='p-btn'; remove.textContent='删除收藏'; remove.onclick=()=>deleteBookmark(index); actions.append(remove);
+      const remove = document.createElement('button'); remove.type='button'; remove.className='p-btn'; remove.textContent='删除收藏'; remove.onclick=()=>deleteBookmark(item, remove); actions.append(remove);
       row.append(text,meta,actions);section.append(row);
     }
     list.append(section);
   }
 }
 
-window.deleteBookmark = function(idx) {
-  const bookmarks = Storage.get('qingzhou_bookmarks') || [];
-  bookmarks.splice(idx, 1);
-  Storage.set('qingzhou_bookmarks', bookmarks);
-  renderBookmarks();
-  showToast('已删除');
+window.deleteBookmark = async function(item, button) {
+  if (!Storage.accountReady() || button?.disabled) return;
+  const key = NavrenAccountData.itemKey(item);
+  if (button) button.disabled = true;
+  try {
+    await Storage.update('qingzhou_bookmarks', bookmarks => {
+      const index = bookmarks.findIndex(row => NavrenAccountData.itemKey(row) === key);
+      if (index < 0) throw Error('收藏已变化，请重新读取。');
+      bookmarks.splice(index, 1); return bookmarks;
+    });
+    renderBookmarks(); showToast('已删除');
+  } catch (error) { showToast(error.message || '收藏未删除，请重试。'); }
+  finally { if (button?.isConnected) button.disabled = false; }
 };
 
 // ── Voice Preset Selection ──
+let closeVoicePicker = () => {};
+
 function renderVoicePresets() {
-  const host=document.getElementById('voicePresetRow');if(!host)return;host.replaceChildren();
-  const presets=typeof VOICE_PRESETS!=='undefined'?VOICE_PRESETS:[],current=Storage.get('qingzhou_voicePreset')||'female_sweet';
-  const select=document.createElement('select');select.setAttribute('aria-label','选择语音音色');
-  for(const preset of presets){const option=document.createElement('option');option.value=preset.id;option.textContent=window.NavrenI18n?.t(preset.name)||preset.name;select.append(option);}select.value=current;select.onchange=()=>selectVoice(select.value);
-  const preview=document.createElement('button');preview.type='button';preview.className='p-btn';preview.textContent=window.NavrenI18n?.t('试听')||'试听';preview.setAttribute('aria-label','试听当前音色');preview.onclick=()=>previewVoice(select.value);host.append(select,preview);
+  const host = document.getElementById('voicePresetRow');
+  if (!host) return;
+  closeVoicePicker();
+  host.replaceChildren();
+  if (!Storage.accountReady()) { host.textContent = accountRestoreText(); return; }
+  const presets = typeof VOICE_PRESETS !== 'undefined' ? VOICE_PRESETS : [];
+  const current = Storage.get('qingzhou_voicePreset') || 'female_sweet';
+  const selected = presets.find(preset => preset.id === current) || presets[0];
+  const selectedIndex = Math.max(0, presets.indexOf(selected));
+  const picker = document.createElement('div');
+  picker.className = 'settings-voice-picker';
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'settings-voice-trigger';
+  trigger.setAttribute('role', 'combobox');
+  trigger.setAttribute('aria-label', '选择语音音色');
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.setAttribute('aria-controls', 'settingsVoiceMenu');
+  trigger.disabled = !selected;
+  const value = document.createElement('span');
+  value.className = 'settings-voice-value';
+  value.textContent = window.NavrenI18n?.t(selected?.name || '暂无可用音色') || selected?.name || '暂无可用音色';
+  const icon = path => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.7');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    line.setAttribute('d', path);
+    svg.append(line);
+    return svg;
+  };
+  trigger.append(value, icon('m6 9 6 6 6-6'));
+  const menu = document.createElement('div');
+  menu.id = 'settingsVoiceMenu';
+  menu.className = 'settings-voice-menu';
+  menu.setAttribute('role', 'listbox');
+  menu.setAttribute('aria-label', '语音音色');
+  menu.hidden = true;
+  const options = presets.map(preset => {
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = 'settings-voice-option';
+    option.id = 'settings-voice-option-' + preset.id;
+    option.tabIndex = -1;
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', String(preset.id === selected?.id));
+    const label = document.createElement('span');
+    label.textContent = window.NavrenI18n?.t(preset.name) || preset.name;
+    const check = document.createElement('span');
+    check.className = 'settings-voice-check';
+    check.append(icon('m5 12 4 4L19 6'));
+    option.append(label, check);
+    option.addEventListener('pointerdown', event => event.preventDefault());
+    option.addEventListener('click', () => selectVoice(preset.id));
+    menu.append(option);
+    return option;
+  });
+  let activeIndex = selectedIndex;
+  const outside = event => { if (!picker.contains(event.target)) setOpen(false); };
+  const syncActive = () => {
+    options.forEach((option, index) => { option.dataset.active = String(index === activeIndex); });
+    if (options[activeIndex]) trigger.setAttribute('aria-activedescendant', options[activeIndex].id);
+  };
+  const setOpen = open => {
+    menu.hidden = !open;
+    trigger.setAttribute('aria-expanded', String(open));
+    document.removeEventListener('pointerdown', outside);
+    if (!open) {
+      trigger.removeAttribute('aria-activedescendant');
+      return;
+    }
+    activeIndex = selectedIndex;
+    syncActive();
+    menu.classList.remove('is-above');
+    const rect = trigger.getBoundingClientRect();
+    if (innerHeight - rect.bottom < menu.offsetHeight + 12 && rect.top > menu.offsetHeight + 12) menu.classList.add('is-above');
+    document.addEventListener('pointerdown', outside);
+  };
+  closeVoicePicker = () => setOpen(false);
+  trigger.addEventListener('click', () => setOpen(menu.hidden));
+  trigger.addEventListener('keydown', event => {
+    if (event.key === 'Escape' || event.key === 'Tab') {
+      if (!menu.hidden && event.key === 'Escape') event.preventDefault();
+      setOpen(false);
+      return;
+    }
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      event.preventDefault();
+      if (menu.hidden) setOpen(true);
+      else if (event.key === 'ArrowDown') activeIndex = (activeIndex + 1) % options.length;
+      else if (event.key === 'ArrowUp') activeIndex = (activeIndex + options.length - 1) % options.length;
+      if (event.key === 'Home') activeIndex = 0;
+      if (event.key === 'End') activeIndex = options.length - 1;
+      syncActive();
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (menu.hidden) setOpen(true);
+      else if (presets[activeIndex]) selectVoice(presets[activeIndex].id);
+    }
+  });
+  picker.addEventListener('focusout', event => { if (!picker.contains(event.relatedTarget)) setOpen(false); });
+  const preview = document.createElement('button');
+  preview.type = 'button';
+  preview.className = 'p-btn';
+  preview.textContent = window.NavrenI18n?.t('试听') || '试听';
+  preview.setAttribute('aria-label', '试听当前音色');
+  preview.disabled = !selected;
+  preview.onclick = () => previewVoice(selected.id);
+  picker.append(trigger, menu);
+  host.append(picker, preview);
 }
 
-function selectVoice(id) {
-  Storage.set('qingzhou_voicePreset', id);
-  renderVoicePresets();
-  showToast('语音音色已切换');
+async function selectVoice(id) {
+  if (!Storage.accountReady() || !VOICE_PRESETS.some(item => item.id === id)) return;
+  try {
+    await Storage.set('qingzhou_voicePreset', id);
+    renderVoicePresets();
+    document.querySelector('.settings-voice-trigger')?.focus({preventScroll:true});
+    showToast('语音音色已切换');
+  } catch (_) { showToast('音色设置未保存，请重试。'); }
 }
 
 // 试听与聊天共用相同的百炼音色和取消逻辑。

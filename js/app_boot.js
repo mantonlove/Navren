@@ -1,8 +1,11 @@
 /** Navren 页面版本与内部跳转；不修改账户、聊天记录和阅读偏好。 */
 window.NavrenApp = (() => {
   const release = document.querySelector('meta[name="navren-release"]')?.content;
-  if((location.pathname==='/'||location.pathname.endsWith('index.html'))&&localStorage.getItem('navren_onboarded')==='true'){location.replace('/chat.html'+(release?'?ui='+encodeURIComponent(release):''));}
-  const pages = new Set(['index.html', 'chat.html', 'recommend.html', 'account.html', 'mine.html', 'copilot.html']);
+  if(location.pathname==='/'||location.pathname.endsWith('index.html'))document.addEventListener('DOMContentLoaded',()=>{
+    if(typeof Storage==='undefined'||!window.BankClient)return;
+    Storage.ready().then(()=>{if(Storage.accountReady()&&Storage.get('navren_onboarded')===true)location.replace('/chat.html'+(release?'?ui='+encodeURIComponent(release):''));}).catch(()=>{});
+  });
+  const pages = new Set(['index.html', 'chat.html', 'recommend.html', 'account.html', 'mine.html', 'copilot.html', 'messages.html']);
   function href(target, mode) {
     const url = new URL(target, location.href);
     if (url.origin === location.origin && pages.has(url.pathname.split('/').pop())) {
@@ -40,5 +43,15 @@ window.NavrenApp = (() => {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') checkRelease();
   });
+  // 各应用页共用消息入口与角标；消息本身由后台规则生成。
+  function mountMessageBadge() {
+    const page = location.pathname.split('/').pop() || 'index.html';
+    if (!pages.has(page) || document.querySelector('script[src*="message_badge.js"]')) return;
+    const script = document.createElement('script');
+    script.src = '/js/message_badge.js' + (release ? '?v=' + encodeURIComponent(release) : '');
+    document.body.append(script);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountMessageBadge);
+  else mountMessageBadge();
   return {release, href, navigate};
 })();

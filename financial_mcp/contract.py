@@ -7,7 +7,7 @@ import re
 SCHEMA_VERSION = "navren.financial.v1"
 OPERATIONS = (
     "list_connections", "list_accounts", "list_cards", "get_account_overview",
-    "list_transactions", "list_positions", "list_insurance", "get_policy",
+    "list_transactions", "list_transfers", "list_positions", "list_insurance", "get_policy",
     "list_assets", "list_obligations", "get_financial_summary",
 )
 TOOL_NAMES = tuple("financial_" + name for name in OPERATIONS)

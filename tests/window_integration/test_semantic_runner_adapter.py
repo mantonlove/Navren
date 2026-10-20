@@ -232,6 +232,46 @@ class SemanticRunnerSQLiteAdapterChecks(unittest.TestCase):
         self.assertEqual(adapter.digest(adapter.RUNNER_PATH), adapter.RUNNER_SHA256)
         self.assertEqual(adapter.digest(adapter.GOLDEN_PATH), adapter.GOLDEN_SHA256)
 
+    def test_10_current_runner_binding_and_original_gold_copy_are_exact(self):
+        derived = json.loads((ROOT / "evaluation/window_integration/semantic_cases.json").read_text(encoding="utf-8"))
+        original = json.loads(adapter.GOLDEN_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(adapter.digest(adapter.RUNNER_PATH), adapter.RUNNER_SHA256)
+        self.assertEqual(derived["integration_origin"]["runner_sha256"], adapter.RUNNER_SHA256)
+        self.assertEqual(derived["integration_origin"]["sha256"], adapter.GOLDEN_SHA256)
+        for section in ("fixtures", "fixture_policy", "cases"):
+            with self.subTest(section=section):
+                self.assertEqual(derived[section], original[section])
+
+    def test_11_legacy_catalog_stop_forwards_to_the_captured_real_lifecycle(self):
+        fixture_catalog = self.runner.EvalCatalog({'public_catalog_result': {'items': ['fixed']}})
+        lifecycle = Mock()
+        lifecycle.stop.return_value = True
+        adapted = adapter.EvalCatalogLifecycleAdapter(fixture_catalog, lifecycle)
+        self.assertEqual(adapted.read(), {'items': ['fixed']})
+        self.assertTrue(adapted.stop(timeout=1.25))
+        lifecycle.stop.assert_called_once_with(timeout=1.25)
+        with self.assertRaisesRegex(AttributeError, 'lifecycle_stop_unavailable'):
+            adapter.EvalCatalogLifecycleAdapter(fixture_catalog, object()).stop()
+
+    def test_12_process_preflight_uses_the_real_glm_request_builder_and_local_wire(self):
+        reviewer = self.runner.ProcessPreflightReviewer()
+        result = reviewer.review({}, 'adapter-preflight-wire', 30)
+        self.assertEqual(result['verdict'], 'approve')
+        self.assertEqual(result['reason'], '仅用于离线链路预检，不裁决金融语义。')
+        self.assertEqual(result['issues'], [])
+        self.assertEqual(result['_model_usage'], {
+            'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0})
+        self.assertIsInstance(result['_agent_review_wire'], bytes)
+        self.assertGreater(len(result['_agent_review_wire']), 0)
+        self.assertEqual(reviewer._offline_request_metadata[0]['transport'], 'in_process_fixture_no_network')
+        self.assertEqual(reviewer._offline_request_metadata[0]['billing_mode'], 'unpaid_fixture')
+        self.assertEqual(len(reviewer.records), 1)
+
+    def test_13_runner_is_registered_with_a_package_import_context(self):
+        self.assertIs(sys.modules[self.runner.__name__], self.runner)
+        self.assertEqual(list(self.runner.__spec__.submodule_search_locations),
+                         [str(adapter.RUNNER_PATH.parent)])
+
 
 class TraceReviewerCompatibilityChecks(unittest.TestCase):
     def test_09_real_original_trace_preserves_constructor_metadata_and_forwards_all_review_kwargs_once(self):

@@ -77,7 +77,7 @@ class RuntimeEvents:
         elif activity_kind=='review' and name not in (
                 'independent_review','answer_boundary','amount_contract','evidence_reference'):
             return None
-        elif activity_kind=='skill' and name!='load_skill':
+        elif activity_kind=='skill' and name not in ('load_skill','intent_route'):
             return None
         elif activity_kind=='reply' and name!='social_reply':
             return None
@@ -85,7 +85,8 @@ class RuntimeEvents:
         if attempt is not None and (type(attempt) is not int or not 1 <= attempt <= 10000):
             return None
         summary=event.get('summary',{})
-        if not isinstance(summary,dict) or set(summary)-_SUMMARY_FIELDS[activity_kind]:
+        fields=frozenset() if activity_kind=='skill' and name=='intent_route' else _SUMMARY_FIELDS[activity_kind]
+        if not isinstance(summary,dict) or set(summary)-fields:
             return None
         safe_summary={}
         for key,value in summary.items():

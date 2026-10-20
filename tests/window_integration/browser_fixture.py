@@ -13,6 +13,8 @@ import time
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+FINANCIAL_SOURCE = ROOT / 'outputs/financial-data/navren-financial-v2.sqlite3'
+FINANCIAL_SOURCE_SHA256 = 'cf0a8c109e8301f3d5382aea7065d25d9b02ebbfaca00543aad6d17d70969d65'
 
 
 def sha(path):
@@ -40,6 +42,26 @@ def prepare_server(out):
     if manifest.get('public_only') is not True:
         raise ValueError('browser_public_only_attestation_missing')
 
+    # 浏览器金融数据读取须绑定临时副本；绝不让HTTP进程读取项目原始库。
+    financial_database = out / 'financial.sqlite3'
+    if FINANCIAL_SOURCE.is_symlink() or sha(FINANCIAL_SOURCE) != FINANCIAL_SOURCE_SHA256:
+        raise ValueError('frozen_browser_financial_data_changed')
+    shutil.copy2(FINANCIAL_SOURCE, financial_database)
+    try:
+        import sqlite3
+        with sqlite3.connect(f'file:{financial_database}?mode=ro', uri=True) as db:
+            financial_subjects = [dict(zip(('subject_id', 'workspace_id'), row)) for row in db.execute(
+                'SELECT subject_id,workspace_id FROM subjects ORDER BY subject_id')]
+    except sqlite3.Error as error:
+        raise ValueError('browser_financial_fixture_unreadable') from error
+    if (sha(financial_database) != FINANCIAL_SOURCE_SHA256 or len(financial_subjects) != 4
+            or {row['subject_id'] for row in financial_subjects} != {
+                'grain_farmer', 'retired_entrepreneur', 'tycoon', 'working_landlady'}):
+        raise ValueError('browser_financial_fixture_subjects_invalid')
+    expected['financial_database'] = {'source_sha256': FINANCIAL_SOURCE_SHA256,
+        'copy_sha256': sha(financial_database), 'dataset_version': 'navren-financial-c49c00383e9501ce',
+        'subjects': financial_subjects}
+
     class NoCloud:
         model_id = 'integration-browser-cloud-disabled'
         def complete(self, *args, **kwargs):
@@ -54,10 +76,11 @@ def prepare_server(out):
         def close(self):
             pass
 
-    os.environ['NAVREN_KNOWLEDGE_DB'] = str(out / 'bootstrap-public.sqlite3')
-    server = create_server(port=0, database=str(out / 'bank.sqlite3'),
-        voice=VoiceGateway(key='', allow_cloud_asr=False),
-        conversation_agent=ConversationAgent(primary=NoCloud()))
+    with patch.dict(os.environ, {'NAVREN_KNOWLEDGE_DB': str(out / 'bootstrap-public.sqlite3'),
+                                 'NAVREN_FINANCIAL_DB': str(financial_database)}):
+        server = create_server(port=0, database=str(out / 'bank.sqlite3'),
+            voice=VoiceGateway(key='', allow_cloud_asr=False),
+            conversation_agent=ConversationAgent(primary=NoCloud()))
     try:
         # create_server的自动市场发布仅作用于新建bootstrap库；选定公共发布另行固定。
         server.evidence_runtime.close()
@@ -70,12 +93,20 @@ def prepare_server(out):
         catalog = server.finance.demo_accounts.catalog()
         if initialized['initialized_count'] != 4 or catalog['initialized_count'] != 4:
             raise ValueError('browser_requires_all_four_frozen_profiles')
+        expected_workspaces = {row['workspace_id'] for row in financial_subjects}
+        actual_workspaces = {row['workspace_id'] for row in catalog['accounts']}
+        if (actual_workspaces != expected_workspaces
+                or server.finance.financial_data is None
+                or sha(server.finance.financial_data.database_path) != FINANCIAL_SOURCE_SHA256):
+            raise ValueError('browser_financial_database_not_bound_to_four_profiles')
         ready = {'url': f'http://127.0.0.1:{server.server_port}/chat.html',
             'release': server.app_release, 'cloud_models_enabled': False,
             'cloud_audio_enabled': False, 'cold_public_fetch_enabled': False,
             'database': str(out / 'bank.sqlite3'), 'private_key_persisted': False,
             'profile_catalog': catalog, 'public_release_id': provider.status()['public_release_id'],
-            'public_inputs': expected, 'scope': 'isolated_frozen_synthetic_browser_technical_checks',
+            'public_inputs': expected, 'financial_data_configured': True,
+            'financial_dataset_version': server.finance.financial_data.dataset_version,
+            'scope': 'isolated_frozen_synthetic_browser_technical_checks',
             'semantic_verified': False}
         return server, ready
     except Exception:

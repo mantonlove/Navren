@@ -1,10 +1,16 @@
 /* 账户页与对话共享安全 DOM 组件。金额只显示后端结果，历史卡片保留快照。 */
 window.CalendarUI=(()=>{
-  let uiEpoch=0;const renderEpochs=new WeakMap(),dialogs=new Set();
+  let uiEpoch=0;const renderEpochs=new WeakMap(),dialogs=new Set(),financialRoots=new Set();
   const localEn={'盈利':'Gain','亏损':'Loss','已计算零值':'Calculated zero','未知':'Unknown','数据缺失':'Missing data','未披露':'Not disclosed','当前筛选事项':'Currently filtered events','当日全部事项':'All events for this day','所选来源与组合内的全部事项；不合并其他账本。':'All events within the selected source and portfolio; other ledgers remain separate.','来源版本':'Source versions','计算与来源依据':'Calculation and source basis','正在读取全部事项…':'Loading all events…','日历权限已变化，请重新核对。':'Calendar permission changed. Verify it again.','无收益披露':'No return disclosed'};
+  Object.assign(localEn,{'未提供合计':'Total unavailable','来源未提供可展示的合计，不能按事项数量推算。':'The source did not issue a total. Item counts do not determine an amount.','已发布资金快照，仅供阅读。':'Published funding snapshot; read only.','历史已发布快照，仅供阅读。':'Historical published snapshot; read only.','正在核对原已发布资金快照…':'Verifying the original published funding snapshot…','尚缺生活开支、收入稳定性和目标资料，不能据此认定应急储备充足。':'Living costs, income stability and goals are missing; reserve adequacy is unknown.','当前结果未评估日内偿付能力。':'Intraday solvency has not been assessed.','指标':'Metric','所属账户':'Account identity','币种':'Currency','覆盖范围':'Coverage','计算状态':'Calculation status','计算口径':'Calculation basis','方法':'Method','日期与期间':'Date and period','输入引用':'Input references','条件与假设':'Conditions and assumptions','排除项':'Excluded items','覆盖缺口':'Coverage gaps','业务日期':'Business date','时区':'Time zone','日期口径':'Clock basis','身份与授权版本':'Identity and authorization revision','来源范围':'Source scope','缺项':'Missing inputs','资金规则':'Funding rules','资金限制与适用条件':'Funding limits and conditions','资金来源引用':'Funding source reference','图形依据':'Geometry basis'});
   const t=text=>{const value=window.NavrenI18n?.t?.(text)??text;return value===text&&window.NavrenI18n?.language==='en'?(localEn[text]||text):value;};
+  Object.assign(localEn,{'输入尚未完整覆盖，具体缺项见来源依据。':'Input coverage is incomplete; see the source basis for the missing inputs.','存在未覆盖资料，具体缺项见来源依据。':'Some inputs are not covered; see the source basis.','视图缺项':'View coverage gaps'});
   function readToken(root){const epoch=(renderEpochs.get(root)||0)+1;renderEpochs.set(root,epoch);const generation=uiEpoch,guard=BankClient.identity?.()?BankClient.guard?.():null,view=window.NavrenViews?.revision?.();return {valid(){return root.isConnected&&uiEpoch===generation&&renderEpochs.get(root)===epoch&&(!guard||guard.valid())&&(view===undefined||window.NavrenViews?.revision?.()===view);}};}
-  window.addEventListener('navren:privacy-reset',()=>{uiEpoch++;for(const d of [...dialogs]){d.close?.();if(d.isConnected)d.remove();}dialogs.clear();});
+  function hideFinancial(){for(const root of financialRoots){delete root.__navrenFinancialPacket;if(root.isConnected)root.replaceChildren(el('p','账户或授权已变化，资金快照已隐藏。请重新查询。','calendar-note'));}financialRoots.clear();}
+  window.addEventListener('navren:privacy-reset',()=>{uiEpoch++;hideFinancial();for(const d of [...dialogs]){d.close?.();if(d.isConnected)d.remove();}dialogs.clear();});
+  window.addEventListener('navren:identity-revoked',()=>{uiEpoch++;hideFinancial();});
+  window.addEventListener('navren:account-switched',()=>{uiEpoch++;hideFinancial();});
+  window.addEventListener('pagehide',()=>{uiEpoch++;hideFinancial();});
   const states={recorded:'已记录',planned:'计划',candidate:'候选',completed:'手工完成',cancelled:'已取消',unknown:'数据缺失',awaiting_confirmation:'待确认',failed:'失败'};
   const kinds={transaction:'收支',investment_pnl:'理财损益',distribution:'分红到账',maturity:'到期/解锁',settlement:'到账安排',bill:'缴费/还款',subscription:'订阅',birthday:'生日',life_event:'生活事件'};
   const sources={simulation:'演示账户',imported:'本地导入账单',user_calendar:'本人日历计划',bank_profile:'授权的演示档案'};
@@ -84,12 +90,131 @@ window.CalendarUI=(()=>{
       }catch(e){if(!token.valid()||!list.isConnected)return;loading.remove();err(list,e);list.append(btn('重新查询',()=>{offset=0;fullView=null;list.replaceChildren();load();}));}
     }load();
   }
+  const fundingBlocks=['cash_balance','current_available','current_budget','emergency_floor','obligations','holds'];
+  const fpPlain=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
+  const fpText=v=>typeof v==='string'&&v.trim().length>0;
+  const fpList=v=>Array.isArray(v);
+  function fpStable(v){if(Array.isArray(v))return v.map(fpStable);if(fpPlain(v))return Object.fromEntries(Object.keys(v).sort().map(k=>[k,fpStable(v[k])]));return v;}
+  const fpEqual=(a,b)=>JSON.stringify(fpStable(a))===JSON.stringify(fpStable(b));
+  const fpVersions=(a,b)=>fpPlain(a)&&fpPlain(b)&&Object.keys(a).length>0&&Object.entries(a).every(([k,v])=>fpText(v)&&b[k]===v);
+  const fpVersionOverlap=(a,b)=>fpPlain(a)&&fpPlain(b)&&Object.keys(a).length>0&&Object.entries(a).every(([k,v])=>fpText(v)&&(!Object.prototype.hasOwnProperty.call(b,k)||b[k]===v));
+  function financialPacket(widget,read,session){
+    const fail=()=>{throw Error('资金视图的身份、来源或审核依据不完整，请重新查询。');};
+    const p=widget.presentation,response=read?.response,proof=read?.original_agent_final_proof,verified=read?.verification;
+    if(widget.schema_version!==1||!fpPlain(p)||p.schema_version!==1||p.contract!=='navren.presentation/1'||
+      p.layout!=='funding_blocks'||p.series_kind!=='funding_breakdown'||widget.widget_id!==p.view_id||
+      !fpText(p.view_id)||!fpText(p.message_id)||p.request_id!==p.message_id||!fpPlain(p.authorization_revision)||
+      p.workspace_binding!==session.workspace_id||p.authorization_revision.privacy!==session.privacy_revision||
+      !Number.isSafeInteger(p.authorization_revision.personal)||p.authorization_revision.personal<0||
+      session.personal_revision!==undefined&&p.authorization_revision.personal!==session.personal_revision||
+      !['current','historical_readonly'].includes(read?.status)||read.workspace_id!==session.workspace_id||
+      read.privacy_revision!==session.privacy_revision||read.execution_authority!==false||read.can_reissue_old_approval!==false||
+      !verified?.original_message_verified||!verified.identity_verified||!verified.language_verified||!verified.source_versions_verified||
+      verified.semantic_review_status!=='approved'||verified.final_guard_status!=='verified'||!fpPlain(response)||
+      response.bank_response_id!==p.message_id||!fpEqual(response.presentation,p)||!fpPlain(proof)||
+      proof.contract!=='navren.agent-final-proof/1'||proof.workspace_id!==p.workspace_binding||proof.request_id!==p.request_id||
+      proof.message_id!==p.message_id||proof.language!==read.language||proof.approved_content!==response.reply||
+      proof.verdict?.verdict!=='approve'||proof.approved_response_hash!==read.original_response_hash||
+      read.original_publication_receipt?.original_response_hash!==read.original_response_hash||
+      read.original_publication_receipt?.publication_state!=='server_send_completed'||
+      read.original_publication_receipt?.response_id!==p.message_id)fail();
+    const review=proof.approved_review_projection?.presentation_review,batch=response.metric_batch;
+    if(!fpPlain(review)||!fpEqual(review.presentation,p)||!fpPlain(batch)||batch.batch_contract!=='navren.financial-tool-metrics/1'||
+      batch.workspace_id!==p.workspace_binding||batch.tool_name!=='presentation_view'||!fpText(batch.service_signature)||
+      !fpEqual(batch.binding,{view_id:p.view_id,request_id:p.request_id,message_id:p.message_id})||
+      !fpVersions(p.source_versions,batch.source_versions)||p.source_versions.personal!==String(p.authorization_revision.personal)||
+      !fpPlain(p.scope)||!fpText(p.scope.source)||!fpText(p.scope.currency)||! /^[A-Z]{3}$/.test(p.scope.currency)||
+      !fpPlain(p.scope.funding_rule)||!fpPlain(p.scope.funding_query)||!fpPlain(p.funding_limits)||
+      !fpText(p.scope.funding_query.coverage_scope)||!fpText(p.coverage)||!fpText(p.data_scope)||
+      !fpText(p.as_of)||!fpPlain(p.range)||!fpText(p.range.from)||!fpText(p.range.to)||!fpText(p.timezone)||
+      !fpText(p.clock_basis)||!fpText(p.measure_basis)||!fpPlain(p.funding_reference)||
+      !fpText(p.funding_reference.snapshot_id)||!fpText(p.funding_reference.snapshot_hash)||
+      !fpList(p.important_states)||!p.important_states.length||!p.important_states.every(fpText)||!fpList(p.missing)||
+      !fpList(p.points)||p.points.length!==fundingBlocks.length||!fpList(batch.metrics)||batch.metrics.length!==p.points.length||
+      !fpList(review.display_amount_occurrences)||review.display_amount_occurrences.length!==p.points.length)fail();
+    const metrics=new Map();
+    for(const m of batch.metrics){
+      if(!fpPlain(m)||!fpText(m.metric_id)||metrics.has(m.metric_id)||m.subject_id!==p.workspace_binding||
+        m.unit!=='minor_currency'||!fpText(m.metric_name)||!fpText(m.currency)||!fpText(m.basis)||!fpText(m.formula_id)||
+        !fpText(m.data_scope)||!fpVersionOverlap(m.source_versions,p.source_versions)||!fpVersionOverlap(m.source_versions,batch.source_versions)||
+        !['as_of','period_start','period_end'].every(k=>Object.prototype.hasOwnProperty.call(m,k)&&(m[k]===null||fpText(m[k])))||
+        m.as_of!==null&&m.as_of!==p.as_of||m.period_start!==null&&m.period_start!==p.range.from||m.period_end!==null&&m.period_end!==p.range.to||
+        !fpList(m.input_refs)||!m.input_refs.every(fpText)||!fpList(m.assumed_inputs)||!fpList(m.excluded_items)||!fpList(m.coverage_gaps))fail();
+      metrics.set(m.metric_id,m);
+    }
+    const blocks=new Set(),metricIds=new Set();
+    p.points.forEach((point,index)=>{
+      const value=point?.value,m=metrics.get(value?.metric_id),slot=review.display_amount_occurrences[index];
+      if(!fpPlain(point)||!fundingBlocks.includes(point.block)||blocks.has(point.block)||!fpText(point.label)||
+        !fpText(point.point_ref)||!fpText(point.coverage)||!fpList(point.missing)||!fpPlain(value)||!m||metricIds.has(m.metric_id)||
+        value.currency!==p.scope.currency||value.currency!==m.currency||value.value_minor!==m.value_minor||
+        value.calculation_status!==m.calculation_status||!fpText(value.calculation_status)||m.data_scope!==p.data_scope||
+        value.value_minor!==null&&!Number.isSafeInteger(value.value_minor)||
+        value.value_minor===null&&value.calculation_status==='calculated'||
+        value.value_minor!==null&&!['calculated','partial'].includes(value.calculation_status)||
+        !fpEqual(slot,{path:'points/'+index+'/value',metric_id:m.metric_id,currency:m.currency,value_minor:m.value_minor}))fail();
+      blocks.add(point.block);metricIds.add(m.metric_id);
+    });
+    const claims=review.body_amount_contract?.amount_claims;
+    if(!fpList(claims)||proof.body_amount_occurrence_count!==claims.length||
+      proof.total_amount_occurrence_count!==p.points.length+claims.length||
+      review.visible_amount_occurrence_count!==proof.total_amount_occurrence_count||
+      verified.body_amount_occurrence_count!==claims.length||verified.total_amount_occurrence_count!==proof.total_amount_occurrence_count)fail();
+    for(const row of claims){const claim=row?.claim,m=metrics.get(claim?.metric_id);
+      if(!m||claim.subject_id!==p.workspace_binding||claim.value_minor!==m.value_minor||claim.currency!==m.currency||
+        !Number.isSafeInteger(claim.occurrence_start)||!fpText(claim.text)||
+        response.reply.slice(claim.occurrence_start,claim.occurrence_start+claim.text.length)!==claim.text)fail();
+    }
+    return {presentation:p,metric_batch:batch,verification:verified,proof,reply:response.reply,status:read.status};
+  }
+  function financialBasis(root,rows){const details=el('details'),list=el('dl',undefined,'calendar-note');details.append(el('summary','计算与来源依据'));
+    for(const [label,value] of rows){const dt=el('dt',label),dd=original('dd',typeof value==='string'?value:JSON.stringify(value,null,2));dd.style.whiteSpace='pre-wrap';dd.style.marginInlineStart='0';list.append(dt,dd);}details.append(list);root.append(details);
+  }
+  function financialDisplay(root,packet){
+    const p=packet.presentation;root.replaceChildren();root.dataset.financialViewId=p.view_id;root.dataset.financialProjectionHash=p.projection_hash;
+    root.__navrenFinancialPacket=packet;root.append(original('h3',p.title),original('p',(sources[p.scope.source]||p.scope.source)+' · '+p.scope.currency+' · '+p.range.from+' — '+p.range.to,'calendar-identity'));
+    notice(root,packet.status==='historical_readonly'?'历史已发布快照，仅供阅读。':'已发布资金快照，仅供阅读。');
+    for(const text of new Set([p.scope.funding_query.coverage_scope,...p.important_states]))root.append(original('p',text,'calendar-note'));
+    if(p.funding_limits.adequacy==='unknown_without_living_costs_income_stability_and_goals')notice(root,'尚缺生活开支、收入稳定性和目标资料，不能据此认定应急储备充足。');
+    if(p.funding_limits.intraday_solvency==='not_assessed_daily_net_only')notice(root,'当前结果未评估日内偿付能力。');
+    const grid=el('div',undefined,'calendar-summary');
+    for(const point of p.points){
+      const m=packet.metric_batch.metrics.find(x=>x.metric_id===point.value.metric_id),card=el('article',undefined,'calendar-metric');card.dataset.financialSlot=point.block;
+      const amount=point.value.value_minor===null?el('strong','未提供合计','pnl-missing'):amountNode('strong',point.value.value_minor,point.value.currency,point.coverage);
+      amount.dataset.financialAmount=point.value.value_minor===null?'null':String(point.value.value_minor);card.append(original('span',point.label),amount);
+      if(point.value.value_minor===null){notice(card,'来源未提供可展示的合计，不能按事项数量推算。');}
+      if(point.missing.length)notice(card,point.missing.includes('input_coverage_incomplete')?'输入尚未完整覆盖，具体缺项见来源依据。':'存在未覆盖资料，具体缺项见来源依据。');
+      financialBasis(card,[['指标',m.metric_id],['所属账户',m.subject_id],['币种',m.currency],['覆盖范围',m.data_scope],['计算状态',m.calculation_status],['计算口径',m.basis],['方法',m.formula_id],['日期与期间',{as_of:m.as_of,period_start:m.period_start,period_end:m.period_end}],['输入引用',m.input_refs],['来源版本',m.source_versions],['条件与假设',m.assumed_inputs],['排除项',m.excluded_items],['覆盖缺口',m.coverage_gaps],['视图缺项',point.missing]]);
+      grid.append(card);
+    }root.append(grid);
+    financialBasis(root,[['业务日期',p.as_of],['时区',p.timezone],['日期口径',p.clock_basis],['身份与授权版本',{workspace_binding:p.workspace_binding,request_id:p.request_id,message_id:p.message_id,authorization_revision:p.authorization_revision}],['来源范围',p.scope],['来源版本',p.source_versions],['覆盖范围',p.coverage],['缺项',p.missing],['资金规则',p.scope.funding_rule],['资金限制与适用条件',Object.fromEntries(Object.entries(p.funding_limits).filter(([key])=>!key.endsWith('_minor')))],['资金来源引用',p.funding_reference],['图形依据',p.geometry]]);
+  }
+  async function mountFinancial(root,widget,token){
+    financialRoots.add(root);root.classList.add('financial-presentation-widget');root.replaceChildren(el('p','正在核对原已发布资金快照…','calendar-note'));
+    try{
+      const frozen=JSON.parse(JSON.stringify(widget)),p=frozen.presentation;
+      const session=await BankClient.ensure();if(!token.valid())return;
+      if(!fpPlain(p)||p.workspace_binding!==session.workspace_id||p.authorization_revision?.privacy!==session.privacy_revision)throw Error('此资金视图属于其他账户或授权版本，快照已隐藏。请重新查询。');
+      const responseId=root.closest('.message')?.dataset.bankResponseId;if(responseId&&responseId!==p.message_id)throw Error('资金视图与这条回复不匹配，请重新查询。');
+      const language=window.NavrenI18n?.language==='en'?'en':'zh';
+      const read=await BankClient.get('/approved-responses/'+encodeURIComponent(p.message_id)+'?language='+language);
+      if(!token.valid())return;
+      const current=BankClient.identity?.();if(!current||current.workspace_id!==session.workspace_id||current.privacy_revision!==session.privacy_revision)return;
+      const packet=financialPacket(frozen,read,current),bubble=root.closest('.bubble');
+      if(bubble){let body=bubble.querySelector(':scope > .message-body');if(!body){body=bubble.cloneNode(true);body.querySelectorAll('.calendar-widget').forEach(n=>n.remove());}
+        const plain=text=>String(text||'').replace(/\s+/g,''),expected=document.createElement('div'),text=window.NavrenPresentation?.text?.(packet.reply)||packet.reply;
+        if(typeof window.renderReplyText==='function')expected.innerHTML=window.renderReplyText(text);else expected.textContent=text;
+        if(plain(body.textContent)!==plain(expected.textContent))throw Error('资金视图与回复正文不匹配，请重新查询。');
+      }
+      financialDisplay(root,packet);
+    }catch(e){if(token.valid()){delete root.__navrenFinancialPacket;root.replaceChildren(el('p',e.message||'资金视图已失效或无法核对，请重新查询。','calendar-error'));}}
+  }
   async function bound(root,widget,token){
     root.replaceChildren();const loading=notice(root,'正在核对日历所属账户…');
     try{const s=await BankClient.ensure();if(!token.valid()||loading.parentNode!==root)return false;if(widget.workspace_binding!==s.workspace_id){root.replaceChildren(el('p','此日历属于另一个账户，私人快照已隐藏。请重新查询。'));return false;}root.replaceChildren();return true;}catch(e){if(token.valid()&&loading.parentNode===root)root.replaceChildren(el('p','会话不可用，请重新查询日历。'));return false;}
   }
   async function mount(root,widget){
-    const token=readToken(root);root.classList.add('calendar-widget');if(!await bound(root,widget,token)||!token.valid())return;
+    const token=readToken(root);root.classList.add('calendar-widget');if(widget?.type==='financial_presentation'){await mountFinancial(root,widget,token);return;}if(!await bound(root,widget,token)||!token.valid())return;
     if(widget.type==='calendar_event_draft'){
       try{const status=await CalendarClient.draft(widget.draft.draft_id);if(!token.valid())return;draft(root,widget.draft);
         if(status.status!=='ready'){root.querySelector('.calendar-confirm button')?.remove();notice(root,status.status==='committed'?'此变更已确认保存。':'此草案已失效或未放行，请重新准备。');}
@@ -226,7 +351,7 @@ window.CalendarUI=(()=>{
   async function renderDay(root,context){const heading=el('div',undefined,'calendar-day-context'),title=el('h2'),scope=el('p');title.append(original('span',context.date+' · '),el('span','当日明细'));scope.append(el('span',context.portfolio_id&&context.portfolio_id!=='current'?'历史模拟组合 · 真实净值':sources[context.source_scope]||'日历来源'),el('span','；'),el('span','该快照不是交易授权'));heading.append(title,scope);if(context.filters?.kind&&context.filters.kind!=='overview'){const filter=el('p');filter.append(el('span','当前筛选事项'),el('span',' · '),el('span',{returns:'收益',cashflow:'收支',life:'生活'}[context.filters.kind]||context.filters.kind),el('span',' → '),el('span','当日全部事项'));heading.append(filter);}root.append(heading);const viewId=context.filters?.calendar_view_id;if(!viewId){notice(root,'这份日历快照已不可用，请返回完整日历重新查询。');return;}await dayDetail({view_id:viewId,source_scope:{statement_source:context.source_scope,portfolio:context.portfolio_id||'current'},snapshot:{},range:{from:context.period||context.date,to:context.date}},context.date,root);}
   async function renderItem(root,id,context){await itemDetail({id,date:context.date},root);}
   async function renderProduct(root,id,on,portfolio){await productDetail(id,on,portfolio,root);}
-  function response(message,widgets){const bubble=message.querySelector('.bubble');bubble.querySelectorAll('.calendar-widget').forEach(n=>n.remove());for(const widget of widgets||[]){const root=el('section');bubble.append(root);mount(root,widget);}}
+  function response(message,widgets){const bubble=message.querySelector('.bubble');bubble.querySelectorAll('.calendar-widget').forEach(n=>{financialRoots.delete(n);delete n.__navrenFinancialPacket;n.remove();});for(const widget of widgets||[]){const root=el('section');bubble.append(root);mount(root,widget);}}
   return {mount,response,account,form,productDetail,renderDay,renderItem,renderProduct,destroyAccount(root){accountControllers.get(root)?.destroy();}};
 })();
 

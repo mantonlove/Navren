@@ -3,7 +3,21 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 from market_content import MarketStore,CN
-from market_daily import DailyMarket,MarketDailyError,classify
+from market_daily import DailyMarket,MarketDailyError,classify,theme
+
+class MarketThemeTests(unittest.TestCase):
+    def test_price_statistics_are_macro_data(self):
+        for headline in ('9月份居民消费价格同比上涨','CPI inflation release','制造业PMI统计数据','财政收支情况'):
+            with self.subTest(headline=headline):self.assertEqual(theme({'headline':headline},'macro_policy'),'macro')
+    def test_actual_rate_decisions_keep_rate_theme(self):
+        for headline in ('下调政策利率','维持贷款市场报价利率不变','央行降准决定','Interest rate decision'):
+            with self.subTest(headline=headline):self.assertEqual(theme({'headline':headline},'macro_policy'),'rates')
+    def test_statistical_release_does_not_become_rate_policy_from_analysis(self):
+        self.assertEqual(theme({'headline':'居民消费价格统计','analysis':'通胀可能影响利率决策。'},'macro_policy'),'macro')
+    def test_explicit_theme_and_non_macro_category_are_preserved(self):
+        self.assertEqual(theme({'theme':'international'},'macro_policy'),'international')
+        self.assertEqual(theme({'topic_id':'household'},'household'),'household')
+        self.assertEqual(theme({'headline':'CPI数据'},'international'),'international')
 
 class DailyTests(unittest.TestCase):
     def setUp(self):
@@ -46,6 +60,7 @@ class DailyTests(unittest.TestCase):
     def test_next_day_same_fingerprint_creates_actual_day_and_seals_previous(self):
         self.add(1);self.update();self.now+=timedelta(days=1)
         result=self.update();self.assertTrue(result['changed']);self.assertEqual(result['revision'],1)
+        self.assertEqual(result['count'],0)
         self.assertEqual(self.store.history_day('2026-10-06',now=self.now)['period_state'],'sealed')
     def test_failed_or_partial_zero_check_does_not_invent_archive(self):
         self.store.update_daily(run_id='failed',valid_check=False,now=self.now)
@@ -93,12 +108,12 @@ class DailyTests(unittest.TestCase):
             if i==2:article.update(source_id='cctv',publisher='央视网',origin_publisher='国家统计局',identity='media_report',access_status='free_full_text')
             with self.store.db() as db:db.execute('UPDATE market_articles SET body=? WHERE id=?',(json.dumps(article),'a_'+str(i)))
         self.update();self.assertEqual(self.day()['total_count'],1)
-    def test_seventy_two_hour_and_seven_day_eligibility(self):
+    def test_previous_days_never_qualify_even_with_high_importance(self):
         self.add(1,self.now-timedelta(hours=71),importance=.5)
         self.add(2,self.now-timedelta(hours=80),importance=.5)
         self.add(3,self.now-timedelta(hours=80),importance=1)
         self.add(4,self.now-timedelta(days=8),importance=1)
-        self.update();self.assertEqual({e['id'] for e in self.day()['events']},{'e_1','e_3'})
+        self.update();self.assertEqual(self.day()['events'],[])
     def test_unreviewed_or_unbound_material_never_enters_selection(self):
         self.add(1,extra={'review':{'status':'rejected'}})
         self.add(2,extra={'article_versions':{'a_2':99}})

@@ -2,6 +2,7 @@
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 POLICY_VERSION = 'navren-agent-policy-1'
@@ -39,7 +40,7 @@ def context_hash(db, workspace):
             from .service import BankError
             private_path=Path(binding[0])
             if not private_path.is_file():raise BankError('PERSONAL_DATA_UNAVAILABLE','个人资料库不可用，审核依据无法核验。',503)
-            with sqlite3.connect(private_path.as_uri()+'?mode=ro',uri=True,timeout=10) as personal_db:
+            with closing(sqlite3.connect(private_path.as_uri()+'?mode=ro',uri=True,timeout=10)) as personal_db:
                 row=personal_db.execute('SELECT revision FROM personal_versions WHERE workspace_id=?',(workspace,)).fetchone()
                 values['personal_revision']=row[0] if row else 0
     values['products'] = [dict(row) for row in db.execute('SELECT * FROM products ORDER BY id')]

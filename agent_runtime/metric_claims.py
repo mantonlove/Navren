@@ -35,8 +35,55 @@ _FIXED_KINDS = {
     "funds.closing_cash/1": "recorded_projection",
     "funds.closing_cash_candidates/1": "candidate_scenario",
 }
+# Closed common-amount grammar for the existing cashflow minimum pair. This
+# checks a bounded declared relationship, not arbitrary natural-language scope.
+_JOINT_SCENARIO_PREFIX = re.compile(
+    r'(?:两种|已确认(?:事项)?(?:与|和|及)候选(?:事项)?)情景(?:下|中)?'
+    r'(?:最低底线外余量)?(?:均|都)(?:为|是)\s*\Z')
+_SCENARIO_MINIMUM_ROLES = {
+    ('minimum_available_after_confirmed', 'confirmed_floor_surplus',
+     'tools.cashflow_confirmed/1', 'recorded_projection'): 'confirmed',
+    ('minimum_available_if_candidates_occur', 'candidate_floor_surplus',
+     'tools.cashflow_candidates/1', 'candidate_scenario'): 'candidate',
+}
+
+
+def _require_joint_scenario_scope(text, occurrences, bound_amounts,
+                                 public_quote_spans, scenario_metric_ids, scenario_context):
+    """Only signatures bound at this occurrence can authorize its joint scope.
+
+    Equal raw data, a registry entry, or another occurrence supplies no branch.
+    Existing funding-assessment choices may additionally pin the request period.
+    Free prose outside this closed grammar still needs semantic review.
+    """
+    allowed = None if scenario_metric_ids is None else frozenset(scenario_metric_ids)
+    for literal in occurrences:
+        start, end = literal['start'], literal['end']
+        if any(left <= start and end <= right for left, right in public_quote_spans):
+            continue
+        prefix = unicodedata.normalize('NFKC', text[:start])
+        if _JOINT_SCENARIO_PREFIX.search(prefix) is None:
+            continue
+        groups = {}
+        for row in bound_amounts.get((start, end), ()):
+            metric = row['metric']
+            role = _SCENARIO_MINIMUM_ROLES.get((metric['metric_name'], metric['basis'],
+                                               metric['formula_id'], row['kind']))
+            if role is None:
+                continue
+            if allowed is not None and metric['metric_id'] not in allowed:
+                _fail('METRIC_SCENARIO_SCOPE_REQUIRED')
+            key = tuple(metric[field] for field in ('subject_id', 'currency', 'unit',
+                'data_scope', 'as_of', 'period_start', 'period_end', 'value_minor'))
+            groups.setdefault(key, set()).add(role)
+        if not groups:
+            if scenario_context:
+                _fail('METRIC_SCENARIO_SCOPE_REQUIRED')
+            continue
+        if len(groups) != 1 or next(iter(groups.values())) != {'confirmed', 'candidate'}:
+            _fail('METRIC_SCENARIO_SCOPE_REQUIRED')
 _MONEY = re.compile(
-    r"([-+−＋－]?[\d.,，]+)\s*(万亿|亿|万)?\s*"
+    r"([-+−＋－]?\d[\d.,，]*)\s*(万亿|亿|万)?\s*"
     r"(人民币|美元|欧元|英镑|日元|元|圆|CNY|RMB|USD|EUR|GBP|JPY)", re.I)
 _CURRENCIES = {"人民币": "CNY", "元": "CNY", "圆": "CNY", "RMB": "CNY",
                "美元": "USD", "欧元": "EUR", "英镑": "GBP", "日元": "JPY"}
@@ -63,7 +110,9 @@ _PREFIX_MONEY = re.compile(
     rf"(?P<number>{_NUMBER_TOKEN})", re.I)
 _NON_MONEY_UNIT = re.compile(
     r"\s*(?:天|日|周|月|年|小时|分钟|秒|笔|次|项|条|个|人|户|份|张|期|级|档|"
-    r"%|％|百分点|倍|GB|MB|KB)", re.I)
+    r"套|种|类|组|%|％|百分点|倍|GB|MB|KB)", re.I)
+_COMPARISON_WORDS = re.compile(r"一致|一样|两回事|两码事")
+_DATE_TOKEN = re.compile(r"(?<![0-9A-Za-z_])\d{4}-\d{2}-\d{2}(?![0-9A-Za-z_])")
 
 
 class MetricClaimError(ValueError):
@@ -152,8 +201,15 @@ def monetary_occurrences(text):
     for match in _MONEY.finditer(text):
         number, scale, unit = match.groups()
         # 不把科学记数或断裂数字的后缀当作另一笔合法金额。
-        if match.start() and text[match.start() - 1] in "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,+-−":
-            _fail("INVALID_MONEY_TEXT")
+        if match.start() and text[match.start() - 1] in "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,，+-−":
+            # NFKC turns a Chinese prose comma into ASCII. Only a separator
+            # after nonnumeric prose is punctuation; numeric/sign prefixes keep
+            # the original broken-number rejection.
+            before_comma = text[:match.start() - 1].rstrip()
+            prose_comma = (text[match.start() - 1] in {",", "，"} and bool(before_comma)
+                           and before_comma[-1] not in "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,，+-−＋－")
+            if not prose_comma:
+                _fail("INVALID_MONEY_TEXT")
         number = unicodedata.normalize("NFKC", number).replace("−", "-")
         if not re.fullmatch(r"[-+]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?", number):
             _fail("INVALID_MONEY_TEXT")
@@ -175,6 +231,13 @@ def monetary_occurrences(text):
 def _reject_unsupported_money(text, canonical):
     def covered(start, end):
         return any(row["start"] <= start and end <= row["end"] for row in canonical)
+    dates = []
+    for token in _DATE_TOKEN.finditer(text):
+        try:
+            date.fromisoformat(token.group(0))
+        except ValueError:
+            continue
+        dates.append(token.span())
 
     for match in _CN_MONEY.finditer(text):
         if not covered(*match.span()):
@@ -185,9 +248,45 @@ def _reject_unsupported_money(text, canonical):
     for pattern in (_FINANCIAL_NUMBER, _NUMBER_FINANCIAL, _PREFIX_MONEY):
         for match in pattern.finditer(text):
             start, end = match.span("number")
+            # Numeral characters inside a complete comparison word are not
+            # amounts. Explicit currencies/scales still ran above; all other
+            # numbers, including a later number in this clause, remain checked.
+            if (pattern in (_FINANCIAL_NUMBER, _NUMBER_FINANCIAL)
+                    and (any(word.start() <= start < end <= word.end()
+                             for word in _COMPARISON_WORDS.finditer(text))
+                         or any(left <= start < end <= right for left, right in dates))):
+                continue
+            # A directly negated zero-fee comparison asserts no money value.
+            # Currency/scale checks above and all other financial terms remain.
+            if (pattern is _FINANCIAL_NUMBER and text[start:end] in ("零", "0", "〇")
+                    and re.fullmatch(r"(?:费用|手续费)\s*为\s*(?:零|0|〇)", match.group(0))
+                    and re.match(r"\s*(?:$|[，,。；;!?！？]|\.(?!\d))", text[end:])):
+                negation = re.search(r"(?:不(?:能|可|应|得)?\s*(?:直接\s*)?"
+                                     r"(?:等于|代表|意味着|说明|理解为|视为|当作|认定为|认为)|并非|不是)"
+                                     r"(?P<scope>[\u4e00-\u9fffA-Za-z \t]{0,24})\Z", text[:match.start()])
+                if negation is not None and not re.search(r"不|非|未|没|无|否认|零|〇", negation.group("scope")):
+                    clause = re.split(r"[，,。；;!?！？\n]", text[:negation.start()])[-1]
+                    if not re.search(r"不|非|未|没|无|否认", clause):
+                        continue
+            # Only the relational “同一” is nonnumeric here; amounts such as
+            # “同一万元” retain the earlier currency/scale guards unchanged.
+            if (pattern is _NUMBER_FINANCIAL and text[start:end] == "一"
+                    and start > 0 and text[start - 1] == "同"):
+                continue
             # R4等正式等级不是“4元”，即便其后紧接“资金配置”。
             if start and text[start - 1] in "Rr" and text[start:end].isdigit():
                 continue
+            # Only a complete, standalone T+N arrival-period token is temporal.
+            # Currency/scale guards above still run; later money is scanned too.
+            if (pattern is _NUMBER_FINANCIAL and start > 0 and text[start - 1] == "T"
+                    and re.fullmatch(r"\+(?:0|[1-9][0-9]*)", text[start:end])
+                    and re.match(r"\s*到账", text[end:])):
+                before_t = text[start - 2] if start > 1 else ""
+                if (not before_t or before_t.isspace()
+                        or ("\u4e00" <= before_t <= "\u9fff" and before_t not in _CN_DIGITS)
+                        or (unicodedata.category(before_t).startswith("P")
+                            and before_t not in "_+.-−＋－")):
+                    continue
             if not covered(start, end) and not _NON_MONEY_UNIT.match(text, end):
                 _fail("METRIC_MONEY_SYNTAX_REQUIRED")
 
@@ -331,7 +430,8 @@ class MetricRegistry:
             validated.append({**record, "claim": _json_copy(dict(claim))})
         return validated
 
-    def validate_answer(self, text, amount_claims, *, current_source_versions, public_quote_spans=()):
+    def validate_answer(self, text, amount_claims, *, current_source_versions, public_quote_spans=(),
+                        scenario_metric_ids=None, scenario_context=False):
         """每个金额出现位置都须被准确片段覆盖，同数别处不自动获准。
 
         public_quote_spans只可由本地独立原文验证器产生，不能直接采用模型
@@ -341,7 +441,8 @@ class MetricRegistry:
         occurrences = monetary_occurrences(text)
         validated = self.validate_claims(amount_claims, current_source_versions=current_source_versions)
         covered = set()
-        for row in validated:
+        bound_amounts = {}
+        for claim_index, row in enumerate(validated):
             claim = row["claim"]
             fragment = claim["text"]
             if "occurrence_start" in claim:
@@ -350,10 +451,14 @@ class MetricRegistry:
                     _fail("METRIC_CLAIM_TEXT_MISMATCH")
             else:
                 start = text.find(fragment)
-                if start < 0 or text.find(fragment, start + 1) >= 0:
-                    _fail("METRIC_CLAIM_TEXT_AMBIGUOUS")
+                if start < 0:
+                    _fail("METRIC_CLAIM_TEXT_MISMATCH", f"amount_claims[{claim_index}].text")
+                if text.find(fragment, start + 1) >= 0:
+                    _fail("METRIC_CLAIM_TEXT_AMBIGUOUS", f"amount_claims[{claim_index}].text")
             for literal in monetary_occurrences(fragment):
-                covered.add((start + literal["start"], start + literal["end"]))
+                span = (start + literal["start"], start + literal["end"])
+                covered.add(span)
+                bound_amounts.setdefault(span, []).append(row)
         # 这些区间是可信原文验证的结果，仍验证边界，防止错位漏检。
         for span in public_quote_spans:
             if not isinstance(span, (tuple, list)) or len(span) != 2 or any(type(v) is not int for v in span):
@@ -365,5 +470,7 @@ class MetricRegistry:
                            if start <= v["start"] and v["end"] <= end)
         if any((v["start"], v["end"]) not in covered for v in occurrences):
             _fail("METRIC_AMOUNT_UNBOUND")
+        _require_joint_scenario_scope(text, occurrences, bound_amounts,
+                                     public_quote_spans, scenario_metric_ids, scenario_context)
         return {"status": "validated", "amount_claims": validated,
                 "amount_occurrence_count": len(occurrences), "independent_review_required": True}

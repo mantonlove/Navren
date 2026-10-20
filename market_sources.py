@@ -244,7 +244,7 @@ def discover(source,limit=15,days=35):
             if source.scope=='public_media' and (len(title)<5 or re.search(r'品牌焕新|广告|招商|酒业管理层',title)):continue
             entries.append({'title':title,'url':u,'published':None,'discovered_date':hint})
         # 首页专题会长期保留；按路径日期发现近期稿，再到原文核实发表时间。
-        if source.scope=='public_media':entries.sort(key=lambda e:(bool(re.search(r'金融|银行|货币|利率|汇率|债券|国债|股|证券|资管|资产管理|保险|税|财政|房贷|消费贷款|数字人民币|经济|GDP|PMI|采购经理|投资|融资|政策|通胀|物价|CPI|PPI|进出口|国际收支|工业企业利润',e['title'],re.I)),e.get('discovered_date') or ''),reverse=True)
+        if source.scope=='public_media':entries.sort(key=lambda e:(e.get('discovered_date') or '',bool(re.search(r'金融|银行|货币|利率|汇率|债券|国债|股|证券|资管|资产管理|保险|税|财政|房贷|消费贷款|数字人民币|经济|GDP|PMI|采购经理|投资|融资|政策|通胀|物价|CPI|PPI|进出口|国际收支|工业企业利润',e['title'],re.I))),reverse=True)
     cutoff=datetime.now(UTC)-timedelta(days=days)
     found=[]
     for e in entries:

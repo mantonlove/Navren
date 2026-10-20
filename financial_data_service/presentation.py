@@ -63,9 +63,10 @@ def _accumulate(total, row):
 class FinancialPresentationService:
     def __init__(self, service):
         self.service = service
+        self.start_date, self.end_date = service.start_date, service.end_date
 
     def query(self, subject_id, arguments):
-        service, as_of = self.service, END
+        service, as_of = self.service, self.end_date
         try:
             if not isinstance(subject_id, str):
                 raise FinancialDataError('SUBJECT_INVALID', '读取主体无效。')
@@ -113,14 +114,14 @@ class FinancialPresentationService:
 
     def _overview(self, db, subject):
         service = self.service
-        data = {'view': 'overview', 'summary': service._query(db, subject, 'get_financial_summary', {}, END)}
+        data = {'view': 'overview', 'summary': service._query(db, subject, 'get_financial_summary', {}, self.end_date)}
         for key, op in [('connections', 'list_connections'), ('accounts', 'list_accounts'),
                         ('cards', 'list_cards'), ('positions', 'list_positions'),
                         ('assets', 'list_assets'), ('obligations', 'list_obligations')]:
-            data[key] = service._query(db, subject, op, {}, END)['items']
-        data['policies'] = service._query(db, subject, 'list_insurance', {'status': 'active'}, END)['items']
+            data[key] = service._query(db, subject, op, {}, self.end_date)['items']
+        data['policies'] = service._query(db, subject, 'list_insurance', {'status': 'active'}, self.end_date)['items']
         data['contracts'] = [r for r in self._list(db, subject, 'contracts')
-                             if r['start_date'] <= END and (r['end_date'] is None or r['end_date'] >= END)
+                             if r['start_date'] <= self.end_date and (r['end_date'] is None or r['end_date'] >= self.end_date)
                              and r['status'] not in ('cancelled', 'expired', 'closed')]
         data['credit_facilities'] = self._list(db, subject, 'credit_facilities')
         for account in data['accounts']:
@@ -128,11 +129,11 @@ class FinancialPresentationService:
             account['card_ids'] = [r['card_id'] for r in data['cards'] if r['account_id'] == ident]
             account['contract_ids'] = [r['contract_id'] for r in data['contracts'] if r['account_id'] == ident]
             account['credit_facility_ids'] = [r['facility_id'] for r in data['credit_facilities'] if r['account_id'] == ident]
-        values = {r['asset_id']: dict(r) for r in db.execute('SELECT asset_id,book_value_minor,cost_basis_minor FROM valuations WHERE subject_id=? AND date=?', (subject, END))}
+        values = {r['asset_id']: dict(r) for r in db.execute('SELECT asset_id,book_value_minor,cost_basis_minor FROM valuations WHERE subject_id=? AND date=?', (subject, self.end_date))}
         for asset in data['assets']:
             value = values.get(asset['asset_id'], {})
             asset.update(book_value_minor=value.get('book_value_minor'), cost_basis_minor=value.get('cost_basis_minor'),
-                         valuation_date=END if value else None, valuation_source='synthetic_not_real_NAV')
+                         valuation_date=self.end_date if value else None, valuation_source='synthetic_not_real_NAV')
         data['entity_counts'] = {key: len(data[key]) for key in ('connections', 'accounts', 'cards', 'contracts', 'credit_facilities', 'positions', 'policies', 'assets', 'obligations')}
         data['policy_scope'] = 'active_as_of_dataset_end'
         data['cards_include_historical'] = True
@@ -149,7 +150,7 @@ class FinancialPresentationService:
     def _cash_series(self, db, subject, start, end, account_id=None):
         first = date.fromisoformat(start)
         previous = (first - timedelta(days=1)).isoformat() if first > date.min else start
-        lower, upper = max(START, previous), min(END, end)
+        lower, upper = max(self.start_date, previous), min(self.end_date, end)
         accounts = self._list(db, subject, 'accounts')
         if account_id is not None:
             accounts = [r for r in accounts if r['account_id'] == account_id]
@@ -162,8 +163,8 @@ class FinancialPresentationService:
                 values.append(account_id)
             for row in db.execute('SELECT account_id,date,balance_minor FROM account_balances WHERE ' + clause, values):
                 balances[row['date']][row['account_id']] = row['balance_minor']
-        if start <= START <= end:
-            balances[(date.fromisoformat(START) - timedelta(days=1)).isoformat()] = {r['account_id']: r['opening_balance_minor'] for r in accounts}
+        if start <= self.start_date <= end:
+            balances[(date.fromisoformat(self.start_date) - timedelta(days=1)).isoformat()] = {r['account_id']: r['opening_balance_minor'] for r in accounts}
         cash = {}
         for day, values in balances.items():
             if set(values) != set(types):
@@ -178,7 +179,7 @@ class FinancialPresentationService:
             grouped[row['booked_on']].append(row)
         result = []
         for day in _days(start, end):
-            covered = START <= day <= END
+            covered = self.start_date <= day <= self.end_date
             rows = grouped[day]
             total = _empty_totals()
             for row in rows:
@@ -201,7 +202,7 @@ class FinancialPresentationService:
         return result
 
     def _snapshot(self, db, subject, day):
-        if day < START:
+        if day < self.start_date:
             accounts = self._list(db, subject, 'accounts')
             result = {'cash_minor': sum(r['opening_balance_minor'] for r in accounts if r['account_type'] != 'credit_card'),
                       'credit_card_outstanding_minor': -sum(r['opening_balance_minor'] for r in accounts if r['account_type'] == 'credit_card')}
@@ -224,9 +225,9 @@ class FinancialPresentationService:
         except ValueError:
             raise FinancialDataError('INVALID_MONTH', 'month必须为真实的YYYY-MM。') from None
         requested_start, requested_end = first.isoformat(), first.replace(day=calendar.monthrange(first.year, first.month)[1]).isoformat()
-        start, end = max(START, requested_start), min(END, requested_end)
+        start, end = max(self.start_date, requested_start), min(self.end_date, requested_end)
         if start > end:
-            raise FinancialDataError('OUTSIDE_COVERAGE', '月份不在十年历史覆盖范围内。')
+            raise FinancialDataError('OUTSIDE_COVERAGE', '月份不在账户历史覆盖范围内。')
         account_id = args.get('account_id')
         rows = self._transactions(db, subject, start, end, account_id)
         daily = self._daily(db, subject, start, end, rows, account_id)
@@ -243,7 +244,7 @@ class FinancialPresentationService:
         prior = (date.fromisoformat(start) - timedelta(days=1)).isoformat()
         selected = None
         if account_id:
-            account = self.service._query(db, subject, 'get_account_overview', {'account_id': account_id}, END)['account']
+            account = self.service._query(db, subject, 'get_account_overview', {'account_id': account_id}, self.end_date)['account']
             _, balances = self._cash_series(db, subject, start, end, account_id)
             selected = {'account': account, 'opening_balance_minor': balances[prior][account_id],
                         'closing_balance_minor': balances[end][account_id],
@@ -283,7 +284,7 @@ class FinancialPresentationService:
                                'status': 'booked', 'amount_minor': row['amount_minor'], 'expense_minor': row['expense_minor'],
                                'account_id': row['account_id'], 'card_id': row['card_id'], 'contract_id': row['contract_id'],
                                'policy_id': row['details'].get('policy_id'), 'transaction_id': row['transaction_id'],
-                               'label': '已入账合成保费', 'cash_effect_included_in_daily': True})
+                               'label': '保险保费已入账', 'cash_effect_included_in_daily': True})
         obligations = _rows(db.execute('SELECT * FROM obligations WHERE subject_id=? AND due_on>=? AND due_on<=? ORDER BY due_on,obligation_id LIMIT 201', (subject, start, end)))
         statements = _rows(db.execute('SELECT * FROM card_statements WHERE subject_id=? AND due_on>=? AND due_on<=? ORDER BY due_on,statement_id LIMIT 201', (subject, start, end)))
         if len(obligations) > 200 or len(statements) > 200:
@@ -318,7 +319,7 @@ class FinancialPresentationService:
         policy_ids = {e['policy_id'] for e in events if e['policy_id']}
         contract_ids = {e['contract_id'] for e in events if e['contract_id']}
         return {'view': 'calendar', 'period': {'start_date': start, 'end_date': end,
-                'coverage_start': START, 'coverage_end': END, 'coverage_partial': start < START or end > END},
+                'coverage_start': self.start_date, 'coverage_end': self.end_date, 'coverage_partial': start < self.start_date or end > self.end_date},
                 'daily': daily, 'events': events, 'event_count': total,
                 'events_truncated': total > MAX_EVENTS, 'event_limit': MAX_EVENTS,
                 'accounts': self._list(db, subject, 'accounts'), 'cards': self._list(db, subject, 'cards'),

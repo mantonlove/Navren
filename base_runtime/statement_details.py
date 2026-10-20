@@ -33,9 +33,28 @@ def query(gateway, workspace, values):
     args = parameters(values)
     source = gateway.source(workspace)
     rows = gateway.transactions(workspace, args['month'])
-    selected = [row for row in rows if row.get('kind') == args['kind']
-                and row.get('currency', 'CNY') == args['currency']
-                and (args['category'] is None or row.get('category') == args['category'])]
+    selected = []
+    for row in rows:
+        item = row
+        # 三年账本费用以expense_minor为准；贷款利息可下钻，本金不计消费。
+        if row.get('historical_import') and type(row.get('expense_minor')) is int:
+            expense = row['expense_minor']
+            if args['kind'] == 'expense' and expense > 0:
+                item = {**row, 'kind': 'expense', 'amount_minor': expense}
+            elif args['kind'] == 'refund' and expense < 0:
+                item = {**row, 'kind': 'refund', 'amount_minor': -expense}
+        if args['kind'] == 'income' and row.get('kind') == 'investment_redemption':
+            from .history import verified_runtime_redemption
+            redemption = verified_runtime_redemption(gateway.bank, workspace, row)
+            gain = redemption.get('realized_return_minor')
+            if type(gain) is not int:
+                raise BankError('STATEMENT_GAIN_UNAVAILABLE', '已实现投资损益缺少可核对依据。', 503)
+            if gain == 0:
+                continue
+            item = {**redemption, 'kind': 'income', 'category': '已实现投资损益', 'amount_minor': gain}
+        if (item.get('kind') == args['kind'] and item.get('currency', 'CNY') == args['currency']
+                and (args['category'] is None or item.get('category') == args['category'])):
+            selected.append(item)
     selected.sort(key=lambda row: (row['occurred_at'], row['id']))
     if any(type(row.get('amount_minor')) is not int for row in selected):
         raise BankError('STATEMENT_AMOUNT_INVALID', '账单明细金额无法核对。', 503)
@@ -43,6 +62,7 @@ def query(gateway, workspace, values):
     items = [{'id': row['id'], 'account_id': row.get('account_id'),
               'occurred_at': row['occurred_at'], 'name': row['occurred_at'][:10],
               'category': row.get('category'), 'kind': row['kind'],
+              'counterparty': row.get('counterparty') or row.get('merchant'),
               'amount_minor': row['amount_minor'], 'currency': args['currency']}
              for row in selected[args['offset']:end]]
     return {**args, 'source': source['active_source'], 'month': args['month'],

@@ -1,0 +1,84 @@
+/* 表单展开控件共用视觉。末尾加载；颜色全部跟随 Navren 主题。 */
+:root{--control-radius:12px;--control-menu-radius:12px;--control-row-height:36px;--control-shadow:0 8px 28px rgba(25,46,73,.12),0 2px 6px rgba(25,46,73,.04);--control-focus-edge:color-mix(in srgb,var(--ink,#202b3a) 27%,var(--border,#d5e1ef))}
+html[data-theme="dark"]{--control-shadow:0 12px 30px rgba(0,0,0,.28),0 2px 8px rgba(0,0,0,.16)}
+.nv-control-source{position:absolute!important;width:1px!important;min-width:0!important;height:1px!important;min-height:0!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important;opacity:0!important;pointer-events:none!important}
+.nv-control{display:inline-flex;flex-direction:column;position:relative;vertical-align:middle;width:100%;min-width:0;max-width:100%;box-sizing:border-box;gap:5px}
+.nv-control .nv-control-trigger{display:flex;align-items:center;justify-content:flex-start;gap:9px;width:100%;min-width:0;min-height:40px;height:auto;box-sizing:border-box;margin:0;padding:9px 12px;border:1px solid var(--border,#d5e1ef);border-radius:var(--control-radius);background:var(--surface-card,#f8fafe);color:var(--ink,#202b3a);font:inherit;font-size:inherit;font-weight:400;line-height:1.4;text-align:start;box-shadow:none;outline:none;cursor:pointer;transition:border-color .14s,background .14s,box-shadow .14s}
+.nv-control .nv-control-trigger:hover:not(:disabled),.nv-control .nv-control-trigger[aria-expanded="true"]{border-color:var(--primary-border,#abc7e8);background:var(--surface-raised,var(--surface-card,#f8fafe))}
+.nv-control .nv-control-trigger:focus-visible{border-color:var(--control-focus-edge);box-shadow:none;outline:1px solid var(--control-focus-edge);outline-offset:2px}
+.nv-control .nv-control-trigger:disabled{opacity:.5;cursor:default}
+.nv-control .nv-control-trigger[aria-invalid="true"]{border-color:var(--state-danger,#b43b47)}
+.nv-control .nv-control-trigger.is-placeholder{color:var(--ink-50,#667a92)}
+.nv-control-value{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.nv-control-trigger>svg,.nv-control-popup svg{flex:none;display:block;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.nv-control-trigger>svg:first-child:not(:last-child){color:var(--ink-50,#667a92)}
+.nv-control-trigger>svg:last-child{width:15px;height:15px;margin-inline-start:3px;color:var(--ink-50,#667a92);transition:transform .14s}
+.nv-control-trigger[aria-expanded="true"]>svg:last-child{transform:rotate(180deg)}
+.nv-control-error{font-size:12px;font-weight:400;line-height:1.5;color:var(--state-danger,#b43b47)}
+.nv-control-error[hidden]{display:none!important}
+.nv-control-popup{position:fixed;z-index:1800;inset:auto;margin:0;box-sizing:border-box;max-width:calc(100vw - 24px);padding:5px;border:1px solid var(--border,#d5e1ef);border-radius:var(--control-menu-radius);background:var(--surface-card,#f8fafe);color:var(--ink,#202b3a);box-shadow:var(--control-shadow);font-family:var(--body,inherit);font-size:var(--font-size-sm,14px);line-height:1.4;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;animation:nv-control-enter .12s ease-out;transform-origin:top center}
+.nv-control-popup[data-placement="above"]{transform-origin:bottom center}
+.nv-control-popup::backdrop{background:transparent}
+.nv-control-popup button{box-sizing:border-box;font:inherit;color:inherit;cursor:pointer}
+.nv-control-popup .nv-control-option{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:var(--control-row-height);width:100%;margin:0;padding:8px 10px;border:0;border-radius:7px;background:transparent;color:var(--ink-70,#455569);font:inherit;font-weight:400;text-align:start;line-height:1.4;outline:0;box-shadow:none}
+.nv-control-option-label{flex:1;min-width:0;overflow-wrap:anywhere}
+.nv-control-option>svg{width:15px;height:15px;opacity:0;color:var(--primary-deep,#2c5f99)}
+.nv-control-popup .nv-control-option[aria-selected="true"]{background:var(--primary-soft,#e4effc);color:var(--primary-deep,#2c5f99);font-weight:500}
+.nv-control-option[aria-selected="true"]>svg{opacity:1}
+.nv-control-popup .nv-control-option:hover:not(:disabled),.nv-control-popup .nv-control-option.is-active:not(:disabled){background:var(--surface-hover,#e8f1fb);color:var(--ink,#202b3a)}
+.nv-control-popup .nv-control-option[aria-selected="true"].is-active{background:var(--primary-soft,#e4effc);color:var(--primary-deep,#2c5f99)}
+.nv-control-popup .nv-control-option:focus-visible{box-shadow:none;outline:1px solid var(--control-focus-edge);outline-offset:-1px}
+.nv-control-popup .nv-control-option:disabled{color:var(--ink-30,#9faaba);cursor:default;opacity:.6}
+.nv-control-group{padding:8px 10px 5px;color:var(--ink-50,#667a92);font-size:12px;font-weight:500}
+.nv-control-group:not(:first-child){margin-top:4px;border-top:1px solid var(--border,#d5e1ef)}
+.nv-control-empty{padding:8px 10px;margin:0;color:var(--ink-50,#667a92)}
+.nv-control-calendar{width:320px;padding:12px}
+.nv-control-calendar-header{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px}
+.nv-control-calendar .nv-control-nav,.nv-control-calendar .nv-control-calendar-title,.nv-control-calendar .nv-control-day,.nv-control-calendar .nv-control-month,.nv-control-calendar-footer>button{min-height:32px;padding:6px 8px;border:0;border-radius:7px;background:transparent;box-shadow:none;outline:0;font:inherit}
+.nv-control-calendar .nv-control-nav{display:grid;place-items:center;flex:none;width:32px;height:32px;padding:0}
+.nv-control-nav.is-next svg{transform:rotate(180deg)}
+.nv-control-calendar .nv-control-calendar-title{display:flex;align-items:center;justify-content:center;gap:5px;flex:1;font-weight:600;font-variant-numeric:tabular-nums}
+.nv-control-calendar-title svg{width:14px;height:14px;color:var(--ink-50,#667a92)}
+.nv-control-calendar button:hover:not(:disabled){background:var(--surface-hover,#e8f1fb)}
+.nv-control-calendar button:disabled{color:var(--ink-30,#9faaba);opacity:.45;cursor:default}
+.nv-control-weekdays,.nv-control-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.nv-control-weekdays{margin-bottom:4px;font-size:12px;color:var(--ink-50,#667a92);text-align:center}
+.nv-control-weekdays>span{padding:5px 0}
+.nv-control-day-row{display:contents}
+.nv-control-calendar .nv-control-day{height:34px;min-height:34px;padding:0;font-variant-numeric:tabular-nums}
+.nv-control-calendar .nv-control-day.is-outside{color:var(--ink-40,#8a97a8)}
+.nv-control-calendar .nv-control-day.is-today:not([aria-selected="true"]){color:var(--primary-deep,#2c5f99);box-shadow:inset 0 0 0 1px var(--primary-border,#abc7e8)}
+.nv-control-calendar .nv-control-day[aria-selected="true"],.nv-control-calendar .nv-control-day[aria-selected="true"]:hover{background:var(--primary,#367dcc);color:var(--on-primary,#fff);font-weight:600}
+.nv-control-calendar button:focus-visible,.nv-control-calendar .nv-control-day.is-today:focus-visible{box-shadow:none;outline:1px solid var(--control-focus-edge);outline-offset:-1px}
+.nv-control-month-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.nv-control-calendar .nv-control-month{min-height:36px}
+.nv-control-calendar .nv-control-month[aria-pressed="true"]{background:var(--primary-soft,#e4effc);color:var(--primary-deep,#2c5f99);font-weight:500}
+.nv-control-year-field{display:flex;align-items:center;gap:12px;margin:4px 0 12px;font-size:12px;color:var(--ink-50,#667a92)}
+.nv-control-calendar input.nv-control-year,.nv-control-calendar input.nv-control-time-input{box-sizing:border-box;width:100%;min-width:0;min-height:34px;margin:0;padding:5px 8px;border:1px solid var(--border,#d5e1ef);border-radius:7px;background:var(--surface,#edf4fb);color:var(--ink,#202b3a);font:inherit;text-align:center;font-variant-numeric:tabular-nums;box-shadow:none;outline:0}
+.nv-control-calendar input:focus-visible{border-color:var(--control-focus-edge);box-shadow:none}
+.nv-control-time-title{margin:2px 0 12px;font-weight:600}
+.nv-control-time-fields{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border,#d5e1ef)}
+.nv-control-time-title+.nv-control-time-fields{margin-top:0;padding-top:0;border-top:0}
+.nv-control-time-field{display:flex;flex:1;flex-direction:column;min-width:0;gap:5px}
+.nv-control-time-field>span{font-size:12px;color:var(--ink-50,#667a92);text-align:center}
+.nv-control-calendar-footer{display:flex;align-items:center;gap:5px;margin-top:12px;padding-top:9px;border-top:1px solid var(--border,#d5e1ef)}
+.nv-control-calendar-footer .nv-control-clear,.nv-control-calendar-footer .nv-control-today{color:var(--primary-deep,#2c5f99)}
+.nv-control-calendar-footer .nv-control-apply{margin-inline-start:auto;background:var(--primary,#367dcc);color:var(--on-primary,#fff);padding-inline:14px;font-weight:500}
+.nv-control-calendar-footer .nv-control-apply:hover:not(:disabled){background:var(--primary-deep,#2c5f99)}
+.nv-control-calendar-footer .nv-control-apply:disabled{color:var(--on-primary,#fff);opacity:.45}
+/* 已有自定义下拉与月份控件沿用同样的圆角、边框、选中层和阴影。 */
+.navren-month-popup,.ah-payer-menu,.cd-choice-menu,.account-switch-menu{border-radius:var(--control-menu-radius);border-color:var(--border,#d5e1ef);background:var(--surface-card,#f8fafe);color:var(--ink,#202b3a);box-shadow:var(--control-shadow)}
+.navren-month-trigger{border-radius:var(--control-radius);box-shadow:none}
+.navren-month-trigger:focus-visible,.cd-choice-button:focus-visible{outline:1px solid var(--control-focus-edge);outline-offset:2px;border-color:var(--control-focus-edge);box-shadow:none}
+#accountHome .ah-payer-trigger:focus-visible{outline:1px solid var(--control-focus-edge);outline-offset:2px;border-color:var(--control-focus-edge);box-shadow:none}
+.ah-payer-trigger{border-radius:var(--control-radius)}
+.ah-payer-menu .ah-payer-option{min-height:48px;border-radius:7px;padding-block:9px}
+.ah-payer-menu .ah-payer-option[aria-checked="true"]{background:var(--primary-soft,#e4effc);color:var(--primary-deep,#2c5f99)}
+.ah-payer-menu .ah-payer-option:focus-visible{outline:1px solid var(--control-focus-edge);outline-offset:-1px;box-shadow:none}
+.navren-month-popup .navren-month-cell{border-radius:7px;height:38px}
+.account-switch-menu>button,.cd-choice-option{min-height:var(--control-row-height);border-radius:7px;font-weight:400}
+.account-switch-menu>button[aria-current="true"],.cd-choice-option[aria-checked="true"]{background:var(--primary-soft,#e4effc);color:var(--primary-deep,#2c5f99)}
+.mode-senior{--control-row-height:44px}
+.mode-senior .nv-control-trigger{min-height:46px}
+@keyframes nv-control-enter{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.nv-control-popup{animation:none}.nv-control .nv-control-trigger,.nv-control-trigger>svg:last-child{transition:none}}

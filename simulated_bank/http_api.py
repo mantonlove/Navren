@@ -104,8 +104,12 @@ def create_server(bank, port=18766):
                 strict_fields(self._payload(), [])
                 result = bank.create_workspace()
                 return 201, result, result['session_token']
+            if self.command=='POST' and path==PREFIX+'/security/password-session':
+                from .security_credentials import restore
+                result=restore(bank,self._payload())
+                return 200,result,result['session_token']
             workspace, role = self._session()
-            operation_match = re.fullmatch(PREFIX+r'/operations/([a-f0-9]{32})(?:/(verify|confirm|cancel))?',path)
+            operation_match = re.fullmatch(PREFIX+r'/operations/([a-f0-9]{32})(?:/(sms|verify|confirm|cancel))?',path)
             periodic_mark_match = re.fullmatch(PREFIX+r'/periodic-charges/([a-f0-9]{64})/mark',path)
             if self.command=='GET':
                 allowed_query = {'year'} if path==PREFIX+'/annual-analysis' else {'month'} if path in (PREFIX+'/snapshot',PREFIX+'/transactions',PREFIX+'/analysis') else set()
@@ -144,12 +148,18 @@ def create_server(bank, port=18766):
                     return 200,bank.products(workspace,data['product_ids']),None
                 if path==PREFIX+'/profile':
                     return 200,bank.profile(workspace,data),None
+                if path==PREFIX+'/security/password-drafts':
+                    from .security_credentials import prepare
+                    return 200,prepare(bank,workspace,data),None
                 if periodic_mark_match:
                     strict_fields(data,['decision'],['decision'])
                     return 200,bank.mark_periodic_candidate(workspace,
                         {'candidate_id':periodic_mark_match[1],'decision':data['decision']}),None
                 if operation_match:
                     op, action = operation_match[1],operation_match[2]
+                    if action=='sms':
+                        strict_fields(data,[])
+                        return 200,bank.start_sms_verification(workspace,op),None
                     if action=='verify': return 200,bank.verify(workspace,op,data),None
                     if action=='confirm': return 200,bank.confirm(workspace,op,data),None
                     if action=='cancel':

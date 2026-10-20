@@ -11,3 +11,11 @@ feedparser==6.0.12
 beautifulsoup4==4.14.3
 # 本地个人资料正文加密；密钥由系统钥匙串提供
 cryptography>=46.0,<47
+# AA私有图片凭证真实解码、去除元信息；不走模型或外部存储
+Pillow>=11,<13
+# Agent 完整请求的本地计数；与固定官方模板及词表共同校验。
+tokenizers==0.23.3
+# 受限 WAT 纯计算 worker；不启用 WASI、宿主 imports 或金融执行。
+wasmtime==49.0.0
+# 阿里云官方号码认证 SDK；验证码由供应商生成和核验。
+alibabacloud-dypnsapi20170525==2.0.0
