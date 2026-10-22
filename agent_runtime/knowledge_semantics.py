@@ -403,13 +403,64 @@ def _concrete_time_conclusions(text):
     return result
 
 
+# Concrete definitions are answer-only: source definitions remain generic so
+# public_time_basis_bindings cannot borrow a different numerical horizon.
+_TIME_NUMBERED_DEFINITION = re.compile(
+    r't\s*\+\s*(?P<target>[0-9]{1,4})(?![0-9])\s*(?:日|天)\s*[:：]?\s*(?:指|是|为)\s*'
+    r'(?:自|从)?\s*t\s*日\s*(?:起|后)\s*(?:的)?\s*第\s*(?P<ordinal>[0-9]{1,4})(?![0-9])\s*个\s*'
+    r'(?P<unit>工作日|自然日)?'
+    r'(?P<tail>(?:(?!t\s*\+\s*(?:[0-9]|n))[^。；;！!\n]){0,60})', re.I)
+
+
+def _time_origin_states(text):
+    # Keep unknown origin wording unknown, and remove entire negative spans
+    # before checking positive wording: 不包含T日 must not also mean 含T日.
+    compact = re.sub(r'\s+', '', _time_normalized(text))
+    compact = re.split(r't\+(?:[0-9]|n)', compact, maxsplit=1)[0]
+    excluded = re.compile(r'不(?:包含|包括|含|计入|算入)t日|t日不(?:计入|算入)')
+    states = set()
+    for clause in re.split(r'[，,。；;！!\n]', compact):
+        values = {True} if excluded.search(clause) else set()
+        remaining = excluded.sub('', clause)
+        if re.search(r'(?:包含|包括|含|计入|算入)t日|t日(?:也|同样)?(?:计入|算入)', remaining):
+            values.add(False)
+        origin_unknown = re.search(r'起点|起(?:算|始)(?:日|点)?|计日(?:口径|单位)|单位', clause)
+        if (values or origin_unknown) and (
+                _TIME_UNASSERTED.search(clause) or re.search(r'未知|不明|未明确', clause)):
+            states.add(None)
+        else:
+            states.update(values)
+    return states
+
+
 def _answer_time_basis_status(text, number, unit, excludes_t):
     normalized = _time_normalized(text)
     compact = re.sub(r'\s+', '', normalized)
     units, origin = set(), False
+    numbered = [match for match in _TIME_NUMBERED_DEFINITION.finditer(normalized)
+                if int(match.group('target')) == int(number)]
+    numbered_origins = set()
+    for match in numbered:
+        remainder = normalized[match.end():]
+        if remainder and not re.match(r'[。；;！!\n]|t\s*\+\s*(?:[0-9]|n)', remainder):
+            return 'missing'  # The bounded tail ended inside this definition.
+        prefix = re.split(r'[，,。；;！!\n]', normalized[:match.start()])[-1]
+        assertion = (prefix + normalized[match.start():match.start('tail')]
+                     + re.split(r'[，,]', match.group('tail'))[0])
+        if (int(match.group('ordinal')) != int(number)
+                or match.group('unit') != unit
+                or _TIME_UNASSERTED.search(assertion)
+                or re.search(r'未知|不明|未明确', assertion)
+                or set(re.findall(r'工作日|自然日', match.group('tail'))) - {unit}):
+            return 'missing'
+        units.add(match.group('unit'))
+        numbered_origins.update(_time_origin_states(match.group('tail')))
     for definition in _time_definitions(text):
         units.add(definition['unit'])
         origin = origin or definition['excludes_t'] is True
+        if numbered:
+            generic = _TIME_DEFINITION.fullmatch(definition['definition'])
+            numbered_origins.update(_time_origin_states(generic.group('tail')))
     literal = re.escape(number)
     direct = re.compile(r't\+0*' + literal + r'(?![0-9])'
         r'(?:(?:日|天)(?:内|以内)?)?(?:\()?(?:按|以)?'
@@ -418,6 +469,14 @@ def _answer_time_basis_status(text, number, unit, excludes_t):
         units.add(match.group('unit').removeprefix('个'))
         nearby = re.split(r'[。；;！!\n]', compact[match.start():match.end()+80])[0]
         origin = origin or _TIME_EXCLUDES_ORIGIN.search(nearby) is not None
+        if numbered:
+            local = nearby[match.end()-match.start():]
+            numbered_origins.update(_time_origin_states(local))
+    if numbered:
+        # Unknown or contradictory origin cannot borrow a correct unit/phrase.
+        # The usual generic/direct path is byte-for-byte unchanged otherwise.
+        return ('explicit' if units == {unit} and type(excludes_t) is bool
+                and numbered_origins == {excludes_t} else 'missing')
     if units == {unit}:
         return ('explicit' if excludes_t is None or origin else 'semantic_review_required')
     if units:

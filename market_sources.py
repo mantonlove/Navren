@@ -1,6 +1,7 @@
 """白名单公开发布入口；feedparser/BeautifulSoup 解析，禁止任意 URL 抓取。"""
 from __future__ import annotations
-import hashlib, re, time, urllib.request, urllib.error
+import hashlib, json, re, time, urllib.request, urllib.error
+from market_source_attribution import media_attribution
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
@@ -295,6 +296,7 @@ def check_public_access(soup,main):
 def read_article(source,entry):
     from bs4 import BeautifulSoup
     url=safe_url(source,entry['url']); title=entry['title']; published=entry.get('published_at')
+    attribution = {}
     link_status='verified'; body_text='';updated=None;origin=source.publisher;author='';precision=entry.get('published_precision') or ('second' if published else 'date')
     try:
         raw,final,kind=fetch(source,url,True)
@@ -336,6 +338,8 @@ def read_article(source,entry):
             body_text=text(main)
             if len(body_text)<120:raise ArticleUnavailable('soft_error_or_empty_body')
             if len(title)<5:raise ValueError('article_title_missing')
+            attribution=media_attribution(source,soup,published,body_text)
+            if attribution:origin=attribution['origin_publisher']
     except urllib.error.HTTPError as e:
         if source.scope=='metadata_only' and e.code in (401,403):link_status='restricted'
         else:raise
@@ -343,8 +347,10 @@ def read_article(source,entry):
     # 原文只作后台审核材料；公共接口保留直链和短证据，不转载全文。
     access='free_full_text' if source.scope!='metadata_only' else link_status
     identity=source.identity if source.scope=='public_media' else 'professional_report' if source.scope=='metadata_only' else 'official_interpretation' if source.id=='nbs_analysis' else 'official_speech' if '/press/key/' in url else 'official_interview' if '/press/inter/' in url else source.identity
-    fingerprint=hashlib.sha256(('source-parser-v3\n'+title+'\n'+published+'\n'+precision+'\n'+body_text+'\n'+access+'\n'+identity+'\n'+origin).encode()).hexdigest()
-    return {'id':'a_'+hashlib.sha256(url.encode()).hexdigest()[:24],'source_id':source.id,'publisher':source.publisher,
+    fingerprint=hashlib.sha256(('source-parser-v3\n'+title+'\n'+published+'\n'+precision+'\n'+body_text+'\n'+access+'\n'+identity+'\n'+(origin or '')).encode()).hexdigest()
+    if attribution:
+        fingerprint=hashlib.sha256((fingerprint+'\n'+json.dumps(attribution,ensure_ascii=False,sort_keys=True,separators=(',',':'))).encode()).hexdigest()
+    return {**attribution,'id':'a_'+hashlib.sha256(url.encode()).hexdigest()[:24],'source_id':source.id,'publisher':source.publisher,
         'title':title,'title_cn':title if re.search(r'[\u4e00-\u9fff]',title) else '',
         'url':url,'published_at':published,'published_precision':precision,'original_timezone':source.timezone,'content_updated_at':updated,
         'fetched_at':now_iso(),'checked_at':now_iso(),'read_scope':'metadata_only' if source.scope=='metadata_only' else 'full_text',

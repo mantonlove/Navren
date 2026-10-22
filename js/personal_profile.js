@@ -4,12 +4,13 @@ window.NavrenPersonalProfile = (() => {
   const keys=['nickname','full_name','phone','email','city','occupation','company','birthday','gender','bio','avatar'];
   const words={'个人资料':'Personal profile','编辑资料':'Edit profile','编辑个人资料':'Edit personal profile','基本资料':'Basic information','联系信息':'Contact information','工作与简介':'Work and biography','昵称':'Display name','姓名':'Full name','生日':'Birthday','性别':'Gender','联系邮箱':'Contact email','联系手机':'Contact phone','所在城市':'City','职业':'Occupation','公司 / 学校':'Company / school','个人简介':'About you','未填写':'Not provided','不设置':'Not set','女':'Female','男':'Male','不便透露':'Prefer not to say','更换头像':'Change photo','移除头像':'Remove photo','取消':'Cancel','保存修改':'Save changes','保存中…':'Saving…','处理图片…':'Processing image…','关闭':'Close','重新读取':'Reload','放弃修改并读取最新':'Discard changes and reload','沿用原昵称和头像':'Use previous name and photo','除了昵称，其余信息均可按需填写。':'All fields except the display name are optional.','联系信息不会修改登录凭据。':'Contact details do not change your sign-in credentials.','资料暂时无法读取，请重试。':'Your profile could not be loaded. Please retry.','个人资料已保存':'Profile saved','请输入昵称。':'Enter a display name.','请输入有效的联系邮箱。':'Enter a valid contact email.','请输入有效的联系手机，允许国际区号。':'Enter a valid phone number; international prefixes are supported.','生日不能晚于今天。':'Your birthday cannot be in the future.','请选择 5 MB 以内的 PNG、JPEG、WebP 或 GIF 图片。':'Choose a PNG, JPEG, WebP or GIF image smaller than 5 MB.','图片无法读取，请换一张图片。':'This image could not be read. Try another image.','图片处理失败，请换一张图片。':'This image could not be processed. Try another image.','资料已在其他页面更新，请读取最新资料后重新编辑。':'Your profile changed elsewhere. Reload the latest profile before editing.','保存失败，请稍后重试。':'Changes could not be saved. Please retry.','账户已变化，请重新打开资料。':'Your account changed. Reopen your profile.','正在读取资料…':'Loading profile…','资料响应无法核对，请重新读取。':'Profile data could not be verified. Please reload.'};
   words['旧资料待确认']='Previous profile needs confirmation';words['旧资料存在冲突，需本人确认']='Previous profile data conflicts. Confirm your own information.';
+  Object.assign(words,{'模拟角色资料':'Simulated persona','本人资料':'Your personal profile','模拟联系邮箱':'Simulated contact email','模拟联系手机':'Simulated contact phone','以下为虚构体验角色资料，模拟联系方式仅用于展示。':'These are fictional persona details. Simulated contacts are for display only.','本人资料可通过“编辑资料”自行填写。':'You can enter your own details using Edit profile.'});
   const t=value=>window.NavrenI18n?.language==='en'?(words[value]||value):value;
   const node=(tag,text,cls)=>{const e=document.createElement(tag);if(text!=null)e.textContent=t(text);if(cls)e.className=cls;return e;};
   const copy=(tag,text,cls)=>{const e=node(tag,text,cls);e.dataset.ppCopy=text;return e;};
   const blank=()=>Object.fromEntries(keys.map(key=>[key,'']));
   const validAvatar=value=>value===''||typeof value==='string'&&value.length<=546176&&/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(value);
-  let profile=null,identity=null,epoch=0,accountCheck=0,readPromise=null,dialog=null,editor=null,hidden=false,needsConfirmation=false;
+  let profile=null,identity=null,simulationProfile=null,epoch=0,accountCheck=0,readPromise=null,dialog=null,editor=null,hidden=false,needsConfirmation=false;
   const channel=typeof BroadcastChannel==='function'?new BroadcastChannel('navren-personal-profile'):null;
   const bindingFields=['registered_user_id','workspace_id','account_id','privacy_revision','auth_subject','session_generation','csrf','auth_expires_at','lease_expires_at'];
   const registered=value=>typeof value==='string'&&/^[a-f0-9]{32}$/.test(value);
@@ -21,6 +22,30 @@ window.NavrenPersonalProfile = (() => {
   function accountProfile(state,snapshot){
     if(!state||state.contract!=='navren.account-state/1'||state.registered_user_id!==snapshot.registered_user_id||state.workspace_binding!==snapshot.workspace_id||state.persona_id!==snapshot.account_id||!Number.isSafeInteger(state.revision)||state.revision<0||!Array.isArray(state.initialized_sections)||!state.sections?.profile)throw Error(t('资料响应无法核对，请重新读取。'));
     return validate({profile:{...Object.fromEntries(keys.map(key=>[key,state.sections.profile[key]])),revision:state.revision,updated_at:state.updated_at},account_revision:state.revision});
+  }
+  function simulatedProfile(state,snapshot){
+    const value=state?.simulated_persona_profile,p=value?.profile;
+    if(value?.contract!=='navren.simulated-persona-profile/1'||value.status!=='available'||!['tycoon','grain_farmer','working_landlady','retired_entrepreneur'].includes(value.persona_id)||
+      value.registered_user_id!==snapshot.registered_user_id||value.workspace_binding!==snapshot.workspace_id||value.persona_id!==snapshot.account_id||
+      value.data_origin!=='navren_synthetic'||value.is_simulated!==true||value.is_real_identity!==false||value.contact_use!=='display_only'||value.editable!==false||
+      typeof value.template_version!=='string'||!/^[a-f0-9]{64}$/.test(value.template_version)||
+      !p||p.persona_id!==value.persona_id||p.data_origin!=='navren_synthetic'||p.is_simulated!==true||
+      ['nickname','full_name','email','simulation_contact_phone','city','occupation','birthday','bio'].some(key=>typeof p[key]!=='string'||!p[key].trim())||
+      !p.email.endsWith('@navren.example.invalid')||!/^SIM-PHONE-\*{4}-100[1-4]$/.test(p.simulation_contact_phone))return null;
+    return JSON.parse(JSON.stringify(value));
+  }
+  function sameSimulation(a,b){return a===b||!!a&&!!b&&a.template_version===b.template_version&&a.registered_user_id===b.registered_user_id&&a.workspace_binding===b.workspace_binding&&a.persona_id===b.persona_id;}
+  function summaryGrid(rows){
+    const dl=node('dl',null,'pp-summary-grid');
+    for(const [label,value]of rows){const field=node('div',null,'pp-summary-item'),dd=node('dd');dd.textContent=value||t('未填写');if(value){dd.setAttribute('translate','no');dd.dataset.i18nSkip='';}dd.classList.toggle('pp-unfilled',!value);field.append(copy('dt',label),dd);dl.append(field);}
+    return dl;
+  }
+  function renderSimulatedSummary(host){
+    if(!live()||!simulationProfile||!sameBinding(identity,window.BankClient?.identity()))return false;
+    const value=simulationProfile.profile,section=node('section');section.dataset.profileScope='simulated-persona';
+    const heading=node('div',null,'pp-summary-bio');heading.append(copy('span','模拟角色资料'),node('p',value.nickname));section.append(heading,copy('p','以下为虚构体验角色资料，模拟联系方式仅用于展示。','pp-field-note'));
+    section.append(summaryGrid([['姓名',value.full_name],['模拟联系邮箱',value.email],['模拟联系手机',value.simulation_contact_phone],['所在城市',value.city],['职业',value.occupation],['生日',value.birthday]]));
+    const bio=node('div',null,'pp-summary-bio');bio.append(copy('span','个人简介'),node('p',value.bio));section.append(bio);host.append(section);return true;
   }
   function confirmationRequired(state){return state.migration?.legacy_profile==='conflict'&&!state.initialized_sections.includes('profile');}
   function ownedLegacyInfo(snapshot){
@@ -52,9 +77,10 @@ window.NavrenPersonalProfile = (() => {
     if(subtitle){subtitle.textContent=p?(needsConfirmation?t('旧资料存在冲突，需本人确认'):[p.occupation,p.company,p.city].filter(Boolean).join(' · ')||t('个人资料')):'';subtitle.setAttribute('translate','no');subtitle.dataset.i18nSkip='';}
     drawAvatar(document.getElementById('profileAvatar'),needsConfirmation?null:p);
     const edit=document.getElementById('editPersonalProfile'),avatar=document.getElementById('profileAvatar');if(edit){edit.textContent=t('编辑资料');edit.disabled=!p;}if(avatar)avatar.disabled=!p;
-    if(summary){summary.replaceChildren();if(p&&needsConfirmation){const notice=copy('p','旧资料存在冲突，需本人确认','pp-read-error');notice.setAttribute('role','status');summary.append(notice);}else if(p){
-      const dl=node('dl',null,'pp-summary-grid');
-      for(const [label,value]of [['姓名',p.full_name],['联系邮箱',p.email],['联系手机',p.phone],['所在城市',p.city],['职业',p.occupation],['生日',p.birthday]]){const field=node('div',null,'pp-summary-item'),dd=node('dd');dd.textContent=value||t('未填写');if(value){dd.setAttribute('translate','no');dd.dataset.i18nSkip='';}dd.classList.toggle('pp-unfilled',!value);field.append(copy('dt',label),dd);dl.append(field);}summary.append(dl);
+    if(summary){summary.replaceChildren();const hasSimulation=renderSimulatedSummary(summary);if(p&&needsConfirmation){const notice=copy('p','旧资料存在冲突，需本人确认','pp-read-error');notice.setAttribute('role','status');summary.append(notice);}else if(p){
+      const hasPersonalDetails=['full_name','email','phone','city','occupation','birthday','company','bio','gender'].some(key=>p[key]);
+      if(hasSimulation){const heading=node('div',null,'pp-summary-bio');heading.append(copy('span','本人资料'),copy('p',hasPersonalDetails?'个人资料':'本人资料可通过“编辑资料”自行填写。'));summary.append(heading);}
+      if(!hasSimulation||hasPersonalDetails)summary.append(summaryGrid([['姓名',p.full_name],['联系邮箱',p.email],['联系手机',p.phone],['所在城市',p.city],['职业',p.occupation],['生日',p.birthday]]));
       if(p.bio){const bio=node('div',null,'pp-summary-bio');bio.append(copy('span','个人简介'),node('p',null));bio.lastElementChild.textContent=p.bio;bio.lastElementChild.setAttribute('translate','no');bio.lastElementChild.dataset.i18nSkip='';summary.append(bio);}
     }}
     document.querySelectorAll('.message.user .avatar').forEach(decorateAvatar);
@@ -72,10 +98,10 @@ window.NavrenPersonalProfile = (() => {
       if(!same(token,snapshot,data)||!guard.valid(data))return null;
       const next=validate(data);
       if(next.revision!==canonical.revision||!sameProfile(next,canonical)||profile&&identity?.registered_user_id===snapshot.registered_user_id&&next.revision<profile.revision)throw Error(t('资料已在其他页面更新，请读取最新资料后重新编辑。'));
-      profile=canonical;identity=snapshot;needsConfirmation=confirmation;renderSummary();
+      profile=canonical;simulationProfile=simulatedProfile(state,snapshot);identity=snapshot;needsConfirmation=confirmation;renderSummary();
       window.dispatchEvent(new CustomEvent('navren:personal-profile-loaded',{detail:{registered_user_id:identity.registered_user_id,workspace_id:identity.workspace_id,account_revision:profile.revision}}));
       return needsConfirmation?null:{...profile};
-    }catch(error){if(token===epoch&&!hidden){profile=identity=null;needsConfirmation=false;readError(error);}return null;}finally{if(token===epoch)readPromise=null;}});
+    }catch(error){if(token===epoch&&!hidden){profile=identity=simulationProfile=null;needsConfirmation=false;readError(error);}return null;}finally{if(token===epoch)readPromise=null;}});
     readPromise=task;return task;
   }
   function dateToday(){const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const get=type=>parts.find(part=>part.type===type).value;return get('year')+'-'+get('month')+'-'+get('day');}
@@ -149,7 +175,7 @@ window.NavrenPersonalProfile = (() => {
     }
     form.append(body,footer);dialog.append(form);document.body.append(dialog);dialog.addEventListener('cancel',event=>{event.preventDefault();close();});dialog.addEventListener('click',event=>{if(event.target===dialog){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)close();}});dialog.showModal();window.NavrenFormControls?.enhance(dialog);if(needsConfirmation)setEditorStatus('旧资料存在冲突，需本人确认');updateSave();editor.inputs.get(options.field||'nickname')?.focus({preventScroll:true});
   }
-  function invalidate(){epoch++;accountCheck++;readPromise=null;profile=identity=null;needsConfirmation=false;close(true);renderSummary();}
+  function invalidate(){epoch++;accountCheck++;readPromise=null;profile=identity=simulationProfile=null;needsConfirmation=false;close(true);renderSummary();}
   async function syncAccountProfile(){
     const token=++accountCheck;let snapshot;
     if(hidden||!Storage.accountReady())return;
@@ -157,13 +183,13 @@ window.NavrenPersonalProfile = (() => {
       snapshot=window.BankClient?.identity?.();if(!snapshot)return;const guard=BankClient.guard();
       const state=await Storage.ready();
       if(hidden||token!==accountCheck||!sameBinding(snapshot,BankClient.identity())||!guard.valid()||!Storage.accountReady())return;
-      const current=accountProfile(state,snapshot),confirmation=confirmationRequired(state);
+      const current=accountProfile(state,snapshot),confirmation=confirmationRequired(state),nextSimulation=simulatedProfile(state,snapshot);
       if(live()&&current.revision<profile.revision)return;
-      if(live()&&profile.revision===current.revision&&sameProfile(profile,current)&&needsConfirmation===confirmation)return;
+      if(live()&&profile.revision===current.revision&&sameProfile(profile,current)&&needsConfirmation===confirmation&&sameSimulation(simulationProfile,nextSimulation))return;
       if(editor?.saving)return;
       if(dialog){if(confirmation){needsConfirmation=true;renderSummary();}dialog.querySelector('.pp-legacy-import')?.remove();setEditorStatus('资料已在其他页面更新，请读取最新资料后重新编辑。',true);editor.reload.hidden=false;return;}
       // 只采用适配器已核验的同一 canonical profile；不再发 GET 或触发 ready 循环。
-      epoch++;readPromise=null;profile=current;identity={...snapshot};needsConfirmation=confirmation;renderSummary();
+      epoch++;readPromise=null;profile=current;simulationProfile=nextSimulation;identity={...snapshot};needsConfirmation=confirmation;renderSummary();
       window.dispatchEvent(new CustomEvent('navren:personal-profile-loaded',{detail:{registered_user_id:identity.registered_user_id,workspace_id:identity.workspace_id,account_revision:profile.revision}}));
     }catch(error){if(token===accountCheck&&!hidden&&sameBinding(snapshot,window.BankClient?.identity?.())){invalidate();readError(error);}}
   }

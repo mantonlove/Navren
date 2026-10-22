@@ -8,6 +8,7 @@ import re
 from simulated_bank import BankError
 from personal_profile import FIELDS, TZ, validate_profile
 from user_memory import privacy_revision
+from base_runtime.persona_display_profile import project_simulated_persona_profile
 
 CONTRACT = 'navren.account-state/1'
 PRESETS = ('default', 'stone', 'wave', 'orbit', 'leaf')
@@ -184,7 +185,8 @@ class AccountState:
         result = {'contract': CONTRACT, **binding, 'workspace_binding': w, 'revision': revision,
                   'updated_at': datetime.fromtimestamp(row['updated_at'], TZ).isoformat(timespec='seconds') if row else None,
                   'initialized_sections': sorted(value['sections']),
-                  'sections': sections, 'migration': value['migration']}
+                  'sections': sections, 'migration': value['migration'],
+                  'simulated_persona_profile': project_simulated_persona_profile(binding)}
         return result, value
 
     def _write(self, db, owner, revision, value):

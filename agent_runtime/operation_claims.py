@@ -374,6 +374,31 @@ def _non_status_fallback_projection(clause):
                     r'(?:仍|只|仅|应|必须)?以已结算(?:的)?现金(?:余额)?为准',
                     clause.strip()):
         return ' ' * len(clause)
+    # Complete bounded public rule queries are not transaction states.
+    # Original explicit predicates run first; private subjects remain.
+    timing_action = r'(?:赎回|转账|转出|汇款|汇出|付款|支付|申购|买入)'
+    rule_query = re.fullmatch(
+        r'(?:请)?(?:需要|需)?(?:先|再|进一步|逐一|逐项)?(?:核验|核实|核对)'
+        r'(?:其|(?:具体)?(?:产品|基金)(?:的)?)?' + timing_action
+        + r'(?:确认|规则|条件|条款)(?:和|与|及|、)到账(?:规则|条件|条款|时间|时点|日期|期限)'
+        r'(?:后(?:才能|才可|方可|再)?确认)?',
+        clause.strip())
+    if rule_query and not _REFERENCE_PRIVATE_SUBJECT.search(clause):
+        return ' ' * len(clause)
+    # A closed processing-dependency relation names a timing constraint, not
+    # an observed arrival. Mask only its arrival token; explicit statuses ran
+    # first, and private subjects or extra predicates cannot borrow this span.
+    process_step = r'(?:申请受理|受理|确认|支付|银行处理)'
+    timing_dependency = re.fullmatch(
+        r'(?:' + timing_action + r'(?:款项|资金))?(?:实际)?(?P<arrival>到账)'
+        r'(?:时间|时点|日期|期限)?(?:还|仍|也)?受' + process_step
+        + r'(?:(?:、|及|和|与)' + process_step + r'){1,5}环节影响',
+        clause.strip())
+    if timing_dependency and not _REFERENCE_PRIVATE_SUBJECT.search(clause):
+        offset = len(clause) - len(clause.lstrip())
+        start, end = timing_dependency.span('arrival')
+        projected = (projected[:offset + start] + ' ' * (end - start)
+                     + projected[offset + end:])
     # A complete epistemic denial about public product attributes is not a
     # claim about an operation. The bounded full grammar admits no personal
     # subject, actual status predicate, extra coordinated assertion or suffix.

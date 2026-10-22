@@ -273,6 +273,14 @@ def native_tools(facts=(), evidence=(), drafts=(), identifiers=None, widgets=(),
         schema['required']=[key for key in schema['required'] if key not in ('text','amount_claims')]+['direct_answer','conditions','unknowns']
         specs['answer_reviewed'][0]=specs['answer_reviewed'][0].split(' 每个个人金融金额片段在amount_claims中复制',1)[0]
         specs['answer_reviewed'][0]+=PUBLIC_QUOTE_PARTS_NOTICE
+        from .public_fee_statement_contract import source_rows_from_evidence, build_catalog, restrict_schema, extend_time_catalog
+        fee_sources=source_rows_from_evidence(evidence)
+        if fee_sources is not None:
+            restrict_schema(schema,extend_time_catalog(build_catalog(*fee_sources),evidence))
+            specs['answer_reviewed'][0]+=(' 本轮费用陈述采用来源绑定的有限文字目录；所有text和claims.text完整选择各自enum中的句子，'
+                '不能追加、拼接改写或另造费用关系。每个正文或条件句必须有同文claims，evidence_ids精确指向支持该句的来源；'
+                '直接回答至少含一个规范事实或结论句，不能只有引文。unknowns仅用受控未知句，不选引用ID。'
+                'followups为空或选择受控问句；仍需完整回答问题，原一次修复、预算和完整独立审核不变。')
     for name in ('answer_facts','answer_reviewed'):
         if widgets: specs[name][1]['properties']['widget_ids']['items']['enum']=list(widgets)
         else: specs[name][1]['properties']['widget_ids']['maxItems']=0
@@ -545,6 +553,11 @@ class BankTools:
         self.metric_selection_mode=metric_selections
         self.metric_selection_receipts=[]
         self.metric_part_receipts=[]
+        self._joint_source_plan=None
+        self._fee_delivery_context=None
+        self._fee_statement_args=None
+        self._fee_statement_rendered=None
+        self.joint_source_receipts=[]
         self.request_privacy = request_privacy or RequestPrivacyPolicy(private_context_disabled)
         self.private_context_disabled = private_context_disabled
         self.g, self.w, self.request_id = gateway, workspace, request_id
@@ -1246,6 +1259,12 @@ class BankTools:
                     and type(row.get('status_code')) is int):continue
             if (type(row)is dict and row=={'tool':'answer_reviewed','status':'rejected','code':'INVALID_TOOL_ARGUMENTS','status_code':400}
                     and type(row.get('status_code')) is int):continue
+            if (type(row)is dict
+                    and row=={'tool':'answer_reviewed','status':'rejected','code':'PUBLIC_FEE_SOURCE_REQUIRED','status_code':422}
+                    and type(row.get('status_code')) is int):continue
+            if (type(row)is dict
+                    and row=={'tool':'answer_reviewed','status':'rejected','code':'PUBLIC_TIME_BASIS_REQUIRED','status_code':422}
+                    and type(row.get('status_code')) is int):continue
             if row.get('tool') not in allowed or row.get('status')!='completed':return []
         pinned=self.knowledge._pinned_status
         market_evidence={}
@@ -1320,7 +1339,416 @@ class BankTools:
                 return True
         return False
 
-    def _render_public_quote_parts(self, args):
+    @staticmethod
+    def _joint_source_digest(value):
+        return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False,
+            separators=(',',':'),allow_nan=False).encode()).hexdigest()
+
+    @staticmethod
+    def _joint_source_invalid():
+        raise BankError('PUBLIC_JOINT_SOURCE_PLAN_INVALID',
+            '联合原文补引条件不完整、存在冲突或已失效，本轮停止，不再修稿。',409)
+
+    def _joint_time_endpoint_sources(self, bindings):
+        from .public_quote_recovery import delivered_time_endpoint_sources
+        return delivered_time_endpoint_sources(bindings,evidence=self.evidence,
+            delivered=self.knowledge._delivered,pinned=self.knowledge._pinned_status,
+            context_hash=self.start_context)
+
+    def _fee_source_quote_rows(self, args):
+        """Only complete fee originals in evidence actually cited by this draft."""
+        pinned=self.knowledge._pinned_status
+        cited={eid for claim in args.get('claims',[])for eid in claim.get('evidence_ids',[])}
+        if (not cited or not isinstance(pinned,dict)or pinned.get('ready')is not True
+                or not pinned.get('provider_id')or not pinned.get('public_release_id')):
+            self._joint_source_invalid()
+        selected={};identities=set();versions=set();days=set()
+        identity_fields=('product_id','share_class_id','channel_id','release_id')
+        for eid in sorted(cited):
+            entry=self.evidence.get(eid,{});data=entry.get('data',{})
+            if (entry.get('id')!=eid or entry.get('context_hash')!=self.start_context
+                    or entry.get('tool')!='knowledge_search'or entry.get('source')!='public_knowledge'
+                    or data.get('ready')is not True or data.get('scope')!='public'
+                    or data.get('provider_id')!=pinned['provider_id']
+                    or data.get('public_release_id')!=pinned['public_release_id']
+                    or type(data.get('as_of'))is not str
+                    or datetime.strptime(data['as_of'],'%Y-%m-%d').date().isoformat()!=data['as_of']):
+                self._joint_source_invalid()
+            for hit in data.get('hits',[]):
+                if 'fees'not in hit.get('facets',[]):continue
+                delivered=self.knowledge._delivered.get((hit.get('citation_id'),data['as_of']))
+                if (not delivered or delivered[0]!=hit or hit.get('visibility')!='public'
+                        or hit.get('outbound_allowed')is not True or hit.get('content_status')!='full_text'
+                        or hit.get('claims_are_account_facts')is not False or hit.get('withdrawn',False)is not False
+                        or hit.get('release_id')!=pinned['public_release_id']
+                        or any(type(hit.get(k))is not str or not hit[k]for k in
+                            ('citation_id','document_id','document_version_id','product_id','share_class_id'))
+                        or 'channel_id'not in hit or not(hit['channel_id']is None or type(hit['channel_id'])is str)
+                        or type(hit.get('excerpt'))is not str or not 0<len(hit['excerpt'])<=1198
+                        or monetary_occurrences(unicodedata.normalize('NFKC',hit['excerpt']))):
+                    self._joint_source_invalid()
+                identities.add(tuple(hit[k]for k in identity_fields))
+                versions.add((hit['document_id'],hit['document_version_id']));days.add(data['as_of'])
+                key=(hit['citation_id'],data['as_of']);row={'evidence_id':eid,'hit':deepcopy(hit),'as_of':data['as_of']}
+                if key in selected:
+                    if selected[key]['hit']!=hit:self._joint_source_invalid()
+                else:selected[key]=row
+        if len(identities)!=1 or len(versions)!=1 or len(days)!=1 or not 1<=len(selected)<=6:
+            self._joint_source_invalid()
+        from .public_fee_statement_contract import canonical_source_rows
+        return canonical_source_rows(list(selected.values()))
+
+    def _fee_source_time_bindings(self, args, identity):
+        """An existing concrete limit needs the unchanged original explicit gate."""
+        from .knowledge_semantics import _concrete_time_conclusions, public_time_basis_bindings
+        from .public_quote_recovery import _fee_texts
+        body=args.get('text')
+        if body is None:
+            body='\n'.join(part['text']for path,part,_ in _fee_texts(args)if not path.startswith('claims['))
+        texts=[('text',body)]+[('claims['+str(i)+'].text',claim['text'])
+            for i,claim in enumerate(args.get('claims',[]))]
+        evidence=[entry for entry in self.evidence.values()if entry.get('context_hash')==self.start_context]
+        cited={eid for claim in args.get('claims',[])for eid in claim.get('evidence_ids',[])}
+        records=[];fields=('product_id','share_class_id','channel_id','release_id')
+        for location,text in texts:
+            numbers=_concrete_time_conclusions(text)
+            if not numbers:continue
+            bindings=public_time_basis_bindings({'text':text,'claims':args['claims']},evidence)
+            if ({item['notation'][2:]for item in bindings}!=numbers
+                    or any(item['answer_status']!='explicit'or tuple(item.get(k)for k in fields)!=identity
+                        for item in bindings)):
+                self._joint_source_invalid()
+            for item in bindings:
+                for role in ('limit','definition'):
+                    eid=item[role+'_evidence_id'];entry=self.evidence.get(eid,{});data=entry.get('data',{})
+                    hits=[hit for hit in data.get('hits',[])if hit.get('citation_id')==item[role+'_citation_id']]
+                    if (eid not in cited or len(hits)!=1 or entry.get('id')!=eid
+                            or entry.get('context_hash')!=self.start_context or entry.get('tool')!='knowledge_search'
+                            or entry.get('source')!='public_knowledge' or data.get('ready')is not True
+                            or data.get('scope')!='public' or data.get('provider_id')!=self.knowledge._pinned_status['provider_id']
+                            or data.get('public_release_id')!=identity[3]):self._joint_source_invalid()
+                    hit=hits[0];delivered=self.knowledge._delivered.get((hit['citation_id'],data.get('as_of')))
+                    if (not delivered or delivered[0]!=hit or hit.get('visibility')!='public'
+                            or hit.get('outbound_allowed')is not True or hit.get('content_status')!='full_text'
+                            or hit.get('claims_are_account_facts')is not False or hit.get('withdrawn',False)is not False
+                            or not {'liquidity','terms'}&set(hit.get('facets',[]))
+                            or any(hit.get(k)!=item.get(k)for k in (*fields,'document_id','document_version_id'))):
+                        self._joint_source_invalid()
+            records.append({'location':location,'bindings':bindings})
+        return records
+
+    def _prepare_fee_source_quotes(self, args, context):
+        """Separate fee-only admission; it never obtains identity from time rows."""
+        if self._joint_source_plan is not None:self._joint_source_invalid()
+        self._joint_source_plan={'status':'preparing'}
+        try:
+            self.fresh();self.validate_answer_arguments(args)
+            keys={'contract','original_draft_sha256','restored_args_sha256','fee_paths','protected_time_sentences'}
+            if (type(context)is not dict or set(context)!=keys
+                    or context['contract']!='navren.public-quote-fee-source-context/1'
+                    or not re.fullmatch('[a-f0-9]{64}',context['original_draft_sha256'])
+                    or context['restored_args_sha256']!=self._joint_source_digest(args)):
+                self._joint_source_invalid()
+            from .public_quote_recovery import _fee_texts, _fee_source_time_sentences
+            fields={path for path,_,_ in _fee_texts(args)};paths=context['fee_paths']
+            if (type(paths)is not list or not 1<=len(paths)<=12 or len(paths)!=len(set(paths))
+                    or any(type(path)is not str or path not in fields for path in paths)
+                    or context['protected_time_sentences']!=_fee_source_time_sentences(args)):
+                self._joint_source_invalid()
+            sources=self._fee_source_quote_rows(args)
+            identity=tuple(sources[0]['hit'][k]for k in ('product_id','share_class_id','channel_id','release_id'))
+            self._fee_source_time_bindings(args,identity)
+            self._joint_source_plan={'status':'prepared','arguments_sha256':self._joint_source_digest(args),
+                'context':deepcopy(context),'sources':sources}
+        except BankError:raise
+        except (KeyError,ValueError,TypeError,MetricClaimError):self._joint_source_invalid()
+
+    def prepare_joint_source_quotes(self, args, context):
+        """Private one-shot host plan; no model selector or new financial fact."""
+        self._fee_statement_args=deepcopy(args)
+        if isinstance(context,dict)and context.get('contract')=='navren.public-quote-fee-delivery-context/1':
+            # A descriptor is not a committed source plan. Original guards may
+            # still reject this draft and use their existing single repair.
+            if (self._joint_source_plan is not None or set(context)!=
+                    {'contract','original_draft_sha256','restored_args_sha256'}
+                    or not re.fullmatch('[a-f0-9]{64}',context['original_draft_sha256'])
+                    or context['restored_args_sha256']!=self._joint_source_digest(args)):
+                self._joint_source_invalid()
+            self._fee_delivery_context=deepcopy(context)
+            return
+        if isinstance(context,dict)and context.get('contract')=='navren.public-quote-fee-source-context/1':
+            return self._prepare_fee_source_quotes(args,context)
+        if self._joint_source_plan is not None:self._joint_source_invalid()
+        # A failed plan also consumes this host-only admission. Conversation
+        # must not turn a rejected source plan into another model repair.
+        self._joint_source_plan={'status':'preparing'}
+        try:
+            self.fresh();self.validate_answer_arguments(args)
+            keys={'contract','original_draft_sha256','restored_args_sha256','fee_paths',
+                'time_paths','time_basis_rejections','protected_time_sentences'}
+            if 'time_endpoint_sources'in context:keys.add('time_endpoint_sources')
+            if (type(context)is not dict or set(context)!=keys
+                    or context['contract']!='navren.public-quote-joint-source-context/1'
+                    or not re.fullmatch('[a-f0-9]{64}',context['original_draft_sha256'])
+                    or context['restored_args_sha256']!=self._joint_source_digest(args)):
+                self._joint_source_invalid()
+            from .public_quote_recovery import _fee_texts, _joint_time_model_sentences
+            fields={path:part['text']for path,part,_ in _fee_texts(args)}
+            for key in ('fee_paths','time_paths'):
+                paths=context[key]
+                if (type(paths)is not list or not 1<=len(paths)<=12
+                        or any(type(path)is not str or path not in fields for path in paths)
+                        or len(paths)!=len(set(paths))):self._joint_source_invalid()
+            protected=context['protected_time_sentences'];covered=set()
+            if type(protected)is not list or not 1<=len(protected)<=12:self._joint_source_invalid()
+            for row in protected:
+                if (type(row)is not dict or set(row)!={'path','notation','text_nfkc',
+                        'text_nfkc_sha256','min_occurrences'} or row['path']not in context['time_paths']
+                        or row['path'].startswith('claims[') or type(row['text_nfkc'])is not str
+                        or not row['text_nfkc'] or row['text_nfkc']!=unicodedata.normalize('NFKC',row['text_nfkc']).strip()
+                        or hashlib.sha256(row['text_nfkc'].encode()).hexdigest()!=row['text_nfkc_sha256']
+                        or type(row['min_occurrences'])is not int or row['min_occurrences']<1
+                        or unicodedata.normalize('NFKC',fields[row['path']]).strip().count(row['text_nfkc'])<row['min_occurrences']):
+                    self._joint_source_invalid()
+                covered.add(row['path'])
+            if covered!=set(context['time_paths']):self._joint_source_invalid()
+            bindings=context['time_basis_rejections']
+            identity_fields=('product_id','share_class_id','channel_id','release_id')
+            if type(bindings)is not list or not 1<=len(bindings)<=12:self._joint_source_invalid()
+            identities=set();notations=set()
+            for item in bindings:
+                if (type(item)is not dict or item.get('answer_status')!='missing'
+                        or item.get('location')!='text' or item.get('scope')!='source_time_condition_not_execution_or_current_validity'
+                        or not re.fullmatch(r'T\+(?:0|[1-9][0-9]{0,3})',item.get('notation',''))
+                        or item.get('counting_unit')not in ('工作日','自然日')
+                        or not (item.get('excludes_t')is None or item.get('excludes_t')is True)):
+                    self._joint_source_invalid()
+                identities.add(tuple(item.get(k)for k in identity_fields));notations.add(item['notation'])
+            if (len(identities)!=1 or any(row['notation']not in notations for row in protected)):
+                self._joint_source_invalid()
+            # Reuse the same finite absence-only grammar over every restored
+            # authored body/claim field. No second, looser time parser.
+            endpoint_sources=context.get('time_endpoint_sources',())
+            if endpoint_sources and self._joint_time_endpoint_sources(bindings)!=endpoint_sources:
+                self._joint_source_invalid()
+            _joint_time_model_sentences(args,bindings,time_endpoint_sources=endpoint_sources)
+            identity=next(iter(identities));pinned=self.knowledge._pinned_status
+            if (not identity[0] or not identity[1] or not isinstance(pinned,dict)
+                    or pinned.get('ready')is not True or identity[3]!=pinned.get('public_release_id')):
+                self._joint_source_invalid()
+            sources={};fees={};as_ofs=set()
+            cited={eid for claim in args.get('claims',[])for eid in claim.get('evidence_ids',[])}
+            for eid in sorted(cited):
+                evidence=self.evidence.get(eid,{})
+                data=evidence.get('data',{})
+                if (evidence.get('id')!=eid or evidence.get('context_hash')!=self.start_context
+                        or evidence.get('tool')!='knowledge_search' or evidence.get('source')!='public_knowledge'
+                        or data.get('ready')is not True or data.get('scope')!='public'
+                        or data.get('provider_id')!=pinned.get('provider_id')
+                        or data.get('public_release_id')!=identity[3]):continue
+                for hit in data.get('hits',[]):
+                    if tuple(hit.get(k)for k in identity_fields)!=identity:continue
+                    delivered=self.knowledge._delivered.get((hit.get('citation_id'),data.get('as_of')))
+                    if (not delivered or delivered[0]!=hit or hit.get('visibility')!='public'
+                            or hit.get('outbound_allowed')is not True or hit.get('content_status')!='full_text'
+                            or hit.get('claims_are_account_facts')is not False
+                            or not all(isinstance(hit.get(k),str)and hit[k]for k in ('citation_id','document_id','document_version_id'))
+                            or not isinstance(hit.get('excerpt'),str)or not 0<len(hit['excerpt'])<=1198):
+                        self._joint_source_invalid()
+                    row={'evidence_id':eid,'hit':deepcopy(hit),'as_of':data['as_of']}
+                    sources[(eid,hit['citation_id'])]=row
+                    if 'fees'in hit.get('facets',[]):
+                        key=(hit['citation_id'],data['as_of'])
+                        if key in fees and fees[key]['hit']!=hit:self._joint_source_invalid()
+                        fees.setdefault(key,row);as_ofs.add(data['as_of'])
+            if (not fees or len({(row['hit']['document_id'],row['hit']['document_version_id'])
+                    for row in fees.values()})!=1):self._joint_source_invalid()
+            selected=list(fees.values())
+            for item in bindings:
+                for role in ('limit','definition'):
+                    row=sources.get((item.get(role+'_evidence_id'),item.get(role+'_citation_id')))
+                    if (row is None or any(row['hit'].get(k)!=item.get(k)for k in
+                            ('product_id','share_class_id','channel_id','document_id','document_version_id','release_id'))
+                            or not {'liquidity','terms'}&set(row['hit'].get('facets',[]))):
+                        self._joint_source_invalid()
+                    as_ofs.add(row['as_of'])
+                    if not any(old['hit']['citation_id']==row['hit']['citation_id']for old in selected):selected.append(row)
+            if len(as_ofs)!=1 or not 1<=len(selected)<=6:self._joint_source_invalid()
+            for row in selected:
+                # Nonmonetary originals do not mint a public monetary fact or
+                # borrow a different fact's amount exemption.
+                if monetary_occurrences(unicodedata.normalize('NFKC',row['hit']['excerpt'])):
+                    self._joint_source_invalid()
+            from .public_fee_statement_contract import canonical_source_rows
+            self._joint_source_plan={'status':'prepared','arguments_sha256':self._joint_source_digest(args),
+                'context':deepcopy(context),'sources':canonical_source_rows(selected,bindings)}
+        except BankError:raise
+        except (KeyError,ValueError,TypeError,MetricClaimError):self._joint_source_invalid()
+
+    def _render_joint_source_quotes(self, rendered, plan):
+        """Reject the unchanged model body/claims before adding complete originals."""
+        from .public_quote_recovery import public_fee_source_rejections
+        from .knowledge_semantics import public_time_basis_bindings
+        from .operation_claims import validate_operation_wording
+        self.fresh();validate_operation_wording(rendered,self);self.amount_contract(rendered)
+        if public_fee_source_rejections(rendered,self):self._joint_source_invalid()
+        context=plan['context'];fee_only=context['contract']in(
+            'navren.public-quote-fee-source-context/1','navren.public-quote-fee-delivery-context/1')
+        evidence=[e for e in self.evidence.values()if e.get('context_hash')==self.start_context]
+        if fee_only:
+            if self._fee_source_quote_rows(rendered)!=plan['sources']:self._joint_source_invalid()
+            fee_identity=tuple(plan['sources'][0]['hit'][k]for k in ('product_id','share_class_id','channel_id','release_id'))
+            fee_time=self._fee_source_time_bindings(rendered,fee_identity)
+        else:
+            bindings=context['time_basis_rejections']
+            actual=public_time_basis_bindings(rendered,evidence)
+            if actual!=bindings:self._joint_source_invalid()
+            endpoint_sources=context.get('time_endpoint_sources',())
+            if endpoint_sources and self._joint_time_endpoint_sources(bindings)!=endpoint_sources:
+                self._joint_source_invalid()
+        quotes=[];leaves=[];seen=set()
+        for row in plan['sources']:
+            hit=row['hit'];entry=self.evidence.get(row['evidence_id'],{})
+            delivered=self.knowledge._delivered.get((hit['citation_id'],row['as_of']))
+            if (entry.get('id')!=row['evidence_id']or entry.get('context_hash')!=self.start_context
+                    or entry.get('tool')!='knowledge_search' or entry.get('source')!='public_knowledge'
+                    or entry.get('data',{}).get('provider_id')!=self.knowledge._pinned_status['provider_id']
+                    or entry.get('data',{}).get('public_release_id')!=hit['release_id']
+                    or entry.get('data',{}).get('as_of')!=row['as_of']
+                    or hit not in entry.get('data',{}).get('hits',[])or not delivered or delivered[0]!=hit):
+                self._joint_source_invalid()
+            canonical=hit['excerpt'];display=unicodedata.normalize('NFKC',canonical)
+            quote='“'+display+'”';identity=(hit['citation_id'],row['as_of'])
+            if identity in seen:self._joint_source_invalid()
+            seen.add(identity)
+            # Always copy the whole delivered excerpt, not a selected table row
+            # or a paraphrase. No fee/rate/threshold/unit/date is inferred.
+            quotes.append({'text':quote,'evidence_ids':[row['evidence_id']]})
+            leaves.append({'evidence_id':row['evidence_id'],'citation_id':hit['citation_id'],
+                'document_id':hit['document_id'],'document_version_id':hit['document_version_id'],
+                'release_id':hit['release_id'],'product_id':hit['product_id'],
+                'share_class_id':hit['share_class_id'],'channel_id':hit.get('channel_id'),
+                'as_of':row['as_of'],'provider_id':self.knowledge._pinned_status['provider_id'],
+                'source_ref':hashlib.sha256(canonical.encode()).hexdigest(),
+                'source_revision':hashlib.sha256(display.encode()).hexdigest()})
+        before=self._joint_source_digest(rendered)
+        result=deepcopy(rendered)
+        result['text']+='\n\n'+'\n\n'.join(q['text']for q in quotes)
+        result['claims'].extend(quotes)
+        validate(result,SPECS['answer_reviewed'][1])
+        if public_fee_source_rejections(result,self):self._joint_source_invalid()
+        if fee_only:
+            if self._fee_source_time_bindings(result,fee_identity)!=fee_time:self._joint_source_invalid()
+        else:
+            checked=public_time_basis_bindings(result,evidence)
+            if (len(checked)!=len(bindings)or any(item['answer_status']!='explicit'for item in checked)):
+                self._joint_source_invalid()
+        receipt={'contract':'navren.public-quote-joint-source-rendering/1',
+            'original_draft_sha256':context['original_draft_sha256'],
+            'restored_args_sha256':plan['arguments_sha256'],'pre_quote_answer_sha256':before,
+            'rendered_pre_boundary_answer_sha256':self._joint_source_digest(result),
+            'quote_claims_sha256':self._joint_source_digest(quotes),'source_claims':leaves,
+            'host_generated_conclusion':False,'additional_primary_calls':0,'additional_business_calls':0,
+            'original_guards_status':'pending_original_full_GLM_and_FinalProof'}
+        return result,receipt
+
+    def _validate_public_fee_delivery(self, rendered, sources):
+        """Whole originals in the visible body; claims alone cannot cover them."""
+        from .public_quote_recovery import _FEES
+        def missing():
+            raise BankError('PUBLIC_FEE_DELIVERY_REQUIRED',
+                '本轮费用原文或费用字段未完整进入可见答复，本轮停止。',422)
+        originals=[unicodedata.normalize('NFKC',row['hit']['excerpt'])for row in sources]
+        if not originals:missing()
+        for row,display in zip(sources,originals):
+            quote='“'+display+'”'
+            if (quote not in rendered['text'] or not any(claim==
+                    {'text':quote,'evidence_ids':[row['evidence_id']]}for claim in rendered['claims'])):
+                missing()
+        # Bind named operating-fee fields to their own annual table, never a
+        # different fee's identical percentage. No rate is calculated or filled.
+        named=set(_FEES.findall(rendered['text']))
+        for fee in named:
+            if not any('年费率'in original and '基金资产中扣除'in original
+                    and re.search(re.escape(fee)+r'\s+[0-9]+(?:\.[0-9]+)?%',original)
+                    for original in originals):missing()
+
+    def _complete_public_fee_delivery(self, rendered):
+        """Common successful terminal, after the original operation/fee/time gates."""
+        from .public_quote_recovery import _FEES
+        cited={eid for claim in rendered.get('claims',[])for eid in claim.get('evidence_ids',[])}
+        has_fees=any('fees'in hit.get('facets',[])for eid in cited
+            for hit in self.evidence.get(eid,{}).get('data',{}).get('hits',[]))
+        if not has_fees and not _FEES.search(rendered.get('text','')):return rendered
+        # Only the existing structured public-answer protocol obtains this
+        # delivery contract; private/legacy answers keep their original path.
+        if self._fee_delivery_context is None and self._joint_source_plan is None:return rendered
+        self.fresh();self.amount_contract(rendered)
+        # Validate authored fields only after the unchanged recoverable gates.
+        # Bind their proof to the actual renderer result (NFKC is the existing
+        # boundary display transform); no new repair or rewriting is allowed.
+        from .public_fee_statement_contract import build_catalog, validate_authored, extend_time_catalog
+        def statement_proof(sources,context):
+            try:
+                args=self._fee_statement_args;snapshot=self._fee_statement_rendered
+                if (self._joint_source_digest(args)!=context['restored_args_sha256']
+                        or snapshot is None or any(unicodedata.normalize('NFKC',rendered[key])!=
+                            unicodedata.normalize('NFKC',snapshot[key])for key in ('text',))
+                        or rendered['claims']!=snapshot['claims']
+                        or rendered['followups']!=snapshot['followups']):self._joint_source_invalid()
+                cited={eid for claim in args['claims']for eid in claim['evidence_ids']}
+                catalog=extend_time_catalog(build_catalog(sources,self.knowledge._pinned_status['provider_id']),
+                    self.evidence,cited_ids=cited)
+                for unit in catalog['units']:
+                    if unit['kind']!='time_exact':continue
+                    for witness in unit['witnesses']:
+                        entry=self.evidence[witness['evidence_id']]
+                        receipt=self.knowledge._delivered.get((witness['citation_id'],witness['as_of']))
+                        hits=[hit for hit in entry['data']['hits']if all(hit.get(key)==witness.get(key)
+                            for key in ('citation_id','product_id','share_class_id','channel_id','release_id',
+                                'document_id','document_version_id'))]
+                        if (entry.get('context_hash')!=self.start_context or not receipt
+                                or len(hits)!=1 or receipt[0]!=hits[0]
+                                or hashlib.sha256(receipt[0]['excerpt'].encode()).hexdigest()!=witness['source_sha256']):
+                            self._joint_source_invalid()
+                return validate_authored(args,catalog)
+            except (KeyError,ValueError,TypeError,AttributeError):self._joint_source_invalid()
+        if self._joint_source_plan is not None:
+            if self._joint_source_plan.get('status')!='consumed':self._joint_source_invalid()
+            sources=self._fee_source_quote_rows(rendered)
+            self._validate_public_fee_delivery(rendered,sources)
+            proof=statement_proof(sources,self._joint_source_plan['context'])
+            if not self.joint_source_receipts:self._joint_source_invalid()
+            receipt=deepcopy(self.joint_source_receipts[-1])
+            receipt.update(contract='navren.public-quote-joint-source-rendering/2',fee_statement_proof=proof)
+            self.joint_source_receipts[-1]=receipt
+            self.metric_part_receipts[-1]['joint_source_rendering']=deepcopy(receipt)
+            return rendered
+        # All original recoverable gates have passed. A failure in the new
+        # source contract is terminal, never a fresh unrestricted model draft.
+        self._joint_source_plan={'status':'preparing'}
+        try:
+            sources=self._fee_source_quote_rows(rendered)
+            context=self._fee_delivery_context
+            proof=statement_proof(sources,context)
+            plan={'status':'consumed','arguments_sha256':context['restored_args_sha256'],
+                'context':deepcopy(context),'sources':sources}
+            selected=self.metric_part_receipts[-1]['selected_public_quote_fact_ids']
+            if len(selected)+len(sources)>6:self._joint_source_invalid()
+            result,receipt=self._render_joint_source_quotes(rendered,plan)
+            receipt.update(contract='navren.public-quote-joint-source-rendering/2',fee_statement_proof=proof)
+            self._validate_public_fee_delivery(result,sources)
+            self.fresh();self.amount_contract(result)
+            # Commit a receipt only for a fully checked result. The sentinel
+            # makes new assembly failures fatal without spending a fresh repair.
+            self._joint_source_plan=plan
+            self.joint_source_receipts.append(deepcopy(receipt))
+            self.metric_part_receipts[-1].update(joint_source_rendering=deepcopy(receipt),
+                rendered_pre_boundary_text_sha256=hashlib.sha256(result['text'].encode()).hexdigest())
+            return result
+        except (KeyError,ValueError,TypeError,MetricClaimError):self._joint_source_invalid()
+
+    def _render_public_quote_parts(self, args, *, joint_source_plan=None):
         self.fresh()
         eligible=set(self.public_quote_fact_ids());pieces=[];quotes=[];selected=[];source_bindings=[];displayed=set();duplicate_references=[]
         for part in args['reply_parts']:
@@ -1342,6 +1770,10 @@ class BankTools:
         rendered={key:deepcopy(value)for key,value in args.items()if key!='reply_parts'}
         rendered.update(text=''.join(pieces),amount_claims=[],claims=deepcopy(args['claims'])+quotes)
         validate(rendered,SPECS['answer_reviewed'][1])
+        joint_receipt=None
+        if joint_source_plan is not None:
+            if len(selected)+len(joint_source_plan['sources'])>6:self._joint_source_invalid()
+            rendered,joint_receipt=self._render_joint_source_quotes(rendered,joint_source_plan)
         self.metric_part_receipts.append({'contract':'navren.public-quote-parts-rendering/1',
             'raw_reply_parts_sha256':hashlib.sha256(encoded(args['reply_parts']).encode()).hexdigest(),
             'rendered_pre_boundary_text_sha256':hashlib.sha256(rendered['text'].encode()).hexdigest(),
@@ -1351,6 +1783,9 @@ class BankTools:
             'no_financial_calculation':True,'no_personal_entitlement':True,'additional_primary_calls':0,
             'additional_business_calls':0,'legacy_draft_repaired':False,
             'original_guards_status':'pending_read_amount_evidence_and_GLM'})
+        if joint_receipt is not None:
+            self.metric_part_receipts[-1]['joint_source_rendering']=deepcopy(joint_receipt)
+            self.joint_source_receipts.append(deepcopy(joint_receipt))
         return rendered
 
     def _public_quote_answer_sections(self, args, public_ids):
@@ -1386,21 +1821,45 @@ class BankTools:
     def render_public_quote_answer(self, args):
         self.validate_answer_arguments(args)
         sections=self._public_quote_answer_sections(args,self.public_quote_fact_ids())
-        # Only model-authored parts and complete original quotes; no host conclusion.
-        parts=[];labelled=set()
+        # Source limits belong only to the exact eligible citation selected below.
+        parts=[];labelled=set();source_limits=[];noted=set()
+        limit='这部分费用引文本身未核实销售渠道及其优惠折扣，不能据此确认渠道当前报价。'
         for field,row in sections:
             if field!='direct_answer' and field not in labelled:
                 parts.append({'text':('适用条件：\n' if field=='conditions' else '尚未核实：\n')})
                 labelled.add(field)
-            parts.extend(deepcopy(row));parts.append({'text':'\n'})
+            for part in row:
+                parts.append(deepcopy(part));fid=part.get('public_quote_fact_id')
+                if not fid or fid in noted:continue
+                noted.add(fid);fact=self.facts[fid];evidence=self.evidence[fact['evidence_id']]
+                if evidence.get('source')!='public_knowledge' or evidence.get('tool')!='knowledge_search':continue
+                data=evidence['data'];hit=next(h for h in data['hits']if h.get('citation_id')==fact.get('citation_id'))
+                if ('channel_id' not in hit or hit['channel_id'] is not None or 'fees' not in hit.get('facets',[])
+                        or not all(isinstance(hit.get(k),str)and hit[k]for k in ('product_id','share_class_id'))):continue
+                parts.append({'text':'\n来源局限：'+limit+'\n'})
+                source_limits.append({'fact_id':fid,'evidence_id':fact['evidence_id'],'citation_id':fact['citation_id'],
+                    'product_id':hit['product_id'],'share_class_id':hit['share_class_id'],'channel_id':None,
+                    'provider_id':data['provider_id'],'release_id':hit['release_id'],'as_of':data['as_of'],
+                    'canonical_source_text_sha256':hashlib.sha256(fact['text'].encode()).hexdigest(),
+                    'code':'SELECTED_FEE_CITATION_CHANNEL_UNBOUND','text':limit})
+            parts.append({'text':'\n'})
         envelope={k:deepcopy(v)for k,v in args.items()if k not in {'direct_answer','conditions','unknowns'}}
-        result=self._render_public_quote_parts({**envelope,'reply_parts':parts})
+        envelope['claims'].extend({'text':limit,'evidence_ids':[item['evidence_id']]}for item in source_limits)
+        plan=self._joint_source_plan
+        if plan is not None:
+            if (plan.get('status')!='prepared'
+                    or plan['arguments_sha256']!=self._joint_source_digest(args)):
+                self._joint_source_invalid()
+            plan['status']='consumed'
+        result=self._render_public_quote_parts({**envelope,'reply_parts':parts},joint_source_plan=plan)
         self.metric_part_receipts[-1].update(answer_contract='navren.public-quote-answer/1',
             raw_structured_answer_sha256=hashlib.sha256(encoded(args).encode()).hexdigest(),
             model_authored_sections=['direct_answer','conditions','unknowns'],
             model_part_count=sum(len(row)for _,row in sections),
             quote_reference_count=sum('public_quote_fact_id'in part for _,row in sections for part in row),
-            host_generated_conclusion=False,semantic_completion='pending_independent_GLM')
+            host_generated_conclusion=False,host_generated_source_limit=bool(source_limits),
+            source_limit_receipts=source_limits,semantic_completion='pending_independent_GLM')
+        self._fee_statement_rendered=deepcopy(result)
         return result
 
     def validate_answer_arguments(self, args):
@@ -1710,16 +2169,34 @@ class BankTools:
                 if self._history_reference is not None:args=self._compose_history_quotes(args)
                 from .operation_claims import validate_operation_wording
                 validate_operation_wording(args,self)
+                from .public_quote_recovery import public_fee_source_rejections
+                rejected=public_fee_source_rejections(args,self)
+                if rejected:
+                    from .knowledge_semantics import public_time_basis_bindings
+                    time_basis_rejections=[item for item in public_time_basis_bindings(args,
+                        [e for e in self.evidence.values()if e.get('context_hash')==self.start_context])
+                        if item['answer_status']=='missing']
+                    error=BankError('PUBLIC_FEE_SOURCE_REQUIRED',
+                        '费用计提、频率、持有期限适用或净值作用缺少本轮同费种、同份额和同版本原文支持；只修答复及claims，不重新检索。',422)
+                    error._fee_source_rejections=rejected
+                    error._fee_time_basis_rejections=deepcopy(time_basis_rejections)
+                    from .public_quote_recovery import has_deadline_endpoint
+                    if time_basis_rejections and has_deadline_endpoint(args):
+                        try:error._fee_time_endpoint_sources=self._joint_time_endpoint_sources(time_basis_rejections)
+                        except (ValueError,KeyError,TypeError):self._joint_source_invalid()
+                    raise error
                 from .knowledge_semantics import public_time_basis_bindings
                 time_bindings=public_time_basis_bindings(args,[e for e in self.evidence.values()
                     if e.get('context_hash')==self.start_context])
                 missing=next((item for item in time_bindings if item['answer_status']=='missing'),None)
                 if missing is not None:
-                    raise BankError('PUBLIC_TIME_BASIS_REQUIRED',
+                    error=BankError('PUBLIC_TIME_BASIS_REQUIRED',
                         '触发字段：text。保留具体'+missing['notation']+'支付或到账时限时，需保留同一版本原文的计日口径；'
                         '仅说明T日为开放日、或全文别处出现工作日，不能代替该期限的计日基础。'
                         '请按本轮引文'+missing['definition_citation_id']+'修正该期限及其适用条件；'
                         '若不作具体期限结论，不要为此补写期限。只修答复，不重新创建或执行操作。',422)
+                    error._time_basis_rejection=deepcopy(missing)
+                    raise error
                 return args
             return self.aggregate_budget_facts(args)
         if name in ('presentation_query','presentation_detail'):

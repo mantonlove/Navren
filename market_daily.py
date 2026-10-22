@@ -8,7 +8,9 @@ from pathlib import Path
 from market_content import CN, packed, event_primary_publication
 from market_sources import readable_article,cluster_key,evidence_readable,article_reported_at,source_verified_brief_event,source_verified_text_event,text_only_article
 
-RULE_VERSION = 'daily-selection-v8-distinct-statistical-releases'
+from market_source_attribution import first_publication_verified
+
+RULE_VERSION = 'daily-selection-v10-verified-original-live-slot-replacement'
 _publication_clock_scope = ContextVar('navren_daily_publication_clock_scope',default=None)
 
 def _clock_execution_owner():
@@ -48,7 +50,7 @@ def classify(event, articles=()):
     if re.search(r'购房|住房|房贷|缴费|消费信贷|个人.*权益|养老|社保|mortgage|pension',text):return 'household'
     if re.search(r'货币政策|财政|监管|利率|采购经理|pmi|宏观|通胀|统计|再贷款|inflation|monetary|policy rate',text):return 'macro_policy'
     if re.search(r'数字支付|金融科技|金融ai|银行技术|人工智能|支付技术|fintech|digital payment|banking technology',text):return 'fintech'
-    if re.search(r'股票|债券|基金|证券|交易所|stock|bond|equity|fund market',text):return 'investment'
+    if re.search(r'股票|股市|股指|债券|基金|证券|交易所|stock|bond|equity|fund market',text):return 'investment'
     return 'general'
 
 def theme(event, category):
@@ -308,6 +310,7 @@ class DailyMarket:
             primary,published=event_primary_publication(event,articles)
             now=self.clock(now)
             age=(now-published).total_seconds()/3600
+            if not first_publication_verified(primary):return None
             if primary.get('reported_time_kind')=='source_page_updated_at':return None
             if age<0 or published.date()!=now.date():return None
             return {'freshness_layer':0,'age_hours':age,'publication_date':published.date().isoformat()}
@@ -322,6 +325,7 @@ class DailyMarket:
                 event=self.approved_snapshot(db,row,display)
                 if event is None:continue
                 primary,main=event_primary_publication(event,event['articles'])
+                if not first_publication_verified(primary):continue
                 age=(now-main).total_seconds()/3600
             except (ValueError,KeyError,TypeError,AttributeError):continue
             if reconstructed_date:
@@ -351,6 +355,19 @@ class DailyMarket:
             event['selection_reason'].update({'freshness_layer':0} if reconstructed_date else eligibility)
             event['selection_reason']['recency_policy']='primary_original_publication_same_shanghai_day'
             out.append(event)
+        # 已有完整六条不能让后续时段的新报道永远被旧分数压住；
+        # 新原发先替换，之后保留仍有效的当日卡片，避免下一次检查又回滚。
+        prior=self.edition(db,now.date().isoformat())
+        if not reconstructed_date and prior and prior['item_count']==6:
+            pins={(r['event_id'],r['event_version']):r['position'] for r in db.execute('SELECT event_id,event_version,position FROM market_daily_items WHERE edition_date=? AND revision=?',(prior['edition_date'],prior['revision']))}
+            incumbents=[e for e in out if (e['id'],e['version']) in pins]
+            if incumbents:
+                watermark=max(instant(e['reported_at']) for e in incumbents)
+                fresh={e['id'] for e in out if instant(e['reported_at'])>watermark}
+                for e in out:
+                    position=pins.get((e['id'],e['version']))
+                    layer=(0 if e['id'] in fresh else position if position else 7) if fresh else (position-1 if position else 6)
+                    e['selection_reason'].update(freshness_layer=layer,refresh_policy='verified_new_publication_then_retained_six')
         out.sort(key=lambda e:(e['selection_reason']['freshness_layer'],-e['selection_reason']['score'],-instant(e['reported_at']).timestamp(),e['id']))
         parents=list(range(len(out)));seen={};links={}
         def find(i):
@@ -523,6 +540,10 @@ class DailyMarket:
                 'display_summary_en','display_conditions_en'):result[key]=''
             for key in ('facts','conflicts'):result[key]=[]
             result.pop('display_fact',None)
+            exact=self.event_row(db,snapshot['id'],snapshot['version'])
+            if exact and exact['status']=='editorial_review_required':
+                result.update(headline='这条解读正在重新核验',display_title='这条解读正在重新核验',
+                    display_title_en=None,availability_reason='editorial_review_required')
             from public_market_history import metadata_only
             result['articles']=[{**metadata_only(a),'status':state} for a in snapshot['articles']]
         if not detail:
@@ -578,23 +599,32 @@ class DailyMarket:
             return self.expose(db,row,edition,detail=True)
 
     def hotspots(self, *, now=None):
-        now=self.clock(now);meta=self.metadata(now)
+        now=self.clock(now);meta=self.metadata(now);today=meta['server_today']
         with self.store.db() as db:
             self.read_snapshot(db)
-            result=self._read_day(db,meta['server_today'],now=now)
-            # Old immutable editions remain readable in history, but cannot fill today's feed.
-            events=[]
-            for event in result['events']:
-                try:
-                    primary,published=event_primary_publication(event,event.get('articles',[]))
-                    if event.get('availability')=='active' and primary.get('reported_time_kind')!='source_page_updated_at' and published.date()==now.date() and published<=now:
-                        events.append(event)
-                except (ValueError,KeyError,TypeError,AttributeError):continue
-            result['events']=events
+            current=self._read_day(db,today,now=now)
+            current_meta={k:current.get(k) for k in ('edition_date','revision','status','readable_count','total_count')}
+            result=None
+            # 单次读事务内选择最近完整且仍有效的六条；局部失效不能展示残缺的2/4条。
+            rows=db.execute('SELECT edition_date,revision FROM market_daily_editions WHERE edition_date BETWEEN ? AND ? AND item_count=6 ORDER BY edition_date DESC,revision DESC',(meta['window_start'],today)).fetchall()
+            for row in rows:
+                packet=self._read_day(db,row['edition_date'],now=now,revision=row['revision'])
+                if len(packet['events'])!=6 or any(e.get('availability')!='active' for e in packet['events']):continue
+                valid=True
+                for event in packet['events']:
+                    try:
+                        primary,published=event_primary_publication(event,event.get('articles',[]))
+                        if primary.get('reported_time_kind')=='source_page_updated_at' or published.date().isoformat()!=row['edition_date'] or published>now:valid=False;break
+                    except (ValueError,KeyError,TypeError,AttributeError):valid=False;break
+                if valid:result=packet;break
+            if result is None:
+                result={**current,'events':[],'status':'no_qualified_hotspots'}
+            events=result['events'];fallback=bool(events and (result['edition_date']!=today or result.get('revision')!=current.get('revision')))
+            result.update(current_edition=current_meta,requested_edition_date=today,is_fallback=fallback,
+                display_mode='retained' if fallback else 'current' if events else 'empty')
             for field in ('total_count','matched_count','readable_count','matched_readable_count'):result[field]=len(events)
-            if result['status']!='missing_archive':result['status']='published' if events else 'no_qualified_hotspots'
-        result['as_of']=max((e['reported_at'] for e in result['events']),default=None)
-        result['reading']=[] # Supplementary reading remains separate from the six selected events.
+        result['as_of']=max((e['reported_at'] for e in events),default=None)
+        result['reading']=[]
         result['coverage']=self.store.status()
         return result
 

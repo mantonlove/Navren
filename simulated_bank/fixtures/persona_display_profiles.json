@@ -1,0 +1,72 @@
+{
+  "schema": "navren.simulated-persona-profile-templates/1",
+  "data_origin": "navren_synthetic",
+  "is_real_identity": false,
+  "contact_use": "display_only",
+  "profiles": {
+    "tycoon": {
+      "persona_id": "tycoon",
+      "data_origin": "navren_synthetic",
+      "is_simulated": true,
+      "nickname": "A市首富",
+      "full_name": "徐景行（模拟）",
+      "birthday": "1973-04-18",
+      "gender": "male",
+      "city": "杭州",
+      "occupation": "企业经营者、个人股权投资者",
+      "company": "模拟远景实业（虚构）",
+      "email": "xujingxing@navren.example.invalid",
+      "simulation_contact_phone": "SIM-PHONE-****-1001",
+      "avatar_preset": "orbit",
+      "bio": "虚构体验角色。经营企业并持有个人投资与出租物业，演示中区分个人资金和企业资金。"
+    },
+    "grain_farmer": {
+      "persona_id": "grain_farmer",
+      "data_origin": "navren_synthetic",
+      "is_simulated": true,
+      "nickname": "种粮大户",
+      "full_name": "程丰年（模拟）",
+      "birthday": "1978-09-23",
+      "gender": "male",
+      "city": "阜阳",
+      "occupation": "家庭农场经营者",
+      "company": "模拟丰禾家庭农场（虚构）",
+      "email": "chengfengnian@navren.example.invalid",
+      "simulation_contact_phone": "SIM-PHONE-****-1002",
+      "avatar_preset": "leaf",
+      "bio": "虚构体验角色。经营粮食种植和农机服务，关注农资投入、收获季回款与农业保障。"
+    },
+    "working_landlady": {
+      "persona_id": "working_landlady",
+      "data_origin": "navren_synthetic",
+      "is_simulated": true,
+      "nickname": "坚持上班的包租婆",
+      "full_name": "沈知夏（模拟）",
+      "birthday": "1984-06-12",
+      "gender": "female",
+      "city": "杭州",
+      "occupation": "企业行政主管、出租物业持有人",
+      "company": "模拟城市服务公司（虚构）",
+      "email": "shenzhixia@navren.example.invalid",
+      "simulation_contact_phone": "SIM-PHONE-****-1003",
+      "avatar_preset": "wave",
+      "bio": "虚构体验角色。保留日常工作，同时管理个人出租物业，演示工资、租金和物业支出的不同用途。"
+    },
+    "retired_entrepreneur": {
+      "persona_id": "retired_entrepreneur",
+      "data_origin": "navren_synthetic",
+      "is_simulated": true,
+      "nickname": "退休后重新创业的阿姨",
+      "full_name": "陈惠兰（模拟）",
+      "birthday": "1964-03-08",
+      "gender": "female",
+      "city": "杭州",
+      "occupation": "退休职工、餐饮门店经营者",
+      "company": "模拟惠邻家常菜馆（虚构）",
+      "email": "chenhuilan@navren.example.invalid",
+      "simulation_contact_phone": "SIM-PHONE-****-1004",
+      "avatar_preset": "stone",
+      "bio": "虚构体验角色。退休后经营社区餐饮门店，演示养老金、家庭支出与门店周转资金的分别管理。"
+    }
+  }
+}

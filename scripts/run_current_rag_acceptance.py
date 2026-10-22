@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import argparse
 import ast
-from contextlib import ExitStack, closing
+from contextlib import ExitStack, closing, contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
@@ -17,6 +17,7 @@ import importlib.metadata
 import json
 import os
 import platform
+import plistlib
 from pathlib import Path
 import re
 import shutil
@@ -34,6 +35,10 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = ROOT / 'outputs/window-progress/rag'
 OUTPUT_ROOT = ROOT / 'outputs/rag-overall-acceptance-20261012'
+YOUN_MOUNT = Path('/Volumes/YOUN')
+YOUN_OUTPUT_ROOT = YOUN_MOUNT / '04-项目/Navren/outputs/rag-overall-acceptance-20261012'
+YOUN_UUID = '5CFF89B0-1D08-3665-A84F-7D24395095EB'
+_youn_device = None
 MODEL_URL = 'https://aiping.cn/api/v1/chat/completions'
 LIMITS = {'max_tokens': 100000, 'timeout_seconds': 105, 'max_rounds': 8,
           'max_tools': 12, 'primary_output_tokens': 4000, 'reviewer_output_tokens': 1400}
@@ -426,6 +431,21 @@ def shared_assets_unchanged(assets):
                and sha(item['path']) == item['sha256'] for item in assets.values())
 
 
+def archived_prepared_source(logical_path, physical, expected_sha):
+    """仅原受管源库兼容链接可读归档；不参与任何写入或消费者源码准入。"""
+    logical = Path(logical_path)
+    if (not logical.is_absolute() or str(logical) != logical_path or '..' in logical.parts
+            or not any(logical.is_relative_to(root) for root in (OUTPUT_ROOT, PUBLIC))
+            or not physical.is_relative_to(YOUN_MOUNT / '99-本机归档') or physical == logical):
+        return False
+    suffix = (Path('CC/projects/Navren') / logical.relative_to(ROOT)).parts
+    if physical.parts[-len(suffix):] != suffix or not physical.is_file():
+        return False
+    check_youn_storage(YOUN_OUTPUT_ROOT, refresh=True)
+    return (physical.stat().st_dev == YOUN_MOUNT.stat().st_dev
+            and sha(physical) == expected_sha)
+
+
 def prepared_contract(args, database, expected_sha, release, reference, source_root=None):
     path = getattr(args, 'prepared_public_manifest', None)
     supplied_sha = getattr(args, 'prepared_public_manifest_sha256', None)
@@ -435,8 +455,9 @@ def prepared_contract(args, database, expected_sha, release, reference, source_r
         return None
     if not path or not supplied_sha:
         raise ValueError('prepared_public_manifest_required')
+    check_youn_storage(path)
     path = Path(path).resolve()
-    if not path.is_relative_to(OUTPUT_ROOT.resolve()) or sha(path) != supplied_sha:
+    if not registered_rag_path(path, OUTPUT_ROOT) or sha(path) != supplied_sha:
         raise ValueError('prepared_public_manifest_changed')
     receipt = json.loads(path.read_text())
     checks = receipt.get('checks', {})
@@ -446,8 +467,18 @@ def prepared_contract(args, database, expected_sha, release, reference, source_r
             or any(value is not True for value in checks.values())):
         raise ValueError('prepared_public_checks_failed')
     source = Path(receipt['source_database_path']).resolve()
-    if (not database.is_relative_to(OUTPUT_ROOT.resolve())
-            or not (source.is_relative_to(OUTPUT_ROOT.resolve()) or source.is_relative_to(PUBLIC.resolve()))
+    archived = archived_prepared_source(receipt['source_database_path'], source,
+                                        receipt['source_database_sha256'])
+    if source.is_relative_to(YOUN_MOUNT / '99-本机归档') and not archived:
+        raise ValueError('archived_prepared_source_binding_invalid')
+    if not archived:
+        if Path(receipt['source_database_path']).is_relative_to(YOUN_MOUNT):
+            canonical_source_path(receipt['source_database_path'])
+        if not source.is_relative_to(PUBLIC.resolve()):
+            check_youn_storage(receipt['source_database_path'])
+    check_youn_storage(receipt['actual_database_path'])
+    if (not registered_rag_path(database, OUTPUT_ROOT)
+            or not (archived or source.is_relative_to(PUBLIC.resolve()) or registered_rag_path(source, OUTPUT_ROOT))
             or Path(receipt['actual_database_path']).resolve() != database
             or receipt.get('database_sha256') != expected_sha
             or receipt.get('database_sha256_before_queries') != expected_sha
@@ -618,10 +649,102 @@ def stamp():
     return datetime.now(timezone.utc).isoformat()
 
 
+def check_youn_storage(path, *, refresh=False):
+    """只准入固定RAG物理目录；小文件边界复核设备，关键阶段复核卷身份。"""
+    global _youn_device
+    path = Path(path).absolute()
+    if not (path.is_relative_to(YOUN_MOUNT) or path.resolve().is_relative_to(YOUN_MOUNT)):
+        return
+    if (path.resolve() != path or not path.is_relative_to(YOUN_OUTPUT_ROOT)
+            or YOUN_OUTPUT_ROOT.resolve() != YOUN_OUTPUT_ROOT):
+        raise ValueError('rag_storage_path_redirected_or_outside_scope')
+    if not os.path.ismount(YOUN_MOUNT) or YOUN_MOUNT.resolve() != YOUN_MOUNT:
+        raise ValueError('rag_storage_not_mounted')
+    device = YOUN_MOUNT.stat().st_dev
+    if refresh or _youn_device != device:
+        result = subprocess.run(['/usr/sbin/diskutil', 'info', '-plist', str(YOUN_MOUNT)],
+                                check=True, capture_output=True, timeout=10)
+        info = plistlib.loads(result.stdout)
+        if info.get('MountPoint') != str(YOUN_MOUNT) or info.get('VolumeUUID') != YOUN_UUID:
+            raise ValueError('rag_storage_volume_mismatch')
+        _youn_device = device
+    anchor = path
+    while not anchor.exists():
+        anchor = anchor.parent
+    if (not os.path.ismount(YOUN_MOUNT) or YOUN_MOUNT.stat().st_dev != device
+            or anchor.stat().st_dev != device):
+        raise ValueError('rag_storage_device_changed')
+
+
+def registered_rag_path(path, local_root):
+    path = Path(path)
+    check_youn_storage(path)
+    return path.is_relative_to(YOUN_OUTPUT_ROOT) or path.is_relative_to(local_root.resolve())
+
+
+@contextmanager
+def rag_freeze_storage(target, *, provenance=False):
+    check_youn_storage(target, refresh=True)
+    external = Path(target).is_relative_to(YOUN_OUTPUT_ROOT)
+    cleanup = external and provenance
+    if cleanup and any(Path(target).iterdir()):
+        raise ValueError('external_freeze_target_not_fresh_empty')
+    def clean_created(path):
+        if not path.is_relative_to(target):
+            raise ValueError('metadata_cleanup_outside_fresh_target')
+        sidecar = path.with_name('._' + path.name)
+        if not sidecar.exists() and not sidecar.is_symlink():
+            return
+        raw = sidecar.read_bytes() if not sidecar.is_symlink() else b''
+        offset = raw.find(b'ATTR')
+        if (raw[:8] != bytes.fromhex('0005160700020000') or offset < 0
+                or raw[offset + 34:offset + 36] != b'\0\1'
+                or raw[offset + 46:offset + 68] != b'\x15com.apple.provenance\0'):
+            raise ValueError('unrecognized_created_appledouble')
+        digest = sha(path) if path.is_file() else None
+        receipt = Path(target).parent / 'storage-provenance-cleanup.jsonl'
+        check_youn_storage(receipt)
+        with receipt.open('a') as log:
+            log.write(json.dumps({'path': str(sidecar), 'sha256': hashlib.sha256(raw).hexdigest(),
+                'target_sha256': digest, 'reason': 'fresh_freeze_generated_provenance_only'}) + '\n')
+            log.flush(); os.fsync(log.fileno())
+        sidecar.unlink()
+        if digest is not None and sha(path) != digest:
+            raise ValueError('source_bytes_changed_during_metadata_cleanup')
+    original = Path.mkdir
+    def mkdir(path, *args, **kwargs):
+        check_youn_storage(path)
+        fresh = not path.exists()
+        if cleanup and fresh and path.with_name('._' + path.name).exists():
+            raise ValueError('preexisting_appledouble_not_owned')
+        result = original(path, *args, **kwargs)
+        if cleanup and fresh:
+            clean_created(path)
+        return result
+    def copyfile(source, destination, **kwargs):
+        if cleanup and Path(destination).with_name('._' + Path(destination).name).exists():
+            raise ValueError('preexisting_appledouble_not_owned')
+        result = shutil.copyfile(source, destination, **kwargs)
+        if cleanup:
+            clean_created(Path(destination))
+        return result
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(Path, 'mkdir', mkdir))
+        if external:
+            # ExFAT仅复制源码字节，避免copy2元数据生成未登记的AppleDouble文件。
+            stack.enter_context(patch.object(shutil, 'copy2', copyfile))
+        yield
+    check_youn_storage(target, refresh=True)
+
+
 def save(path, value):
     path = Path(path)
+    check_youn_storage(path, refresh=True)
     temporary = path.with_suffix(path.suffix + '.tmp')
+    check_youn_storage(temporary)
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+    check_youn_storage(path)
+    check_youn_storage(temporary)
     os.replace(temporary, path)
 
 
@@ -708,8 +831,8 @@ def consumer_source_contract(args):
         raise ValueError('consumer_source_binding_required')
     root, manifest = (canonical_source_path(value) for value in values[:2])
     project = ROOT.resolve()
-    if (not root.is_dir() or not root.is_relative_to(project / 'outputs')
-            or not manifest.is_relative_to(project / 'outputs') or not manifest.is_file()
+    if (not root.is_dir() or not registered_rag_path(root, project / 'outputs')
+            or not registered_rag_path(manifest, project / 'outputs') or not manifest.is_file()
             or not isinstance(values[2], str) or not re.fullmatch('[0-9a-f]{64}', values[2])
             or sha(manifest) != values[2]):
         raise ValueError('consumer_source_binding_invalid')
@@ -747,8 +870,8 @@ def consumer_source_unchanged(config):
         root = canonical_source_path(contract['source_root'])
         manifest = canonical_source_path(contract['manifest_path'])
         project = canonical_source_path(contract['project_root'])
-        if (not root.is_dir() or not root.is_relative_to(project / 'outputs')
-                or not manifest.is_relative_to(project / 'outputs')
+        if (not root.is_dir() or not registered_rag_path(root, project / 'outputs')
+                or not registered_rag_path(manifest, project / 'outputs')
                 or config['input_sha256'][name] != contract['manifest_sha256']
                 or config['input_bindings'][name] != {'source_path': str(manifest), 'sha256': contract['manifest_sha256']}
                 or sha(manifest) != contract['manifest_sha256']
@@ -806,6 +929,11 @@ def execution_manifest_unchanged(config):
 
 
 def freeze(target, consumer=None):
+    with rag_freeze_storage(target, provenance=True):
+        return freeze_snapshot(target, consumer)
+
+
+def freeze_snapshot(target, consumer=None):
     # 旧冻结器只加载标准库；不用其业务 run()，也不污染 scripts 包的 import 路径。
     helper = ROOT / 'scripts/run_rag_acceptance.py'
     if consumer:
@@ -962,12 +1090,14 @@ def direct_http_opener(*handlers):
 
 def prepare(args):
     out = args.out_dir.resolve()
-    if out == OUTPUT_ROOT.resolve() or not out.is_relative_to(OUTPUT_ROOT.resolve()):
+    check_youn_storage(args.out_dir, refresh=True)
+    if out in (OUTPUT_ROOT.resolve(), YOUN_OUTPUT_ROOT) or not registered_rag_path(out, OUTPUT_ROOT):
         raise ValueError('output_outside_registered_scope')
     consumer = consumer_source_contract(args)
     if consumer and out.is_relative_to(Path(consumer['source_root'])):
         raise ValueError('output_inside_consumer_source')
-    out.mkdir(parents=True, exist_ok=False)
+    with rag_freeze_storage(out):
+        out.mkdir(parents=True, exist_ok=False)
     candidate = out / 'candidate'
     candidate.mkdir()
     manifest = freeze(candidate, consumer)
@@ -979,6 +1109,8 @@ def prepare(args):
     if len(cases) * LIMITS['max_tokens'] > args.max_total_tokens:
         raise ValueError('aggregate_token_preflight_rejected')
     reference = json.loads((PUBLIC / 'integration-data-manifest.json').read_text())
+    if args.prepared_public_manifest and args.knowledge_database:
+        check_youn_storage(args.knowledge_database)
     database = (args.knowledge_database or Path(reference['knowledge_database']['path'])).resolve()
     expected_sha = args.database_sha256 or reference['knowledge_database']['sha256']
     release = args.release_id or reference['knowledge_database']['release_id']
@@ -991,6 +1123,7 @@ def prepare(args):
     if prepared and any(manifest.get(name) != digest for name, digest in prepared['source_sha256'].items()):
         raise ValueError('prepared_retrieval_source_not_frozen')
     inputs = out / 'inputs'
+    check_youn_storage(inputs, refresh=True)
     inputs.mkdir()
     shutil.copy2(database, inputs / 'knowledge.sqlite3')
     shutil.copy2(question_path, inputs / 'question-set.json')
@@ -1474,8 +1607,11 @@ def run(args):
         safe_code = str(error) if type(error) is ValueError else type(error).__name__
         failure = {'status': 'preflight_failed', 'error_type': type(error).__name__,
                    'error_code': safe_code, 'exit_code': 2, 'model_calls': 0}
-        if not existing_output and args.out_dir.is_dir() and args.out_dir.resolve().is_relative_to(OUTPUT_ROOT.resolve()):
-            save(args.out_dir / 'results.json', failure)
+        try:
+            if not existing_output and args.out_dir.is_dir() and registered_rag_path(args.out_dir.resolve(), OUTPUT_ROOT):
+                save(args.out_dir / 'results.json', failure)
+        except (ValueError, OSError, subprocess.SubprocessError):
+            pass  # 断盘保留待续状态，不为错误回执创建替身或回退内盘。
         print(json.dumps(failure))
         return 2
     out = Path(config['out_dir'])
@@ -1498,6 +1634,7 @@ def run(args):
             save(out / 'results.json', report)
             return 2
         case_out = out / case['id']
+        check_youn_storage(case_out, refresh=True)
         case_out.mkdir()
         command = [sys.executable, '-I', '-B', str(Path(config['candidate']) / 'scripts/run_current_rag_acceptance.py'),
                    '--case-worker', str(out / 'configuration.json'), '--case-id', case['id']]

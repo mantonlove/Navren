@@ -110,8 +110,10 @@ SELECTION_ATTENTION_POLICY = 'daily-recency-v1-reviewed-attention'
 EVENT_EDITOR_POLICY = 'event-editor-v4-reviewed-attention'
 EVENT_REVIEW_TEXT_LIMIT = 14000
 
+from market_source_attribution import first_publication_verified
+
 def event_materials(groups):
-    return [{'event_id':g['id'],'articles':[{'id':a['id'],'version':a['version'],'title':a['title'],'publisher':a['publisher'],'origin_publisher':a.get('origin_publisher',a['publisher']),'identity':a['identity'],'published_at':a.get('published_at'),'read_scope':a['read_scope'],'text':a['evidence_text'][:EVENT_REVIEW_TEXT_LIMIT]} for a in g['articles']]} for g in groups]
+    return [{'event_id':g['id'],'articles':[{'id':a['id'],'version':a['version'],'title':a['title'],'publisher':a['publisher'],'origin_publisher':a.get('origin_publisher',a['publisher']),'identity':a['identity'],'published_at':a.get('published_at'),**({k:a.get(k) for k in ('publication_platform','source_attribution','reporting_body','byline_text','page_author','original_published_at','first_publication_status','publication_time_kind')} if a.get('source_attribution') else {}),'read_scope':a['read_scope'],'text':a['evidence_text'][:EVENT_REVIEW_TEXT_LIMIT]} for a in g['articles']]} for g in groups]
 
 def event_input_hash(group,mode='reviewed_ai',*,legacy=False):
     value={'editor':EVENT_GENERATION_CONTRACT,'mode':mode,'articles':[(a['id'],a['version'],a['fingerprint']) for a in group['articles']]}
@@ -134,6 +136,10 @@ def selection_attention_time_context(body,articles,as_of):
         checked=datetime.fromisoformat(as_of)
         if checked.tzinfo is None:raise ValueError()
     except (TypeError,ValueError):raise ValueError('selection_attention_clock_invalid') from None
+    if primary.get('source_attribution') and not first_publication_verified(primary):
+        return {'policy':SELECTION_ATTENTION_POLICY,'as_of':as_of,'primary_article_id':primary['id'],
+            'first_published_at':None,'original_timezone':primary.get('original_timezone'),
+            'published_precision':None,'maximum_expires_at':None,'first_publication_status':'unknown'}
     return {'policy':SELECTION_ATTENTION_POLICY,'as_of':as_of,
         'primary_article_id':primary['id'],'first_published_at':primary['published_at'],
         'original_timezone':primary.get('original_timezone'),
@@ -149,6 +155,7 @@ def validate_selection_attention(body,articles,*,mode='reviewed_ai'):
             or attention['important'] is not True or not isinstance(attention['reason'],str)
             or not attention['reason'].strip() or len(attention['reason'])>400):raise ValueError('invalid_selection_attention')
     primary,published=event_primary_publication(body,articles)
+    if primary.get('source_attribution') and not first_publication_verified(primary):raise ValueError('selection_attention_original_publication_unknown')
     try:
         expires=datetime.fromisoformat(attention['expires_at'])
         if expires.tzinfo is None or not published<expires<=published+timedelta(hours=168):raise ValueError()
@@ -241,6 +248,7 @@ class MarketStore:
               CREATE TABLE IF NOT EXISTS market_weekly_review_bindings(generation_id TEXT PRIMARY KEY, publication_sha256 TEXT NOT NULL, draft_sha256 TEXT NOT NULL, review_sha256 TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS market_articles(id TEXT NOT NULL, version INTEGER NOT NULL, fingerprint TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL, checked_at TEXT NOT NULL, PRIMARY KEY(id,version));
               CREATE TABLE IF NOT EXISTS market_events(id TEXT NOT NULL, version INTEGER NOT NULL, fingerprint TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL, released_at TEXT NOT NULL, PRIMARY KEY(id,version));
+              CREATE TABLE IF NOT EXISTS market_editorial_quarantines(event_id TEXT NOT NULL,event_version INTEGER NOT NULL,body_sha256 TEXT NOT NULL,reason TEXT NOT NULL,actor TEXT NOT NULL,quarantined_at TEXT NOT NULL,PRIMARY KEY(event_id,event_version));
               CREATE TABLE IF NOT EXISTS market_claims(id TEXT PRIMARY KEY, event_id TEXT NOT NULL, event_version INTEGER NOT NULL, body TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS market_observations(id TEXT NOT NULL, version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(id,version));
               CREATE TABLE IF NOT EXISTS market_weeklies(period TEXT NOT NULL, version INTEGER NOT NULL, fingerprint TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL, released_at TEXT NOT NULL, PRIMARY KEY(period,version));
@@ -293,6 +301,28 @@ class MarketStore:
             for row in db.execute('SELECT rowid,body FROM '+table+" WHERE status='published'").fetchall():
                 body=json.loads(row['body'])
                 if article_id in body.get('article_ids',[]):db.execute('UPDATE '+table+' SET status=? WHERE rowid=?',(reason,row['rowid']))
+    def quarantine_event(self,id,version,*,expected_body_sha256,reason,actor):
+        """只隔离已核实的事件版本；旧正文/审核/原文章保留，不能作为内容展示。"""
+        if (not isinstance(id,str) or not _weekly_positive(version)
+                or not re.fullmatch(r'[0-9a-f]{64}',expected_body_sha256 or '')
+                or not isinstance(reason,str) or not 1<=len(reason.strip())<=1200
+                or not isinstance(actor,str) or not 1<=len(actor.strip())<=120):
+            raise ValueError('invalid_editorial_quarantine')
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT body,status FROM market_events WHERE id=? AND version=?',(id,version)).fetchone()
+            if row is None or hashlib.sha256(row['body'].encode()).hexdigest()!=expected_body_sha256:
+                raise ValueError('quarantine_version_conflict')
+            old=db.execute('SELECT * FROM market_editorial_quarantines WHERE event_id=? AND event_version=?',(id,version)).fetchone()
+            if old is not None:
+                if old['body_sha256']!=expected_body_sha256 or old['reason']!=reason or old['actor']!=actor:
+                    raise ValueError('quarantine_audit_conflict')
+                return False
+            db.execute('INSERT INTO market_editorial_quarantines VALUES(?,?,?,?,?,?)',
+                (id,version,expected_body_sha256,reason,actor,now_iso()))
+            db.execute("UPDATE market_events SET status='editorial_review_required' WHERE id=? AND version=?",(id,version))
+            return True
+
     def withdraw_article(self,id,reason='withdrawn'):
         with self.db() as db:
             db.execute('UPDATE market_articles SET status=?,checked_at=? WHERE id=?',(reason,now_iso(),id));self._invalidate(db,id,reason)
@@ -518,6 +548,10 @@ class MarketStore:
             return {'groups':deepcopy(frozen),'generations':deepcopy(generations)}
 
     def _validate_event_publication(self,db,id,body,fingerprint,*,require_record=True,require_publication_stamp=False):
+        if require_publication_stamp and type(body.get('version')) is int:
+            exists=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='market_editorial_quarantines'").fetchone()
+            if exists and db.execute('SELECT 1 FROM market_editorial_quarantines WHERE event_id=? AND event_version=?',(id,body['version'])).fetchone():
+                raise ValueError('event_editorial_quarantined')
         g=body.get('generation')
         if not isinstance(g,dict) or g.get('contract')!=EVENT_GENERATION_CONTRACT or g.get('event_id')!=id or body.get('id')!=id:raise ValueError('missing_event_generation')
         captured=db.execute('SELECT snapshot FROM market_event_generations WHERE generation_id=?',(g.get('generation_id'),)).fetchone()

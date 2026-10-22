@@ -9,6 +9,7 @@ from market_content import MarketStore, week_periods, packed, CN, WEEKLY_GENERAT
 from market_editor import MarketEditor
 from market_schedule import plan
 from market_daily import DailyMarket
+from market_source_attribution import first_publication_verified
 
 EDITOR_VERSION=EVENT_EDITOR_POLICY
 DAILY_HOTSPOT_COUNT=6
@@ -49,6 +50,7 @@ def daily_hotspot_candidates(groups, now, limit=DAILY_CANDIDATE_LIMIT):
     for group in groups:
         try:
             primary=group['articles'][0]
+            if not first_publication_verified(primary):continue
             published=datetime.fromisoformat(primary['published_at'])
             if (published.tzinfo is None or published>now
                     or published.astimezone(CN).date()!=now.date()
@@ -61,6 +63,20 @@ def daily_hotspot_candidates(groups, now, limit=DAILY_CANDIDATE_LIMIT):
     financial=lambda group:bool(re.search(r'银行|存款|存单|理财|债券|基金|证券|保险|金融|利率|汇率|货币|政策|财政|税|经济|物价|就业',group['articles'][0].get('title','')))
     eligible.sort(key=financial,reverse=True)
     return select_candidates(eligible,limit)
+
+def unchanged_historical_contract_upgrade(old,article,now):
+    """元数据解析器升级不作原报道修订；旧日证据原封保留，不赋予今日资格。"""
+    if not old or old.get('status')!='active' or old.get('source_attribution') or not article.get('source_attribution'):return False
+    try:
+        published=datetime.fromisoformat(old['published_at'])
+        if published.astimezone(CN).date()>=now.astimezone(CN).date() or published!=datetime.fromisoformat(article['published_at']):return False
+    except (ValueError,TypeError,KeyError):return False
+    compact=lambda text:''.join((text or '').split())
+    return (old.get('id')==article.get('id') and old.get('source_id')==article.get('source_id')
+        and old.get('title')==article.get('title') and old.get('identity')==article.get('identity')
+        and old.get('access_status')==article.get('access_status')
+        and not article.get('evidence_truncated') and not old.get('evidence_truncated')
+        and compact(old.get('evidence_text'))==compact(article.get('evidence_text')))
 
 def daily_qualified_count(store):
     with store.db() as db:return len(DailyMarket(store).candidates(db,datetime.now(CN)))
@@ -102,6 +118,7 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
                 if not force_check and old and old['status']=='active' and (datetime.now(timezone.utc)-datetime.fromisoformat(old['checked_at'])).total_seconds()<10800:continue
                 try:
                     article=read_article(source,entry)
+                    if unchanged_historical_contract_upgrade(old,article,datetime.now(timezone.utc)):continue
                     if old and old.get('content_mode')=='source_verified_text' and old['status']=='active':
                         # 历史正文含段落换行，日常解析器折叠空白；解析格式变化不构成原文修订。
                         # 相同文字、标题和发表时刻保留旧证据绑定，不重写30日历史快照。
@@ -170,6 +187,14 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
                 (g['id'] in existing and existing[g['id']].get('input_hash')==input_hash(g) and store._event_is_reusable(existing[g['id']],input_hash(g)))
                 or tuple(sorted((a['id'],a['version']) for a in g['articles'])) in verified_text_bindings)]
             def publish_events(pending,reserve=0,until_daily_target=False):
+                if until_daily_target:
+                    with store.db() as db:incumbents=DailyMarket(store).candidates(db,datetime.now(CN))
+                    if len(incumbents)==DAILY_HOTSPOT_COUNT:
+                        boundary=max(datetime.fromisoformat(e['reported_at']) for e in incumbents)
+                        pending=[g for g in pending if datetime.fromisoformat(g['articles'][0]['published_at'])>boundary]
+                        pending=sorted(pending,key=lambda g:datetime.fromisoformat(g['articles'][0]['published_at']),reverse=True)[:DAILY_HOTSPOT_COUNT]
+                        report['hotspot_replacement']={'required':bool(pending),'candidates':[g['id'] for g in pending],'published':[]}
+                        until_daily_target=False
                 for offset in range(len(pending)):
                     if until_daily_target and daily_qualified_count(store)>=DAILY_HOTSPOT_COUNT:break
                     if time.monotonic()+95+reserve>deadline:report['rejected'].append({'stage':'editor','reason':'run_deadline'});break
@@ -181,6 +206,7 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
                             h=input_hash(next(g for g in snapshot['groups'] if g['id']==e['id']));e['input_hash']=h
                             store._record_event_review(e)
                             report['published_events']+=int(store.publish('market_events',e['id'],e,h))
+                            if e['id'] in report.get('hotspot_replacement',{}).get('candidates',[]):report['hotspot_replacement']['published'].append(e['id'])
                     except Exception as error:report['rejected'].append({'stage':'event_review','ids':[g['id'] for g in batch],'reason':getattr(error,'code',str(error))[:120]})
             # 先完成到期周报的材料和周报，再使用剩余预算处理热点。
             publish_events([g for g in pending if g['id'] in weekly_ids],WEEKLY_RESERVE_SECONDS)
@@ -220,9 +246,12 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
             report['daily_edition']=store.update_daily(run_id=id,valid_check=good,
                 coverage={'limited':limited,'sources':report['sources'],'scope':'registered_public_sources','required_count':DAILY_HOTSPOT_COUNT})
             count=report['daily_edition'].get('count')
-            report['streams']['hotspots']={'status':'ok' if good and count==DAILY_HOTSPOT_COUNT else 'partial' if good else 'failed',
+            replacement=report.get('hotspot_replacement',{})
+            replacement_failed=replacement.get('required') is True and not replacement.get('published')
+            complete=good and count==DAILY_HOTSPOT_COUNT and not replacement_failed
+            report['streams']['hotspots']={'status':'ok' if complete else 'partial' if good else 'failed',
                 'required_count':DAILY_HOTSPOT_COUNT,'qualified_count':count,
-                'publication_complete':good and count==DAILY_HOTSPOT_COUNT}
+                'publication_complete':complete,'fresh_replacement_failed':replacement_failed}
         if 'ingest' in jobs:report['streams']['ingest']={'status':'ok' if good and not limited else 'partial' if good else 'failed'}
         if 'weekly' in jobs:
             target=report['targets']['weekly']

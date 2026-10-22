@@ -10,6 +10,7 @@ import io
 import json
 import os
 from pathlib import Path
+import plistlib
 import shutil
 import sqlite3
 import sys
@@ -1433,6 +1434,231 @@ class CurrentRagHarnessSafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'prepared_retrieval_source_(changed|not_frozen)'):
             runner.prepare(self.consumer_prepared_args())
         self.assertFalse((self.output / 'run-01/candidate' / relative).exists())
+        self.assert_no_execution()
+
+    def external_storage_fixture(self):
+        """模拟独立挂载点；不创建或卸载真实/Volumes目录。"""
+        self.mount = Path(self.temporary.name).resolve() / 'YOUN'
+        self.external = self.mount / '04-项目/Navren/outputs/rag-overall-acceptance-20261012'
+        self.external.mkdir(parents=True)
+        self.volume_info = {'MountPoint': str(self.mount), 'VolumeUUID': runner.YOUN_UUID}
+        self.mounted = True
+        stack = ExitStack()
+        self.addCleanup(stack.close)
+        stack.enter_context(patch.object(runner, 'YOUN_MOUNT', self.mount))
+        stack.enter_context(patch.object(runner, 'YOUN_OUTPUT_ROOT', self.external))
+        stack.enter_context(patch.object(runner, '_youn_device', None))
+        stack.enter_context(patch.object(runner.os.path, 'ismount',
+            side_effect=lambda path: Path(path) == self.mount and self.mounted))
+        self.diskutil = stack.enter_context(patch.object(runner.subprocess, 'run',
+            side_effect=lambda *args, **kwargs: SimpleNamespace(stdout=plistlib.dumps(self.volume_info))))
+
+    def test_external_registered_namespace_freezes_consumer_with_original_contracts(self):
+        self.external_storage_fixture()
+        self.consumer_source_fixture(original_worker=True)
+        directory = self.external / 'source-fixture'
+        shutil.move(str(self.consumer_root.parent), directory)
+        self.consumer_root = directory / 'source'
+        self.consumer_manifest = directory / 'source-manifest.json'
+        config = runner.prepare(self.consumer_args(out_dir=self.external / 'run-01'))
+        self.assertEqual(config['out_dir'], str(self.external / 'run-01'))
+        self.assertTrue(runner.consumer_source_unchanged(config))
+        self.assertTrue(all(runner.hashes_unchanged(config).values()))
+        self.assertEqual(config['source_sha256']['app.py'], self.consumer_files['app.py'])
+        self.assertEqual(config['source_sha256']['scripts/run_current_rag_acceptance.py'], config['runner_sha256'])
+        self.assertLess(self.diskutil.call_count, 12)  # 卷身份按阶段检查，不按小文件调用。
+        self.assert_no_execution()
+
+    def test_external_missing_mount_wrong_uuid_and_wrong_mountpoint_never_create_output(self):
+        self.external_storage_fixture()
+        for index, state in enumerate(('unmounted', 'wrong-uuid', 'wrong-mountpoint')):
+            with self.subTest(state=state):
+                self.mounted = state != 'unmounted'
+                self.volume_info = {'MountPoint': str(self.mount), 'VolumeUUID': runner.YOUN_UUID}
+                if state == 'wrong-uuid':
+                    self.volume_info['VolumeUUID'] = 'unregistered-volume'
+                if state == 'wrong-mountpoint':
+                    self.volume_info['MountPoint'] = '/Volumes/other'
+                out = self.external / ('rejected-' + str(index))
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(runner.run(self.args(out_dir=out, cloud=True, execute=True)), 2)
+                self.assertFalse(out.exists())
+        self.assert_no_execution()
+
+    def test_external_prepared_receipt_and_database_retain_original_identity_guards(self):
+        self.external_storage_fixture()
+        self.prepared_fixture()
+        destination = self.external / self.prepared_database.name
+        shutil.move(str(self.prepared_database), destination)
+        self.prepared_database = destination
+        self.receipt['actual_database_path'] = str(destination)
+        self.receipt_path = self.external / 'prepared-results.json'
+        self.write_receipt()
+        config = runner.prepare(self.prepared_args(out_dir=self.external / 'prepared-run'))
+        self.assertEqual(config['prepared_public']['receipt_path'], str(self.receipt_path))
+        self.assertEqual(config['input_sha256']['knowledge.sqlite3'], self.receipt['database_sha256'])
+        self.assertTrue(all(runner.hashes_unchanged(config).values()))
+        for name, source in (('prepared_public_manifest', self.receipt_path),
+                             ('knowledge_database', self.prepared_database)):
+            alias = self.mount / ('unregistered-' + source.name)
+            alias.symlink_to(source)
+            args = self.prepared_args(out_dir=self.external / ('alias-' + name))
+            setattr(args, name, alias)
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'rag_storage_path_redirected_or_outside_scope'):
+                runner.prepare(args)
+        source_alias = self.mount / 'source-public-alias.sqlite3'
+        source_alias.symlink_to(self.database)
+        self.receipt['source_database_path'] = str(source_alias); self.write_receipt()
+        with self.assertRaisesRegex(ValueError, 'redirected'):
+            runner.prepare(self.prepared_args(out_dir=self.external / 'source-alias'))
+        self.assert_no_execution()
+
+    def test_external_scope_and_parent_redirects_are_rejected_before_any_write(self):
+        self.external_storage_fixture()
+        outside = self.mount / 'unregistered-output'
+        redirect = self.external / 'redirect'
+        redirect.symlink_to(self.output, target_is_directory=True)
+        physical = self.external / 'physical'
+        physical.mkdir()
+        alias = self.root / 'external-alias'
+        alias.symlink_to(physical, target_is_directory=True)
+        for out in (outside / 'run', redirect / 'run', alias / 'run', self.external):
+            with self.subTest(out=out), self.assertRaises(ValueError):
+                runner.prepare(self.args(out_dir=out))
+        self.assertFalse(outside.exists())
+        self.assertFalse((self.output / 'run').exists())
+        self.assertFalse((physical / 'run').exists())
+        self.assert_no_execution()
+
+    def test_external_consumer_manifest_and_root_cannot_escape_registered_namespace(self):
+        self.external_storage_fixture()
+        self.consumer_source_fixture()
+        outside = self.mount / 'unregistered-source'
+        shutil.copytree(self.consumer_root, outside)
+        manifest = self.mount / 'unregistered-manifest.json'
+        shutil.copy2(self.consumer_manifest, manifest)
+        for changes in ({'consumer_source_root': outside},
+                        {'consumer_source_manifest': manifest, 'consumer_source_manifest_sha256': runner.sha(manifest)}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                runner.consumer_source_contract(self.consumer_args(**changes))
+        self.assert_no_execution()
+
+    def test_external_disconnect_during_freeze_rejects_before_recursive_mkdir(self):
+        self.external_storage_fixture()
+        original = runner.freeze_snapshot
+        def disconnected(*args, **kwargs):
+            self.mounted = False
+            return original(*args, **kwargs)
+        out = self.external / 'interrupted'
+        with patch.object(runner, 'freeze_snapshot', side_effect=disconnected), redirect_stdout(io.StringIO()):
+            self.assertEqual(runner.run(self.args(out_dir=out)), 2)
+        self.assertEqual(list((out / 'candidate').iterdir()), [])
+        self.assertFalse((out / 'source-manifest.json').exists())
+        self.assertFalse((out / 'results.json').exists())
+        self.assert_no_execution()
+
+    def test_external_disconnect_at_initial_mkdir_cannot_rebuild_mount_namespace(self):
+        self.external_storage_fixture()
+        out = self.external / 'interrupted-first-mkdir'
+        original = Path.mkdir
+        def disconnected(path, *args, **kwargs):
+            if path == out:
+                self.mounted = False
+                shutil.rmtree(self.external)
+            return original(path, *args, **kwargs)
+        with patch.object(Path, 'mkdir', disconnected), redirect_stdout(io.StringIO()):
+            self.assertEqual(runner.run(self.args(out_dir=out)), 2)
+        self.assertFalse(self.external.exists())
+        self.assertFalse(out.exists())
+        self.assert_no_execution()
+
+    def test_external_save_rechecks_volume_and_device_without_temp_or_local_fallback(self):
+        self.external_storage_fixture()
+        out = self.external / 'write-boundary'
+        out.mkdir()
+        runner.check_youn_storage(out, refresh=True)
+        self.volume_info['VolumeUUID'] = 'replacement-on-same-device'
+        with self.assertRaisesRegex(ValueError, 'rag_storage_volume_mismatch'):
+            runner.save(out / 'receipt.json', {'must_not_write': True})
+        self.volume_info['VolumeUUID'] = runner.YOUN_UUID
+        real_stat = runner.os.stat
+        def changed_device(path, *args, **kwargs):
+            result = real_stat(path, *args, **kwargs)
+            if Path(path) == out:
+                fields = list(result); fields[2] += 1
+                return os.stat_result(fields)
+            return result
+        with patch.object(runner.os, 'stat', side_effect=changed_device):
+            with self.assertRaisesRegex(ValueError, 'rag_storage_device_changed'):
+                runner.save(out / 'receipt.json', {'must_not_write': True})
+        self.assertEqual(list(out.iterdir()), [])
+        outside = self.root / 'must-stay-unchanged.json'
+        outside.write_text('original')
+        (out / 'receipt.json.tmp').symlink_to(outside)
+        with self.assertRaisesRegex(ValueError, 'rag_storage_path_redirected_or_outside_scope'):
+            runner.save(out / 'receipt.json', {'must_not_write': True})
+        self.assertEqual(outside.read_text(), 'original')
+        self.assertFalse((out / 'receipt.json').exists())
+        self.assert_no_execution()
+
+    def archived_prepared_source_fixture(self):
+        self.external_storage_fixture(); self.prepared_fixture()
+        self.legacy_logical = self.output / 'cloud-pilot-current-03/inputs/knowledge.sqlite3'
+        self.legacy_physical = (self.mount / '99-本机归档/20261019-补充内盘减负/文件/CC/projects/Navren'
+                                / self.legacy_logical.relative_to(self.root))
+        self.legacy_physical.parent.mkdir(parents=True)
+        shutil.copyfile(self.database, self.legacy_physical)
+        self.legacy_logical.parent.mkdir(parents=True)
+        self.legacy_logical.symlink_to(self.legacy_physical)
+        self.receipt['source_database_path'] = str(self.legacy_logical); self.write_receipt()
+
+    def test_archived_prepared_original_source_is_read_via_exact_legacy_link(self):
+        self.archived_prepared_source_fixture()
+        config = runner.prepare(self.prepared_args())
+        self.assertEqual(config['prepared_public']['source_database_path'], str(self.legacy_physical))
+        self.assertTrue(self.legacy_logical.is_symlink())
+        self.assertTrue(all(runner.hashes_unchanged(config).values()))
+        self.assert_no_execution()
+
+    def test_archived_prepared_source_wrong_suffix_or_noncanonical_logical_path_is_rejected(self):
+        self.archived_prepared_source_fixture()
+        wrong = self.legacy_physical.with_name('wrong.sqlite3')
+        shutil.copyfile(self.database, wrong)
+        self.legacy_logical.unlink(); self.legacy_logical.symlink_to(wrong)
+        with self.assertRaisesRegex(ValueError, 'archived_prepared_source_binding_invalid'):
+            runner.prepare(self.prepared_args())
+        self.legacy_logical.unlink(); self.legacy_logical.symlink_to(self.legacy_physical)
+        self.receipt['source_database_path'] = str(self.legacy_logical.parent / '..' / 'inputs/knowledge.sqlite3')
+        self.write_receipt()
+        with self.assertRaisesRegex(ValueError, 'archived_prepared_source_binding_invalid'):
+            runner.prepare(self.prepared_args(out_dir=self.output / 'noncanonical-read'))
+        self.assert_no_execution()
+
+    def test_archived_prepared_source_wrong_hash_or_volume_is_rejected(self):
+        self.archived_prepared_source_fixture()
+        original = self.legacy_physical.read_bytes()
+        self.legacy_physical.write_bytes(original + b'synthetic-drift')
+        with self.assertRaisesRegex(ValueError, 'archived_prepared_source_binding_invalid'):
+            runner.prepare(self.prepared_args())
+        self.legacy_physical.write_bytes(original)
+        self.volume_info['VolumeUUID'] = 'wrong-volume'
+        with self.assertRaisesRegex(ValueError, 'rag_storage_volume_mismatch'):
+            runner.prepare(self.prepared_args(out_dir=self.output / 'wrong-volume-read'))
+        self.assert_no_execution()
+
+    def test_archived_read_exception_never_authorizes_output_or_consumer_source(self):
+        self.archived_prepared_source_fixture()
+        with self.assertRaises(ValueError):
+            runner.check_youn_storage(self.legacy_physical)
+        outside = self.legacy_physical.parent / 'write-attempt'
+        with self.assertRaises(ValueError):
+            runner.prepare(self.prepared_args(out_dir=outside))
+        manifest = self.legacy_physical.parent / 'consumer-manifest.json'
+        manifest.write_text(json.dumps({'source_sha256': {'knowledge.sqlite3': runner.sha(self.legacy_physical)}}))
+        with self.assertRaises(ValueError):
+            runner.consumer_source_contract(self.args(consumer_source_root=self.legacy_physical.parent,
+                consumer_source_manifest=manifest, consumer_source_manifest_sha256=runner.sha(manifest)))
+        self.assertFalse(outside.exists())
         self.assert_no_execution()
 
 

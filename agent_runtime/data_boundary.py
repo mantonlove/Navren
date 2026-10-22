@@ -422,6 +422,8 @@ class CloudDataBoundary:
         self._public_quote_repair_used = False
         self._public_quote_repair_applying = False
         self._public_quote_repair_schema_active = False
+        self._public_quote_joint_source_reference = None
+        self._public_fee_delivery_searches = {}
         self._explicit_public_as_of = None
         self._counts = Counter()
         self.max_private_items = min(24, max(1, int(max_private_items)))
@@ -780,6 +782,16 @@ class CloudDataBoundary:
             self._counts['omitted'] += 1
             return _DROP
         if isinstance(value, Mapping):
+            if (domain == 'general' and key == 'references'
+                    and value.get('kind') == 'public_quote_joint_source_rendering'):
+                registered = self._public_quote_joint_source_reference
+                if registered is None or value != registered['reference']:
+                    raise BoundaryError('BOUNDARY_INVALID_INPUT')
+                self._validate_public_quote_joint_source_reference(value)
+                result = copy.deepcopy(dict(value))
+                for leaf in result['references']:
+                    leaf['evidence_id'] = self._alias(leaf['evidence_id'])
+                return result
             if key in _AGGREGATE_MAPS:
                 result = {}
                 for field, item in value.items():
@@ -1904,6 +1916,17 @@ class CloudDataBoundary:
         self._remember_delivered_public_quote_facts(name, result)
         if self._metric_selection_mode:
             result = self._metric_choice_view(name, result)
+        if (name=='knowledge_search' and isinstance(output,Mapping) and isinstance(result,Mapping)
+                and isinstance(output.get('evidence_id'),str) and isinstance(output.get('data'),Mapping)
+                and result.get('evidence_id')in self._reverse
+                and self._reverse[result['evidence_id']]==output['evidence_id']):
+            # One-turn host snapshot of the actual tool projection, not a new
+            # monetary fact or a model-supplied source catalog.
+            snapshot={'data':copy.deepcopy(output['data']),
+                'visible':self._restore(result.get('data'),strict=False)}
+            eid=output['evidence_id'];previous=self._public_fee_delivery_searches.get(eid)
+            if previous is not None and previous!=snapshot:raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            self._public_fee_delivery_searches[eid]=snapshot
         return result
 
     def _metric_choice_view(self, name, result):
@@ -3098,6 +3121,12 @@ class CloudDataBoundary:
                         function['description']='先为每个指定路径写出修复后的完整自然表达，保留原段有据结论、非金额条件与未核实边界，仍须直接回答完整用户问题；不能用占位文字或引文代替回答。再选择该段必需的本轮公开货币引文，无需金额时引用列表为空。提交base_sha256与覆盖全部路径的replacements，其他原参数由宿主原样保留；不得遗漏、重复或原样重交。'
                         if self._public_quote_repair.get('market_recovery') is not None:
                             function['description']='本次市场新闻仅提交base_sha256、selections和paragraphs三个字段。selections逐一覆盖每个slot_id，只能选对应source_choices；paragraphs逐一覆盖指定原text路径，只写完整自然的非货币解释，不添加新事实，不抄货币数值或占位句。其他段落、claims、条件和未知边界原样保留；所选完整原文由宿主展开，原金额、来源、时效、GLM及最终发布校验不变。'
+                        if self._public_quote_repair.get('fee_recovery') is not None:
+                            function['description']='仅提交base_sha256与replacements，每个指定path各一次，仅含path/text。仅围绕用户所问费用，按本轮原文清楚说明费种、份额、费率周期、费率和扣除口径，不用同数值的其他费种代替答复，不新增无关时限。删除或按原文修正无据费用计提、扣除、频率、净值作用及持有期限适用关系；若同时给出计日反馈，本次一起补足同稿已有期限的同版口径、前提及例外。时间专用append_only_paths须逐字保留原片前缀再追加，重合费用路径也不得删原有据期限和例外。不得以常识新增结论；保留年率、费档、条件和未知边界，其余结构及证据绑定由宿主保留，不选择货币引文或添加字段。此为共享唯一修稿，金额、来源、发布与GLM仍须通过。'
+                        if (self._public_quote_repair.get('fee_recovery')or {}).get('time_basis_rejections'):
+                            function['description']='仅提交base_sha256与覆盖费用路径的replacements，各项仅path/text。只修无据费用关系，按本轮原文清楚说明所问费种、份额、费率周期、费率及扣除口径；不能用其他费种的同数值代替答复。原期限完整句、前提和例外必须原样保留，不新增期限、单位或T日口径，不补抄计日定义；绑定的规范来源原文由宿主独立核验后本地装配。此为共享唯一修稿，其余结构及证据由宿主保留，原费用、时间、金额、完整GLM和发布门仍须通过。'
+                        if self._public_quote_repair.get('time_basis_only') is True:
+                            function['description']='仅提交原base_sha256及覆盖所列路径的replacements，各项仅path、text、public_quote_fact_ids=[]。text必须逐字保留原片作为前缀，只在末尾补本轮同版本原文支持的计日口径、前提及例外，不删除原条件或未知字段，不添加无据期限；宿主保留其余整稿。此为原唯一修稿，来源时间、金额、完整GLM与发布校验仍照常。'
                         public_quote_repair_mode=True
                 elif 'reply_parts' in properties:
                     reply_parts_reference_field=self._limit_reply_parts_schema(parameters)
@@ -3200,6 +3229,9 @@ class CloudDataBoundary:
         if repair.get('market_recovery') is not None:
             from .market_quote_recovery import market_repair_schema
             return market_repair_schema(repair['market_recovery'])
+        if repair.get('fee_recovery') is not None:
+            from .public_quote_recovery import fee_repair_schema
+            return fee_repair_schema(repair['fee_recovery'])
         if repair.get('choice_recovery') is not None:
             from .public_quote_recovery import choice_repair_schema
             return choice_repair_schema(repair['choice_recovery'])
@@ -3217,6 +3249,11 @@ class CloudDataBoundary:
                             'description':'text与绑定的本轮可信引文共同完整回答问题；text须直接表达有据的非货币结论、非金额资格及渠道条件和未核实边界，必需金额及阈值由引文完整展开；即使填写引用ID，text中的货币数值仍会被拒绝；金额只由引用原文展示，text不得继续包含货币数值或金额阈值，也不能只删币种或改写数字；用户必需金额由引用显示，不用占位文字替代回答。'},
                         'public_quote_fact_ids':{'type':'array','minItems':0,'maxItems':6,'items':copy.deepcopy(reference),
                             'description':'只选本段必需货币金额或阈值的本轮可信原件；不需金额时为空，同一原文不必多段重复，不能省略必需金额或条件。'}}})
+        if repair.get('time_basis_only') is True:
+            for variant in variants:
+                variant['properties']['text']['description']='逐字保留原片作为前缀，仅在末尾补同版本原文支持的计日说明、申请前提和例外；不得删除或改写原片、原条件与未知边界。'
+                variant['properties']['public_quote_fact_ids'].update(maxItems=0,
+                    description='此次仅补计日说明，必须为空；不替换本轮原有引用。')
         return {'type':'object','additionalProperties':False,
             'properties':{'base_sha256':{'type':'string','enum':[repair['base_sha256']]},
                 'replacements':{'type':'array','minItems':len(repair['paths']),'maxItems':len(repair['paths']),
@@ -3236,6 +3273,18 @@ class CloudDataBoundary:
             try:
                 assembled=apply_market_repair(repair['blocked'],repair['market_recovery'],
                     self._public_quote_fact_texts,args)
+            except (ValueError,KeyError,IndexError,TypeError):raise BoundaryError('BOUNDARY_OUTPUT')
+            repair['status']='applying';self._public_quote_repair_applying=True
+            try:restored=self._restore_public_quote_answer(assembled)
+            except BaseException:
+                repair['status']='failed'
+                raise
+            finally:self._public_quote_repair_applying=False
+            repair['status']='restored'
+            return restored
+        if repair.get('fee_recovery') is not None:
+            from .public_quote_recovery import apply_fee_repair
+            try:assembled=apply_fee_repair(repair['blocked'],repair['fee_recovery'],args)
             except (ValueError,KeyError,IndexError,TypeError):raise BoundaryError('BOUNDARY_OUTPUT')
             repair['status']='applying';self._public_quote_repair_applying=True
             try:restored=self._restore_public_quote_answer(assembled)
@@ -3281,6 +3330,9 @@ class CloudDataBoundary:
             index=int(first)if row_index is None else int(second)
             row=repair['blocked'][field]if row_index is None else repair['blocked'][field][row_index]
             original=row[index]
+            if (repair.get('time_basis_only') is True
+                    and (references or not text.startswith(original['text']))):
+                raise BoundaryError('BOUNDARY_OUTPUT')
             if not references and text==original['text']:raise BoundaryError('BOUNDARY_OUTPUT')
             updates.append((field,row_index,index,copy.deepcopy(parts)))
         if seen!=set(repair['paths']):raise BoundaryError('BOUNDARY_OUTPUT')
@@ -3344,6 +3396,331 @@ class CloudDataBoundary:
         self._public_quote_model_answer=copy.deepcopy(dict(args))
         self._public_quote_restored_answer=copy.deepcopy(result)
         return result
+
+    def public_quote_time_feedback(self,args,binding):
+        if self._public_quote_repair_used:
+            raise BankError('PUBLIC_QUOTE_REPAIR_EXHAUSTED','受限修复后来源时间条件仍未通过，本轮停止。',422)
+        if (not self._metric_selection_mode or not getattr(self,'_public_quote_answer_mode',False)
+                or self._public_quote_repair is not None or self._public_quote_model_answer is None
+                or args!=self._public_quote_restored_answer or not isinstance(binding,Mapping)
+                or binding.get('answer_status')!='missing'
+                or binding.get('counting_unit')not in ('工作日','自然日')
+                or binding.get('excludes_t')not in (None,True)
+                or not isinstance(binding.get('definition'),str) or not binding['definition']):
+            raise BoundaryError('BOUNDARY_INVALID_INPUT')
+        notation=binding.get('notation');match=re.fullmatch(r'T\+([0-9]+)',notation or '')
+        if match is None:raise BoundaryError('BOUNDARY_INVALID_INPUT')
+        from .knowledge_semantics import _concrete_time_conclusions
+        paths=[]
+        for field in ('direct_answer','conditions','unknowns'):
+            rows=[args[field]]if field=='direct_answer'else args[field]
+            for row_index,row in enumerate(rows):
+                for part_index,part in enumerate(row):
+                    if ('text'in part
+                            and match[1]in _concrete_time_conclusions(part['text'])):
+                        paths.append(field+'['+str(part_index)+'].text'if field=='direct_answer'else
+                            field+'['+str(row_index)+']['+str(part_index)+'].text')
+        if not paths:
+            raise BankError('PUBLIC_QUOTE_REPAIR_UNAVAILABLE','没有可核验的原期限文字路径，本轮停止。',422)
+        blocked=copy.deepcopy(self._public_quote_model_answer)
+        canonical=json.dumps(blocked,sort_keys=True,ensure_ascii=False,separators=(',',':'),allow_nan=False)
+        base=hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+        self._public_quote_repair={'blocked':blocked,'base_sha256':base,'paths':tuple(paths),
+            'status':'pending','time_basis_only':True}
+        return {'contract_error':'PUBLIC_TIME_BASIS_REQUIRED',
+            'repair':{'contract':'navren.public-quote-answer-repair/3','base_sha256':base,
+                'fields':paths,'replacement_fields':['text','public_quote_fact_ids']},
+            'source_time_basis':{key:binding[key]for key in
+                ('notation','definition','counting_unit','excludes_t')},
+            'instruction':'沿用原结构和原条件，只补本轮同版本原文支持的计日口径及其前提、例外。'
+                '对每个指定路径提交一次完整text，必须逐字保留该原片作为前缀，仅在末尾追加说明；'
+                'public_quote_fact_ids必须为空，其他分区、条件、claims和引用由宿主原样保留。'
+                '不能删条件、退回text终稿或只把条件留在claims；不新增检索，不补造工作日或交易结论。'
+                '这是与费用、金额修复共享的唯一一次机会；来源时间、金额、完整GLM和发布校验仍全部执行。'}
+
+    def public_quote_fee_feedback(self,args,rejected,*,time_basis_rejections=(),time_endpoint_sources=()):
+        if self._public_quote_repair_used:
+            raise BankError('PUBLIC_QUOTE_REPAIR_EXHAUSTED','受限修复后费用来源仍未通过，本轮停止。',422)
+        if (not self._metric_selection_mode or not getattr(self,'_public_quote_answer_mode',False)
+                or self._public_quote_repair is not None or self._public_quote_model_answer is None
+                or args!=self._public_quote_restored_answer):raise BoundaryError('BOUNDARY_INVALID_INPUT')
+        from .public_quote_recovery import build_fee_repair
+        blocked=copy.deepcopy(self._public_quote_model_answer)
+        try:context=build_fee_repair(blocked,rejected,time_basis_rejections=time_basis_rejections,
+            time_endpoint_sources=time_endpoint_sources)
+        except (ValueError,KeyError,IndexError,TypeError):
+            raise BankError('PUBLIC_QUOTE_REPAIR_UNAVAILABLE','本轮没有可核验的费用来源修复路径。',422)
+        self._public_quote_repair={'blocked':blocked,'base_sha256':context['base_sha256'],
+            'paths':tuple(context['paths']),'status':'pending','fee_recovery':context}
+        feedback={'contract_error':'PUBLIC_FEE_SOURCE_REQUIRED',
+            'repair':{key:copy.deepcopy(context[key])for key in ('contract','base_sha256','paths')},
+            'instruction':'本轮已交付原文未支持所列费用计提、频率、持有期限无条件适用或净值作用关系。下一次answer_reviewed只提交base_sha256和replacements；'
+                '每个path各提交一次非空text，只修所列正文及claims字符串，其他参数由宿主逐字保留。'
+                '删除或按本轮原文修正所有无据的费用作用、范围、计提及频率关系，不能只删计提词；不得用会计常识新增结论。资产扣除与年费率不能证明持有期限无条件适用、净值影响或每日计提。'
+                '仅围绕用户所问费用，按本轮原文清楚说明相关费种、份额、费率周期、费率及扣除口径；不能用同数值的其他费种代替答复，不新增与问题无关的时限。'
+                '如同时提供source_time_basis，须在本次补片补足同稿已有期限的同版原文计日口径、前提及例外。append_only_paths须逐字保留原片作为前缀，仅末尾追加；费用与时间重合路径仍须保留原有据期限和例外，不能删条件规避时间门。'
+                '不要把这些费用或计日口径指向无关原文、费种或版本；保留原费率档、条件、风险及未知边界，不重读、不执行操作。'
+                '此为原public_quote唯一一次修稿，费用与时间须一起修复，失败即停止；原金额、来源、发布与GLM门保持不变。'}
+        if context.get('time_basis_rejections'):
+            feedback['source_time_basis']=[{key:binding[key]for key in
+                ('notation','definition','counting_unit','excludes_t')}for binding in context['time_basis_rejections']]
+            feedback['instruction']='本轮已交付原文未支持所列费用关系。下一次answer_reviewed只提交base_sha256和覆盖费用路径的replacements，每个path各一次非空text；其他参数由宿主逐字保留。只删除或按原文修正无据费用计提、频率、净值作用及持有期限适用关系，不得用常识新增结论。仅围绕用户所问费用清楚说明费种、份额、费率周期、费率及扣除口径，不能把其他费种的同数值当答复。必须原样保留原稿已有期限的完整独立句、前提及例外，不新增或改写期限、单位或T日口径；规范计日原文将由宿主按本轮同版绑定独立核验后本地装配，模型不要补抄定义。不得删时间句规避校验；已有明确或含糊计日口径不属于自动补全范围。此为费用与时间共享的唯一修稿，原费用、时间、金额、完整GLM、FinalProof及发布校验保持不变。'
+        if context.get('fee_safe_edits'):
+            feedback['instruction']+=' 本次仅删除已定位的独立无据连续承担分句；每个path的text须选择schema内对应枚举，除此以外原字节、费种、份额、费率档、年率、全部时间句、前提、例外、claims及未知边界都不得更改。'
+        return feedback
+
+    def _public_quote_fee_source_context(self,restored_args):
+        repair=self._public_quote_repair
+        context=repair.get('fee_recovery')if isinstance(repair,Mapping)else None
+        if not isinstance(context,Mapping)or context.get('time_basis_rejections'):return None
+        if (self._public_quote_repair_used is not True or repair.get('status')!='restored'
+                or restored_args!=self._public_quote_restored_answer):
+            raise BoundaryError('BOUNDARY_INVALID_INPUT')
+        from .public_quote_recovery import _digest, _fee_source_time_sentences
+        protected=context.get('fee_source_time_sentences')
+        if (type(protected)is not list or protected!=_fee_source_time_sentences(repair['blocked'])
+                or protected!=_fee_source_time_sentences(restored_args)):
+            raise BoundaryError('BOUNDARY_INVALID_INPUT')
+        return copy.deepcopy({'contract':'navren.public-quote-fee-source-context/1',
+            'original_draft_sha256':context['base_sha256'],'restored_args_sha256':_digest(restored_args),
+            'fee_paths':context['paths'],'protected_time_sentences':protected})
+
+    def public_quote_joint_source_context(self,restored_args):
+        repair=self._public_quote_repair
+        context=repair.get('fee_recovery')if isinstance(repair,Mapping)else None
+        if not isinstance(context,Mapping):
+            if (not self._metric_selection_mode or not getattr(self,'_public_quote_answer_mode',False)
+                    or self._public_quote_model_answer is None
+                    or not isinstance(restored_args,Mapping)or 'direct_answer'not in restored_args):return None
+            if (restored_args!=self._public_quote_restored_answer or repair is not None
+                    and (self._public_quote_repair_used is not True or repair.get('status')!='restored')):
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            from .public_quote_recovery import _digest
+            original=repair['blocked']if repair is not None else self._public_quote_model_answer
+            return {'contract':'navren.public-quote-fee-delivery-context/1',
+                'original_draft_sha256':_digest(original),'restored_args_sha256':_digest(restored_args)}
+        if not context.get('time_basis_rejections'):
+            return self._public_quote_fee_source_context(restored_args)
+        if (self._public_quote_repair_used is not True or repair.get('status')!='restored'
+                or restored_args!=self._public_quote_restored_answer):
+            raise BoundaryError('BOUNDARY_INVALID_INPUT')
+        from .public_quote_recovery import _digest
+        result=copy.deepcopy({'contract':'navren.public-quote-joint-source-context/1',
+            'original_draft_sha256':context['base_sha256'],
+            'restored_args_sha256':_digest(restored_args),
+            'fee_paths':context['fee_paths'],'time_paths':context['time_paths'],
+            'time_basis_rejections':context['time_basis_rejections'],
+            'protected_time_sentences':context['protected_time_sentences']})
+        if context.get('time_endpoint_sources'):result['time_endpoint_sources']=copy.deepcopy(context['time_endpoint_sources'])
+        return result
+
+    def _public_fee_delivery_sources(self):
+        """Rebuild all cited fee originals from this boundary's delivered views."""
+        cited={eid for claim in self._public_quote_restored_answer['claims']for eid in claim['evidence_ids']}
+        selected={}
+        for eid in sorted(cited):
+            snapshot=self._public_fee_delivery_searches.get(eid)
+            if snapshot is None:continue
+            data=snapshot['data'];visible=snapshot['visible']
+            if not isinstance(visible,Mapping):raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            for hit in data.get('hits',[]):
+                if 'fees'not in hit.get('facets',[]):continue
+                keys=('citation_id','document_id','document_version_id','release_id',
+                    'product_id','share_class_id','channel_id')
+                matched=[item for item in visible.get('hits',[])if isinstance(item,Mapping)
+                    and all(item.get(key)==hit.get(key)for key in keys)
+                    and unicodedata.normalize('NFKC',item.get('excerpt',''))==
+                        unicodedata.normalize('NFKC',hit['excerpt'])]
+                if (data.get('ready')is not True or data.get('scope')!='public'
+                        or data.get('public_release_id')!=hit['release_id']or len(matched)!=1):
+                    raise BoundaryError('BOUNDARY_INVALID_INPUT')
+                row={'evidence_id':eid,'hit':copy.deepcopy(hit),'as_of':data['as_of']}
+                key=(hit['citation_id'],data['as_of'])
+                if key in selected and selected[key]['hit']!=hit:raise BoundaryError('BOUNDARY_INVALID_INPUT')
+                selected.setdefault(key,row)
+        from .public_fee_statement_contract import canonical_source_rows
+        return canonical_source_rows(list(selected.values()))
+
+    def _public_fee_statement_evidence(self):
+        """Rebuild request-local evidence solely from this boundary's snapshots."""
+        cited={eid for claim in self._public_quote_restored_answer['claims']for eid in claim['evidence_ids']}
+        evidence={}
+        keys=('citation_id','document_id','document_version_id','release_id',
+            'product_id','share_class_id','channel_id','visibility','outbound_allowed',
+            'content_status','claims_are_account_facts')
+        for eid in sorted(cited):
+            snapshot=self._public_fee_delivery_searches.get(eid)
+            if snapshot is None:continue
+            data=snapshot['data'];visible=snapshot['visible']
+            if not isinstance(visible,Mapping):raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            for hit in data.get('hits',[]):
+                if not {'fees','liquidity','terms'}&set(hit.get('facets',[])):continue
+                matches=[item for item in visible.get('hits',[])if isinstance(item,Mapping)
+                    and all(item.get(key)==hit.get(key)for key in keys)
+                    and unicodedata.normalize('NFKC',item.get('excerpt',''))==
+                        unicodedata.normalize('NFKC',hit['excerpt'])]
+                if len(matches)!=1:raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            evidence[eid]={'id':eid,'tool':'knowledge_search','source':'public_knowledge',
+                'context_hash':'boundary_actual_delivered_snapshot','data':copy.deepcopy(data)}
+        return evidence
+
+    @staticmethod
+    def _validate_public_quote_joint_source_reference(reference):
+        stages=('original_draft_sha256','restored_args_sha256','pre_quote_answer_sha256',
+            'rendered_pre_boundary_answer_sha256','quote_claims_sha256')
+        leaf_keys={'evidence_id','citation_id','document_id','document_version_id','release_id',
+            'product_id','share_class_id','channel_id','as_of','provider_id','source_ref','source_revision'}
+        def sha(value):
+            return type(value)is str and re.fullmatch('[a-f0-9]{64}',value)is not None
+        if (type(reference)is not dict or set(reference)!={'kind','source_ref','reference','references'}
+                or reference['kind']!='public_quote_joint_source_rendering' or not sha(reference['source_ref'])):
+            raise BoundaryError('BOUNDARY_INVALID_INPUT')
+        stage=reference['reference']
+        if (type(stage)is not dict or set(stage)!={'kind','references'} or stage['kind']!='rendering_hashes'
+                or type(stage['references'])is not list or len(stage['references'])!=len(stages)):
+            raise BoundaryError('BOUNDARY_INVALID_INPUT')
+        for name,row in zip(stages,stage['references']):
+            if (type(row)is not dict or set(row)!={'kind','source_ref'}
+                    or row['kind']!=name or not sha(row['source_ref'])):
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+        leaves=reference['references']
+        if type(leaves)is not list or not 1<=len(leaves)<=6:
+            raise BoundaryError('BOUNDARY_INVALID_INPUT')
+        for leaf in leaves:
+            if (type(leaf)is not dict or set(leaf)!=leaf_keys
+                    or any(type(leaf[key])is not str
+                        or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._:-]{0,299}',leaf[key])
+                        or _ALIAS.search(leaf[key])for key in leaf_keys-{'channel_id','source_ref','source_revision'})
+                    or not (leaf['channel_id']is None or type(leaf['channel_id'])is str
+                        and re.fullmatch('[A-Za-z0-9][A-Za-z0-9._:-]{0,299}',leaf['channel_id'])
+                        and not _ALIAS.search(leaf['channel_id']))
+                    or not sha(leaf['source_ref'])or not sha(leaf['source_revision'])):
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+
+    def register_public_quote_joint_source_reference(self,plan,receipt):
+        """Trusted host only: one restored joint plan, no new tool or public identity."""
+        from .public_quote_recovery import _digest
+        try:
+            context=self.public_quote_joint_source_context(self._public_quote_restored_answer)
+            if (context is None or type(plan)is not dict
+                    or set(plan)!={'status','arguments_sha256','context','sources'}
+                    or plan['status']!='consumed' or _digest(plan['context'])!=_digest(context)
+                    or plan['arguments_sha256']!=context['restored_args_sha256']):
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            sources=plan['sources'];delivery=context['contract']=='navren.public-quote-fee-delivery-context/1'
+            fee_only=context['contract']=='navren.public-quote-fee-source-context/1'or delivery
+            if delivery and sources!=self._public_fee_delivery_sources():
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            identity_fields=('product_id','share_class_id','channel_id','release_id')
+            if fee_only:
+                if type(sources)is not list or not 1<=len(sources)<=6:raise BoundaryError('BOUNDARY_INVALID_INPUT')
+                cited={eid for claim in self._public_quote_restored_answer['claims']for eid in claim['evidence_ids']}
+                if any(type(row)is not dict or row.get('evidence_id')not in cited for row in sources):
+                    raise BoundaryError('BOUNDARY_INVALID_INPUT')
+                bindings=[]
+                identities={tuple(row['hit'].get(key)for key in identity_fields)for row in sources}
+            else:
+                bindings=context['time_basis_rejections']
+                identities={tuple(item.get(key)for key in identity_fields)for item in bindings}
+            from .public_fee_statement_contract import canonical_source_rows
+            if sources!=canonical_source_rows(sources,bindings):
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            if len(identities)!=1 or type(sources)is not list or not 1<=len(sources)<=6:
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            identity=next(iter(identities));leaves=[];seen=set();fee_versions=set();as_ofs=set()
+            if (not identity[0]or not identity[1]or type(receipt)is not dict
+                    or type(receipt.get('source_claims'))is not list
+                    or len(receipt['source_claims'])!=len(sources)):
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            providers={leaf.get('provider_id')for leaf in receipt['source_claims']if type(leaf)is dict}
+            if len(providers)!=1:raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            provider=next(iter(providers))
+            if (type(provider)is not str or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._:-]{0,299}',provider)
+                    or _ALIAS.search(provider)):
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            if delivery and any(self._public_fee_delivery_searches[row['evidence_id']]['data'].get('provider_id')
+                    !=provider for row in sources):raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            for row in sources:
+                if type(row)is not dict or set(row)!={'evidence_id','hit','as_of'}:
+                    raise BoundaryError('BOUNDARY_INVALID_INPUT')
+                hit=row['hit'];day=row['as_of'];eid=row['evidence_id']
+                if (type(hit)is not dict or type(eid)is not str or not 1<=len(eid)<=300
+                        or _ALIAS.search(eid)or type(day)is not str or date.fromisoformat(day).isoformat()!=day
+                        or tuple(hit.get(key)for key in identity_fields)!=identity
+                        or hit.get('visibility')!='public' or hit.get('outbound_allowed')is not True
+                        or hit.get('content_status')!='full_text' or hit.get('claims_are_account_facts')is not False
+                        or hit.get('withdrawn',False)is not False
+                        or type(hit.get('excerpt'))is not str or not 0<len(hit['excerpt'])<=1198
+                        or any(type(hit.get(key))is not str or not re.fullmatch(prefix+'[a-f0-9]{28,64}',hit[key])
+                            for key,prefix in (('citation_id','c'),('document_id','d'),('document_version_id','v')))
+                        or type(hit.get('release_id'))is not str
+                        or not re.fullmatch('pub-[a-f0-9]{40}',hit['release_id'])):
+                    raise BoundaryError('BOUNDARY_INVALID_INPUT')
+                source=(hit['citation_id'],day)
+                if source in seen:raise BoundaryError('BOUNDARY_INVALID_INPUT')
+                seen.add(source);as_ofs.add(day);facets=hit.get('facets',[])
+                if type(facets)is not list:raise BoundaryError('BOUNDARY_INVALID_INPUT')
+                if 'fees'in facets:fee_versions.add((hit['document_id'],hit['document_version_id']))
+                elif not any(eid==item.get(role+'_evidence_id')and hit['citation_id']==item.get(role+'_citation_id')
+                        and all(hit.get(key)==item.get(key)for key in
+                            (*identity_fields,'document_id','document_version_id'))
+                        for item in bindings for role in ('limit','definition')):
+                    raise BoundaryError('BOUNDARY_INVALID_INPUT')
+                canonical=hit['excerpt'];display=unicodedata.normalize('NFKC',canonical)
+                leaves.append({'evidence_id':eid,'citation_id':hit['citation_id'],
+                    'document_id':hit['document_id'],'document_version_id':hit['document_version_id'],
+                    'release_id':hit['release_id'],'product_id':hit['product_id'],'share_class_id':hit['share_class_id'],
+                    'channel_id':hit.get('channel_id'),'as_of':day,'provider_id':provider,
+                    'source_ref':hashlib.sha256(canonical.encode()).hexdigest(),
+                    'source_revision':hashlib.sha256(display.encode()).hexdigest()})
+            if len(as_ofs)!=1 or len(fee_versions)!=1:raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            for item in bindings:
+                for role in ('limit','definition'):
+                    matched=[row for row in sources if row['evidence_id']==item.get(role+'_evidence_id')
+                        and row['hit']['citation_id']==item.get(role+'_citation_id')
+                        and all(row['hit'].get(key)==item.get(key)for key in
+                            (*identity_fields,'document_id','document_version_id'))
+                        and {'liquidity','terms'}&set(row['hit']['facets'])]
+                    if len(matched)!=1:raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            stages=('original_draft_sha256','restored_args_sha256','pre_quote_answer_sha256',
+                'rendered_pre_boundary_answer_sha256','quote_claims_sha256')
+            # Rebuild the authored statement proof from this boundary's own
+            # restored draft and actual delivered source snapshots, not the
+            # producer's catalogue or assertion of validation.
+            from .public_fee_statement_contract import build_catalog,validate_authored,extend_time_catalog
+            fee_sources=self._public_fee_delivery_sources()
+            if ([row for row in sources if 'fees'in row['hit'].get('facets',[])]!=fee_sources
+                    or any(self._public_fee_delivery_searches[row['evidence_id']]['data'].get('provider_id')
+                        !=provider for row in fee_sources)):
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            statement_proof=validate_authored(self._public_quote_restored_answer,
+                extend_time_catalog(build_catalog(fee_sources,provider),self._public_fee_statement_evidence()))
+            receipt_keys={'contract',*stages,'source_claims','host_generated_conclusion',
+                'additional_primary_calls','additional_business_calls','original_guards_status','fee_statement_proof'}
+            if (set(receipt)!=receipt_keys or receipt['contract']!='navren.public-quote-joint-source-rendering/2'
+                    or receipt['fee_statement_proof']!=statement_proof
+                    or receipt['source_claims']!=leaves
+                    or receipt['original_draft_sha256']!=context['original_draft_sha256']
+                    or receipt['restored_args_sha256']!=context['restored_args_sha256']
+                    or any(type(receipt[key])is not str or not re.fullmatch('[a-f0-9]{64}',receipt[key])for key in stages)
+                    or receipt['host_generated_conclusion']is not False
+                    or any(type(receipt[key])is not int or receipt[key]!=0
+                        for key in ('additional_primary_calls','additional_business_calls'))
+                    or receipt['original_guards_status']!='pending_original_full_GLM_and_FinalProof'):
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            reference={'kind':'public_quote_joint_source_rendering','source_ref':_digest(receipt),
+                'reference':{'kind':'rendering_hashes','references':[
+                    {'kind':key,'source_ref':receipt[key]}for key in stages]},'references':leaves}
+            self._validate_public_quote_joint_source_reference(reference)
+            registration={'reference':reference,'plan_sha256':_digest(plan),'receipt_sha256':_digest(receipt)}
+            if (self._public_quote_joint_source_reference is not None
+                    and self._public_quote_joint_source_reference!=registration):
+                raise BoundaryError('BOUNDARY_INVALID_INPUT')
+            self._public_quote_joint_source_reference=copy.deepcopy(registration)
+            return copy.deepcopy(reference)
+        except BoundaryError:raise
+        except (KeyError,ValueError,TypeError,AttributeError,OverflowError):
+            raise BoundaryError('BOUNDARY_INVALID_INPUT')from None
 
     def public_quote_answer_feedback(self,code,args):
         if (code not in ('METRIC_AMOUNT_UNBOUND','INVALID_MONEY_TEXT','METRIC_MONEY_SYNTAX_REQUIRED')
