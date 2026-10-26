@@ -38,6 +38,7 @@ def _hot_publication_available(store, record, now):
             events = packet['events']
             if (packet.get('origin') != 'observed' or packet.get('total_count') != 6
                     or packet.get('readable_count') != 6 or len(events) != 6
+                    or packet.get('distinct_event_count') != 6
                     or len({e['id'] for e in events}) != 6):return False
             return all(e.get('availability') == 'active'
                        and daily.selection_eligibility(db, e, as_of) is not None
@@ -60,7 +61,9 @@ def plan(store, now=None):
     weeklies = {w['period']: w for w in store.weekly_publications()}
     published = {period: w for period, w in weeklies.items() if w['status'] == 'published'}
     for kind in ('hotspots', 'weekly'):
-        records = [(r, r.get('streams', {}).get(kind, {})) for r in runs if kind in r.get('streams', {})]
+        # 新明确标注的修复恢复不占自然时段次数；旧无标签记录保持原解释。
+        records = [(r, r.get('streams', {}).get(kind, {})) for r in runs
+                   if r.get('run_kind')!='controlled_recovery' and kind in r.get('streams', {})]
         recent = [(r, s) for r, s in records if r.get('targets', {}).get(kind) == targets[kind]]
         attempts = [(r,s) for r,s in recent if kind=='hotspots' or r.get('status')!='running']  # 热点每次实际启动均占一次，崩溃不增加额度。
         # 周报失败每天重新给予有限次数；热点到下一个时段重置次数。

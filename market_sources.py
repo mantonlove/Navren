@@ -1,7 +1,8 @@
 """白名单公开发布入口；feedparser/BeautifulSoup 解析，禁止任意 URL 抓取。"""
 from __future__ import annotations
 import hashlib, json, re, time, urllib.request, urllib.error
-from market_source_attribution import media_attribution
+from market_source_attribution import media_attribution, yicai_publication_time
+from market_statistical_identity import source_release_aliases
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
@@ -37,6 +38,7 @@ SOURCES=[
  Source('xinhua','新华网财经','https://www.news.cn/fortune/gundong/ds_8aaa30c0702b4d6997c978bee97139c8.json','www.news.cn','json','Asia/Shanghai',scope='public_media',pattern=r'/fortune/\d{8}/[0-9a-f]{32}/c\.html',identity='media_report',body_selector='#detailContent',title_selector='.title'),
  Source('xinhua_money','新华网金融','https://www.news.cn/money/ds_e99ef52a0795499c9845a80440f6d00b.json','www.news.cn','json','Asia/Shanghai',scope='public_media',pattern=r'/money/\d{8}/[a-f0-9]{32}/c\.html',identity='media_report',body_selector='#detailContent',title_selector='h1'),
  Source('cctv','央视网财经','https://finance.cctv.com/','finance.cctv.com','list','Asia/Shanghai',scope='public_media',pattern=r'/\d{4}/\d{2}/\d{2}/ARTI[A-Za-z0-9]+\.shtml',identity='media_report',body_selector='#content_area',title_selector='#title_area h1'),
+ Source('yicai','第一财经','https://www.yicai.com/','www.yicai.com','list','Asia/Shanghai',scope='public_media',pattern=r'/news/\d+\.html',identity='media_report',body_selector='.m-text .m-txt > #multi-text',title_selector='.m-text .title h1',list_selector='a[href]:has(.m-list)'),
  Source('ft','金融时报','https://www.ft.com/markets?format=rss','www.ft.com',enabled=False,scope='metadata_only',pattern=r'/content/[0-9a-f-]{36}'),
  Source('reuters','路透社','https://reutersagency.com/content-delivery-platforms/reuters-connect/','reutersagency.com','licensed',enabled=False,scope='credentials_required'),
  Source('caixin','财新','https://corp.caixin.com/','corp.caixin.com','manual',enabled=False,scope='not_connected'),
@@ -242,7 +244,7 @@ def discover(source,limit=15,days=35):
             cctv_date=re.search(r'/(\d{4})/(\d{2})/(\d{2})/ARTI',u)
             hint=m[1] if m else ''.join(cctv_date.groups()) if cctv_date else None
             title=text(a)
-            if source.scope=='public_media' and (len(title)<5 or re.search(r'品牌焕新|广告|招商|酒业管理层',title)):continue
+            if source.scope=='public_media' and (len(title)<5 or re.search(r'品牌焕新|广告|招商|酒业管理层|全场\d+折|年终大促',title)):continue
             entries.append({'title':title,'url':u,'published':None,'discovered_date':hint})
         # 首页专题会长期保留；按路径日期发现近期稿，再到原文核实发表时间。
         if source.scope=='public_media':entries.sort(key=lambda e:(e.get('discovered_date') or '',bool(re.search(r'金融|银行|货币|利率|汇率|债券|国债|股|证券|资管|资产管理|保险|税|财政|房贷|消费贷款|数字人民币|经济|GDP|PMI|采购经理|投资|融资|政策|通胀|物价|CPI|PPI|进出口|国际收支|工业企业利润',e['title'],re.I))),reverse=True)
@@ -308,10 +310,15 @@ def read_article(source,entry):
         else:
             metas={str(m.get('name') or m.get('property','')).lower():m.get('content','') for m in soup.select('meta[content]')}
             title=metas.get('articletitle') or metas.get('og:title') or text(soup.select_one(source.title_selector)) or title
+            if source.id == 'yicai':
+                title = text(soup.select_one(source.title_selector))
             if source.id in ('xinhua','xinhua_money'):title=re.sub(r'[-_]新华网$','',title).strip()
             origin=metas.get('source') or source.publisher
             author=metas.get('author') or ''
             original=metas.get('pubdate') or metas.get('article:published_time') or metas.get('firstpublishedtime') or metas.get('date') or metas.get('publishdate')
+            if source.id == 'yicai':
+                original = yicai_publication_time(soup)
+                if not original:raise ArticleUnavailable('publication_date_not_verified')
             if source.id in ('xinhua','xinhua_money'):
                 clock=re.search(r'\d{2}:\d{2}:\d{2}',text(soup.select_one('.header-time .time,.time')))
                 if original and re.fullmatch(r'\d{4}[-/]\d{2}[-/]\d{2}',original) and clock:original=original+' '+clock[0]
@@ -369,6 +376,8 @@ def score_article(a):
     return round(.35*importance+.25*novelty+.2*quality+.1*recency,4),{'importance':importance,'new_fact':novelty,'support':quality,'recency':recency,'authorized_relevance':0,'weights_are_design_parameters':True}
 
 def cluster_key(a):
+    source_aliases=source_release_aliases({'facts':[]},a)
+    if source_aliases:return sorted(source_aliases)[0]
     # 相同原始指标/政策的官方解读按同期间合并；转载不增加支持质量。
     t=a['title'];d=datetime.fromisoformat(article_reported_at(a)).astimezone(CN).strftime('%Y-%m')
     if a['source_id'].startswith('nbs') and re.search(r'采购经理|PMI',t,re.I):return 'pmi_'+d

@@ -1,0 +1,36 @@
+[Unit]
+Description=Navren public competition experience
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=navren-web
+Group=navren-web
+ExecStart=/usr/bin/python3 /etc/navren-public/run.py
+Restart=on-failure
+RestartSec=5
+StateDirectory=navren-public
+StateDirectoryMode=0700
+LogsDirectory=navren-public
+LogsDirectoryMode=0700
+UMask=0077
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=1400M
+TasksMax=128
+TimeoutStopSec=30
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=TZ=Asia/Shanghai
+LoadCredential=navren-sms-config:/etc/navren-public/sms-config.json
+LoadCredentialEncrypted=DEEPSEEK_API_KEY:/etc/credstore.encrypted/navren-official.DEEPSEEK_API_KEY
+LoadCredentialEncrypted=GLM_API_KEY:/etc/credstore.encrypted/navren-official.GLM_API_KEY
+LoadCredentialEncrypted=NAVREN_SMS_ACCESS_KEY_ID:/etc/credstore.encrypted/navren-public.NAVREN_SMS_ACCESS_KEY_ID
+LoadCredentialEncrypted=NAVREN_SMS_ACCESS_KEY_SECRET:/etc/credstore.encrypted/navren-public.NAVREN_SMS_ACCESS_KEY_SECRET
+LoadCredentialEncrypted=NAVREN_PERSONAL_DATA_KEY:/etc/credstore.encrypted/navren-public.NAVREN_PERSONAL_DATA_KEY
+
+[Install]
+WantedBy=multi-user.target

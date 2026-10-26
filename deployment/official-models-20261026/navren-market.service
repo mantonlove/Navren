@@ -1,0 +1,62 @@
+[Unit]
+Description=Navren single public market collector
+Wants=network-online.target
+After=network-online.target
+# Installing the template never arms collection. The runner also verifies the
+# root-owned approval, exact manifest, local handoff and allow_paid_collection.
+ConditionPathExists=/etc/navren-market/approved-cutover.json
+
+[Service]
+Type=oneshot
+User=navren-market
+Group=navren-market
+WorkingDirectory=/var/lib/navren-market
+ExecStart=/opt/navren/public-runtime-20261020/bin/python /etc/navren-market/run_collector.py
+Restart=no
+KillMode=control-group
+TimeoutStartSec=15min
+TimeoutStopSec=30s
+Nice=15
+CPUQuota=40%
+CPUWeight=10
+IOWeight=10
+MemoryHigh=128M
+MemoryMax=256M
+MemorySwapMax=128M
+TasksMax=32
+# Shared public DB WAL/SHM files must remain accessible to the Web's approved
+# supplementary market group. Logs stay private through their parent mode.
+UMask=0007
+StateDirectory=navren-market
+StateDirectoryMode=0750
+LogsDirectory=navren-market
+LogsDirectoryMode=0700
+ReadWritePaths=/var/lib/navren-market /var/log/navren-market
+ReadOnlyPaths=/opt/navren/market-collector /opt/navren/public-runtime-20261020
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+ProcSubset=pid
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+InaccessiblePaths=-/var/lib/navren-public -/opt/navren/app -/etc/navren-public -/etc/navren -/root -/home -/etc/credstore.encrypted
+Environment=TZ=Asia/Shanghai
+Environment=NAVREN_MARKET_SCHEDULER_MODE=server_timer
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=NAVREN_MARKET_DB=/var/lib/navren-market/public/market.sqlite3
+Environment=NAVREN_MODEL_CALL_LOG=/var/log/navren-market/model-calls.jsonl
+Environment=NAVREN_MARKET_MODEL_LOG=/var/log/navren-market/market-model-calls.jsonl
+LoadCredentialEncrypted=DEEPSEEK_API_KEY:/etc/credstore.encrypted/navren-official.DEEPSEEK_API_KEY
+LoadCredentialEncrypted=GLM_API_KEY:/etc/credstore.encrypted/navren-official.GLM_API_KEY
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=navren-market

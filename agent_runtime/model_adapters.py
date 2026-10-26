@@ -1,4 +1,4 @@
-"""AI Ping 主顾问与 GLM 独立审核器的严格 JSON 适配层。
+"""官方 DeepSeek 主顾问与 GLM 独立审核器的严格 JSON 适配层。
 
 调用日志只保留模型、阶段、耗时、HTTP 状态和错误代码，不保存提示词、答复或密钥。
 """
@@ -31,7 +31,10 @@ from .contracts import (
 
 
 DEEPSEEK_MODEL = "deepseek-flash"
-GLM_REVIEW_MODEL = "GLM-5.3-Flash"
+GLM_REVIEW_MODEL = "glm-5.3-flash"
+GLM_ALTERNATE_REVIEW_MODEL = "glm-4.7-flashx"
+ZHIPU_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+GLM_REASONING_OUTPUT_LIMIT = 8192
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 AIPING_URL = "https://aiping.cn/api/v1/chat/completions"
 AIPING_PRIMARY_MODEL = "DeepSeek-V4-Flash"
@@ -66,6 +69,32 @@ class ModelAdapterError(RuntimeError):
         self.model_id = model_id
         self.attempts = attempts
         self.http_status = http_status
+
+
+def _validate_official_transport(*, provider, model_id, url, env_name, keychain_service):
+    """公开配置必须精确匹配；任何凭据读取或出站之前失败关闭。"""
+    allowed = (
+        provider == "deepseek" and model_id == DEEPSEEK_MODEL
+        and url == DEEPSEEK_URL and env_name == "DEEPSEEK_API_KEY"
+        and keychain_service == "CC/DEEPSEEK_API_KEY"
+    ) or (
+        provider == "zhipu" and model_id in (GLM_REVIEW_MODEL, GLM_ALTERNATE_REVIEW_MODEL)
+        and url == ZHIPU_URL and env_name == "GLM_API_KEY"
+        and keychain_service == "CC/GLM_API_KEY"
+    )
+    if not allowed:
+        error = ModelAdapterError("official_model_transport_required", model_id=model_id, attempts=0)
+        error.request_sent = False
+        raise error
+
+
+class _OfficialNoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # 官方模型请求不能重定向到其他地址。
+
+
+def _official_urlopen(request, **kwargs):
+    return urllib.request.build_opener(_OfficialNoRedirect()).open(request, **kwargs)
 
 
 def _key_from_sources(env_name: str, keychain_service: str) -> str:
@@ -116,6 +145,8 @@ class OpenAICompatibleJsonClient:
         key_loader=None,
         log_path: str | None = None,
     ):
+        _validate_official_transport(provider=provider, model_id=model_id, url=url,
+            env_name=env_name, keychain_service=keychain_service)
         if not 0 <= max_retries <= 2:
             raise ValueError("模型重试次数只能为 0 至 2 次。")
         self.provider = provider
@@ -125,9 +156,29 @@ class OpenAICompatibleJsonClient:
         self.keychain_service = keychain_service
         self.timeout = timeout
         self.max_retries = max_retries
-        self.urlopen = urlopen or urllib.request.urlopen
+        self.urlopen = urlopen or _official_urlopen
         self.key_loader = key_loader or (lambda: _key_from_sources(env_name, keychain_service))
         self.log_path = log_path
+
+    def _validate_transport(self):
+        _validate_official_transport(provider=self.provider, model_id=self.model_id, url=self.url,
+            env_name=self.env_name, keychain_service=self.keychain_service)
+
+    def _request_payload(self, *, system: str, user: str, stage: str) -> dict:
+        """纯请求构造钩子；预估与实际请求复用同一完整协议。"""
+        payload = {
+            "model": self.model_id,
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": user}],
+            "temperature": 0,
+            "max_tokens": _max_output_tokens(stage),
+            "thinking": {"type": "disabled"},
+            "response_format": {"type": "json_object"},
+        }
+        if self.provider == "zhipu" and self.model_id == GLM_REVIEW_MODEL:
+            payload.update(thinking={"type": "enabled"}, reasoning_effort="low",
+                           max_tokens=GLM_REASONING_OUTPUT_LIMIT)
+        return payload
 
     def complete_json(self, *, system: str, user: str, stage: str, request_id: str) -> dict:
         started = time.monotonic()
@@ -139,25 +190,21 @@ class OpenAICompatibleJsonClient:
         exception_type = None
         review_usage = None
         try:
+            self._validate_transport()
             key = self.key_loader()
             if not key:
                 error_code = "missing_api_key"
                 raise ModelAdapterError("missing_api_key", model_id=self.model_id, attempts=0)
-            request_payload = {
-                "model": self.model_id,
-                "messages": [{"role": "system", "content": system},
-                             {"role": "user", "content": user}],
-                "temperature": 0,
-                "max_tokens": _max_output_tokens(stage),
-            }
-            if self.provider == "deepseek":
-                # Planning and synthesis are limited to supplied, precomputed evidence;
-                # disable hidden reasoning so the bounded JSON answer is not truncated.
-                request_payload["thinking"] = {"type": "disabled"}
-                request_payload["response_format"] = {"type": "json_object"}
-            elif self.provider == "ai_ping":
-                request_payload["reasoning_effort"] = "low"
-                request_payload["response_format"] = {"type": "json_object"}
+            self._validate_transport()
+            request_payload = self._request_payload(system=system, user=user, stage=stage)
+            reasoning = self.provider == "zhipu" and self.model_id == GLM_REVIEW_MODEL
+            if (request_payload.get("model") != self.model_id
+                    or request_payload.get("thinking") != {"type": "enabled" if reasoning else "disabled"}
+                    or request_payload.get("response_format") != {"type": "json_object"}
+                    or reasoning and (request_payload.get("max_tokens") != GLM_REASONING_OUTPUT_LIMIT
+                                      or request_payload.get("reasoning_effort") != "low")):
+                error_code = "official_model_payload_mismatch"
+                raise ModelAdapterError(error_code, model_id=self.model_id, attempts=0)
             payload = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
             request = urllib.request.Request(
                 self.url, data=payload,
@@ -165,8 +212,11 @@ class OpenAICompatibleJsonClient:
                 method="POST",
             )
             for attempt in range(self.max_retries + 1):
-                attempts = attempt + 1
                 try:
+                    self._validate_transport()
+                    _validate_official_transport(provider=self.provider, model_id=request_payload["model"],
+                        url=request.full_url, env_name=self.env_name, keychain_service=self.keychain_service)
+                    attempts = attempt + 1
                     with self.urlopen(request, timeout=self.timeout) as response:
                         http_status = getattr(response, "status", 200)
                         raw = response.read(256_000)
@@ -226,7 +276,8 @@ class OpenAICompatibleJsonClient:
                                             attempts=attempts, http_status=http_status) from None
             raise ModelAdapterError(error_code, model_id=self.model_id, attempts=attempts,
                                     http_status=http_status)
-        except ModelAdapterError:
+        except ModelAdapterError as error:
+            error_code = error.code
             raise
         except Exception as error:
             # Keep unexpected library/provider shape failures diagnosable without
@@ -275,13 +326,13 @@ def _max_output_tokens(stage: str) -> int:
 
 
 class AIPingCashflowSupervisor:
-    """资金流主模型经 AI Ping 统一路由，不读取官方 DeepSeek 凭据。"""
-    model_id = AIPING_PRIMARY_MODEL
+    """兼容旧类名；资金流主模型仅使用官方 DeepSeek。"""
+    model_id = DEEPSEEK_MODEL
 
     def __init__(self, client: OpenAICompatibleJsonClient | None = None):
         self.client = client or OpenAICompatibleJsonClient(
-            provider="ai_ping", model_id=AIPING_PRIMARY_MODEL, url=AIPING_URL,
-            env_name="AIPING_API_KEY", keychain_service="CC/AIPING_GLM_API_KEY",
+            provider="deepseek", model_id=DEEPSEEK_MODEL, url=DEEPSEEK_URL,
+            env_name="DEEPSEEK_API_KEY", keychain_service="CC/DEEPSEEK_API_KEY",
         )
 
     def route(self, request, agent_catalog) -> RoutePlan:
@@ -385,19 +436,24 @@ class AIPingCashflowSupervisor:
         return _parse_advice_draft(response)
 
 
-# Compatibility alias for old imports. The class now uses AI Ping defaults.
+# Compatibility alias for old imports. Both names now use official DeepSeek.
 DeepSeekCashflowSupervisor = AIPingCashflowSupervisor
 
 
 class AIPingCashflowReviewer:
+    """兼容旧类名；独立审核仅使用官方 GLM。"""
     model_id = GLM_REVIEW_MODEL
+    output_token_limit = GLM_REASONING_OUTPUT_LIMIT
 
     def __init__(self, client: OpenAICompatibleJsonClient | None = None):
         self.client = client or OpenAICompatibleJsonClient(
-            provider="ai_ping", model_id=GLM_REVIEW_MODEL, url=AIPING_URL,
-            env_name="AIPING_API_KEY", keychain_service="CC/AIPING_GLM_API_KEY",
+            provider="zhipu", model_id=GLM_REVIEW_MODEL, url=ZHIPU_URL,
+            env_name="GLM_API_KEY", keychain_service="CC/GLM_API_KEY",
             timeout=40, max_retries=0,
         )
+        self.model_id = self.client.model_id
+        self.output_token_limit = self.client._request_payload(
+            system='', user='', stage='reviewer.review')['max_tokens']
 
     def review(self, request, outputs, final_draft) -> ReviewDecision:
         allowed_ids = {item.evidence_id for item in request.evidence}

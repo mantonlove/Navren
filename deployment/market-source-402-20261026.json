@@ -1,0 +1,45 @@
+{
+  "before": {
+    "market_model.py": "894ac3ef2f24ad1fe2ad8b014752ac891eadc216ff6ddc2594342e4b81308408",
+    "market_pipeline.py": "c47bace0e55d81f8b8e8b78d1a644b87685f8bb36245e60735ffe7e503ce1b00",
+    "market_source_attribution.py": "160bf4bd3b9e85c76a54de5bb76f781809ccc118be0a29357c468187d9f4bbcc",
+    "market_sources.py": "e8816c1c3be6f1d46f59291e1ce8c1f50624027e9adafb32b951890ee6001f0f"
+  },
+  "branch": "codex/market-source-402-20261026",
+  "configuration_changes": {
+    "approved-cutover.json": "Replace only web_market_contract_sha256[src/<four selected file names>] and manifest_sha256 with resulting collector manifest SHA256; preserve authority, schedule, and attempt history.",
+    "collector-manifest.json": "Replace only files[src/<four selected file names>] with matching files SHA256 values; preserve every other field."
+  },
+  "files": {
+    "market_model.py": "54231c75ec7564fdf699fdef664c6d82a432e9965edc10f38fbf41a950352d1b",
+    "market_pipeline.py": "0f9c78079f3428341158a29bc9a953d526b243a5b5f041dccb0ed404dd6e6dd9",
+    "market_source_attribution.py": "6ae41479f28ee05f9093d08e43e31d6f01e1ebd59af02dce1aaf58e5542383e5",
+    "market_sources.py": "e812f408c8fab532c2c1903cbfb4f900082ea5272683e0d682ea0aa6c24b9720"
+  },
+  "guard_patch_sha256": "2a8c1f5e1275e93c97dfd31520b261813b013c024e81fe513d47663a736604b8",
+  "repository": "https://github.com/mantonlove/Navren",
+  "rollback": "Preserve all ten pre-change file bytes and metadata; compare exact before pins; restore all on failed validation or load.",
+  "safety": {
+    "complete_article_HTML_logs_or_usage_ledgers_included": false,
+    "model_route_changed": false,
+    "private_user_data_included": false,
+    "source_permission_and_review_guards_unchanged": true,
+    "timer_and_retry_limits_changed": false
+  },
+  "schema": "navren.scoped-deployment/1",
+  "server_scope": [
+    "/opt/navren/market-collector/releases/market-20261022-1/src",
+    "/opt/navren/releases/navren-20261022-market-cutover-1/app"
+  ],
+  "source_patch_sha256": "e116a71c9c3f167922b8c0859e718b97d8f9ec35dcd181346397fcd710680ac3",
+  "validation": {
+    "article_parser_cases": 13,
+    "business_generation_six_articles_and_UI": "not_accepted",
+    "existing_registry_and_native_permission_rows_equal": 14,
+    "home_discovery_cases": 1,
+    "network_or_model_calls": 0,
+    "real_saved_HTMLs": 14,
+    "same_run_402_existing_free_methods": 7,
+    "source_contract_free_methods_from_owner": 25
+  }
+}

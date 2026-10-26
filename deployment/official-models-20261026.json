@@ -1,0 +1,41 @@
+{
+  "schema": "navren.official-model-migration-deployment/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "codex/official-models-market-20261026",
+  "parent_commit": "1687ef1cca3067a50b65a9b84dd9eec7f5cb0404",
+  "files": {
+    "agent_runtime/model_adapters.py": "038a28f6f74014c72190dd4cd6722c447b718881cc600d41b39fb2335c00a309",
+    "agent_runtime/native_client.py": "1b1e17f1ee5e1427c8eb5c3787bc0f4c665505336aacd8b1fc78f4024dec78c2",
+    "agent_runtime/conversation.py": "b1ab3a54ec6a7354e30228978eb6b9d55b11cc93c3b034b7e624a923074a2297",
+    "agent_runtime/complex_agent.py": "a83eeedb918be9bd67918766ea23a77f1134f7c167971541e0e73cf0a532197f",
+    "market_pipeline.py": "d907809a3d74e974ee15dc6e82f6992a1618e7d0f25cf91fdfc541586184bd30",
+    "market_schedule.py": "1a7e54300208d3ca60202f1dd76cddf5865f83cef76c168ac030c58231eddfc5",
+    "scripts/refresh_market.py": "a71c6edadb2f130421d5d5815bfb2d74cdcbcbec8c45820099ce5acaf4ff8374",
+    "market_model.py": "08283c8cde465fd865d8f799c7bd7d8997679393b037eeaf2cc5876e39090380",
+    "market_editor.py": "d77aebc595523d4ea0c9187d9ee3bd736a7fa5ab482c845f9a6640db85295fb2",
+    "market_statistical_identity.py": "ea90098f5d13b5d73a7e74c8a3365395b7dee5bdef21ceb3c81631ed65f7762f",
+    "market_sources.py": "6203942ac2753ecab5266568efbfc4fde7df6738a469147378fa2a38954e4b0e",
+    "market_daily.py": "fa028907dc1b86dd53e13b6d8d933806624ffa41f8787fe66f86689a90f3a469",
+    "market_budget.py": "436058ece4df24750ae2a29313b7afd71d64764c8d9dabeda820fd1748b037ca",
+    "scripts/serve_financial_frontend.py": "7e0800cf8f4f80f45cbe847ffc7af947f03d16691d099612acc8824d69eb1719",
+    "voice_gateway.py": "bfdd2c513cd20f58120a59107a9f357d35cce3e141b26eaedf68738484f0c730",
+    "glm_speech_task.py": "deced03ed12278e49a8401e3d4d95c347e04f6d3a658e0b7c3087cdfc0922506",
+    "deployment/official-models-20261026/run_collector.py": "60681ca9125f10f34c9998d59d2db92cfc22397f8c9cb007ec019ae1b8d809f8",
+    "deployment/official-models-20261026/run_public.py": "927dd8a3315fa16fd8828a022f4609896d057d3456d5e4ea08b2a26bc91a0d9a",
+    "deployment/official-models-20261026/navren-public.service": "1e1e3bebbefb7297510355c1ffdffb08ab4a01c53c60409a6e704528f1e6c3e5",
+    "deployment/official-models-20261026/navren-market.service": "5f8002b308d34c493298081e5a9fc221c6a0aec97266943470696d14f89c77f5",
+    "deployment/official-models-20261026/official-budget-control.json": "aed2d4a5bca762815d64be0ca0085c2f7f4ab9ce735cacfdd4c6b6aab13949e5"
+  },
+  "scope": "text/voice official routes + controlled native Market recovery + original shared public read contracts; private records unchanged",
+  "cost_plan": {
+    "full_worst_requests": 174,
+    "controlled_requests": 36,
+    "technical_stop_cny": "95.9152128",
+    "authorized_monetary_limit_cny": null,
+    "provider_balance": "unknown",
+    "legacy33unknown_cost": null
+  },
+  "business_accepted": false,
+  "finite_phase_boundary": "Temporary 36 + 27 Oct morning up to3; later original scheduled slots retain native resources and usage, do not inherit date27 lifetime lock",
+  "missed_20261026_recovery_window": true
+}

@@ -1,12 +1,13 @@
 """增量采集与发布；进程锁、截止时间、失败保留最近合格版本。"""
 from __future__ import annotations
-import concurrent.futures, fcntl, hashlib, time, uuid
+import concurrent.futures, fcntl, hashlib, json, time, uuid
 import logging, re, urllib.error
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from market_sources import SOURCES, discover, read_article, score_article, cluster_key, now_iso, readable_article, ArticleUnavailable, text_only_article, source_verified_text_event
 from market_content import MarketStore, week_periods, packed, CN, WEEKLY_GENERATION_CONTRACT, event_input_hash, EVENT_EDITOR_POLICY
 from market_editor import MarketEditor
+from market_model import market_model_session
 from market_schedule import plan
 from market_daily import DailyMarket
 from market_source_attribution import first_publication_verified
@@ -16,6 +17,88 @@ DAILY_HOTSPOT_COUNT=6
 DAILY_CANDIDATE_LIMIT=18
 # 周报最多三次90秒主写及45秒审核，加5秒本地余量；这是准入预留，并非墙钟超时器。
 WEEKLY_RESERVE_SECONDS=320
+# 仅用于主动选择的受控缓存复用，不改变正常产品的复抓/发布时效合同。
+CONTROLLED_REUSE_SECONDS=10800
+CONTROLLED_REUSE_HEADROOM=95
+
+class ControlledRecoveryError(ValueError):
+    def __init__(self,code):self.code='controlled_recovery_'+code;super().__init__(self.code)
+
+def _recovery_require(value,code):
+    if not value:raise ControlledRecoveryError(code)
+
+def _recovery_stamp(value,code):
+    try:stamp=datetime.fromisoformat(value)
+    except (TypeError,ValueError):raise ControlledRecoveryError(code) from None
+    _recovery_require(stamp.tzinfo is not None,code)
+    return stamp
+
+def _validate_recovery_source(store,source_run_id,bindings):
+    """核对真实原运行及原 generation；只读缓存，不创造新的来源观察。"""
+    now=datetime.now(CN)
+    _recovery_require(isinstance(source_run_id,str) and re.fullmatch(r'[0-9a-f]{32}',source_run_id),'invalid_source_run_id')
+    _recovery_require(isinstance(bindings,dict) and bindings.get('run_id')==source_run_id,'binding_run_mismatch')
+    entries=bindings.get('articles')
+    _recovery_require(isinstance(entries,list) and bool(entries) and bindings.get('article_count')==len(entries),'invalid_article_bindings')
+    _recovery_require(len({a.get('id') for a in entries if isinstance(a,dict)})==len(entries),'duplicate_article_bindings')
+    with store.db() as db:
+        runs=[json.loads(r[0]) for r in db.execute('SELECT body FROM market_ingest_runs ORDER BY started_at DESC LIMIT 128')]
+        original=next((r for r in runs if r.get('run_kind')!='controlled_recovery'),None)
+        _recovery_require(original is not None and original.get('id')==source_run_id,'source_run_not_latest')
+        _recovery_require(original.get('status')=='complete_with_limits','source_run_not_complete_with_limits')
+        start=_recovery_stamp(original.get('started_at'),'source_run_time_invalid')
+        end=_recovery_stamp(original.get('ended_at'),'source_run_time_invalid')
+        _recovery_require(start<=end<=now and start.astimezone(CN).date()==now.date() and end.astimezone(CN).date()==now.date(),'source_run_not_same_day')
+        _recovery_require(bindings.get('actual_run_start')==original['started_at'] and bindings.get('actual_run_end')==original['ended_at'],'source_run_binding_time_mismatch')
+        observed=original.get('sources')
+        _recovery_require(isinstance(observed,list) and bool(observed),'source_observations_missing')
+        _recovery_require(all(isinstance(s,dict) and isinstance(s.get('source_id'),str) for s in observed),'source_observations_invalid')
+        _recovery_require(len({s['source_id'] for s in observed})==len(observed),'source_observation_duplicate')
+        _recovery_require(any(s.get('status')=='ok' and s['source_id']!='ft' for s in observed),'source_observation_no_valid_check')
+        source_ids={s['source_id'] for s in observed}
+        for source in observed:
+            checked=_recovery_stamp(source.get('checked_at'),'source_checked_at_invalid')
+            _recovery_require(start<=checked<=end and checked.astimezone(CN).date()==now.date(),'source_observation_not_same_day')
+            _recovery_require((now-checked).total_seconds()+CONTROLLED_REUSE_HEADROOM<CONTROLLED_REUSE_SECONDS,'reuse_observation_expired')
+            row=db.execute('SELECT status FROM market_sources WHERE id=?',(source['source_id'],)).fetchone()
+            _recovery_require(row is not None and json.loads(row['status'])==source,'source_observation_changed')
+        reported_ids={event_id for rejection in original.get('rejected',[]) if isinstance(rejection,dict) for event_id in rejection.get('ids',[]) if isinstance(event_id,str)}
+        normalized=[]
+        for supplied in entries:
+            _recovery_require(isinstance(supplied,dict),'article_binding_invalid')
+            article_id=supplied.get('id');version=supplied.get('version');source_id=supplied.get('source_id')
+            _recovery_require(isinstance(article_id,str) and type(version) is int and version>0 and source_id in source_ids,'article_source_not_observed')
+            row=db.execute('SELECT * FROM market_articles WHERE id=? ORDER BY version DESC LIMIT 1',(article_id,)).fetchone()
+            _recovery_require(row is not None and row['version']==version and row['status']=='active','article_version_changed')
+            raw=json.loads(row['body']);body_sha=hashlib.sha256(row['body'].encode()).hexdigest()
+            _recovery_require(raw.get('id')==article_id and raw.get('version')==version and raw.get('source_id')==source_id,'article_binding_identity_mismatch')
+            _recovery_require(supplied.get('generation_binding_body_SHA256')==body_sha,'article_body_changed')
+            _recovery_require(supplied.get('body_SHA256')==hashlib.sha256(raw.get('evidence_text','').encode()).hexdigest(),'article_text_changed')
+            article={**raw,'status':row['status'],'checked_at':row['checked_at']}
+            _recovery_require(text_only_article(article) and article.get('read_scope')=='full_text' and article.get('evidence_truncated') is False,'article_not_readable')
+            checked=_recovery_stamp(row['checked_at'],'article_checked_at_invalid')
+            _recovery_require(checked<=end and checked.astimezone(CN).date()==now.date(),'article_checked_after_source_run')
+            _recovery_require((now-checked).total_seconds()+CONTROLLED_REUSE_HEADROOM<CONTROLLED_REUSE_SECONDS,'reuse_article_expired')
+            permission=store._event_source_permission(db,source_id,'reviewed_ai')
+            _recovery_require(permission==supplied.get('source_permission'),'article_permission_changed')
+            generation_id=supplied.get('generation_id')
+            _recovery_require(isinstance(generation_id,str) and re.fullmatch(r'[0-9a-f]{32}',generation_id),'generation_id_invalid')
+            record=db.execute('SELECT snapshot FROM market_event_generations WHERE generation_id=?',(generation_id,)).fetchone()
+            _recovery_require(record is not None,'original_generation_missing')
+            generation=json.loads(record['snapshot'])
+            generated=_recovery_stamp(generation.get('started_at'),'generation_time_invalid')
+            _recovery_require(start<=generated<=end and generation.get('event_id')==supplied.get('native_event_id') and generation.get('event_id') in reported_ids,'generation_source_run_mismatch')
+            bound=[b for b in generation.get('article_bindings',[]) if b.get('article_id')==article_id and b.get('version')==version]
+            _recovery_require(len(bound)==1 and bound[0].get('article_body_sha256')==body_sha and bound[0].get('source_id')==source_id and bound[0].get('permission_revision')==permission['revision'],'original_generation_binding_mismatch')
+            _recovery_require(permission in generation.get('source_permissions',[]),'original_generation_permission_mismatch')
+            normalized.append({'id':article_id,'version':version,'source_id':source_id,'article_body_sha256':body_sha,'checked_at':row['checked_at'],'permission':permission,'generation_id':generation_id})
+        return {'source_run_id':source_run_id,'source_run_started_at':original['started_at'],'source_run_ended_at':original['ended_at'],
+                'bindings_sha256':hashlib.sha256(packed(bindings).encode()).hexdigest(),'sources':deepcopy(observed),
+                'articles':sorted(normalized,key=lambda a:a['id'])}
+
+def _assert_recovery_source(store,source_run_id,bindings,expected):
+    _recovery_require(_validate_recovery_source(store,source_run_id,bindings)==expected,'source_snapshot_changed')
+
 def input_hash(g):return event_input_hash(g)
 
 def failure(error):
@@ -81,12 +164,24 @@ def unchanged_historical_contract_upgrade(old,article,now):
 def daily_qualified_count(store):
     with store.db() as db:return len(DailyMarket(store).candidates(db,datetime.now(CN)))
 
-def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_only=False,total_seconds=720,force_check=False,scheduled=False,sources=None,hotspots_only=False):
+@market_model_session
+def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_only=False,total_seconds=720,force_check=False,scheduled=False,sources=None,hotspots_only=False,run_kind=None,source_run_id=None,recovery_bindings=None):
+    controlled=run_kind=='controlled_recovery'
+    reuse=controlled and (source_run_id is not None or recovery_bindings is not None)
+    if controlled:
+        _recovery_require(scheduled is False and hotspots_only is True and force_check is False and ingest_only is False and sources is None,'invalid_mode')
+        if reuse:_recovery_require(source_run_id is not None and recovery_bindings is not None,'reuse_bindings_required')
+    else:
+        _recovery_require(run_kind is None and source_run_id is None and recovery_bindings is None,'unexpected_recovery_arguments')
     store=store or MarketStore();id=uuid.uuid4().hex;started=now_iso();deadline=time.monotonic()+total_seconds
     lock=open(str(store.path)+'.lock','a')
     try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     except BlockingIOError:lock.close();return {'status':'already_running'}
-    schedule=plan(store)
+    try:
+        schedule=plan(store)
+        recovery=_validate_recovery_source(store,source_run_id,recovery_bindings) if reuse else None
+    except BaseException:
+        fcntl.flock(lock,fcntl.LOCK_UN);lock.close();raise
     jobs=schedule['jobs'] if scheduled else ['hotspots','weekly']
     if hotspots_only:jobs=[j for j in jobs if j=='hotspots']
     if not jobs:
@@ -97,8 +192,12 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
         start=datetime.fromisoformat(schedule['targets']['weekly']).replace(tzinfo=CN)
         periods=[(start,start+timedelta(days=7))]
     if not scheduled:schedule['targets']['weekly']=periods[0][0].date().isoformat()
-    report={'id':id,'started_at':started,'status':'running','targets':schedule['targets'],
+    report={'id':id,'started_at':started,'status':'running','targets':schedule['targets'],'run_kind':'controlled_recovery' if controlled else 'scheduled' if scheduled else 'manual',
         'streams':{k:{'status':'running'} for k in jobs},'sources':[],'new_or_revised':0,'published_events':0,'published_weeklies':0,'rejected':[]}
+    if controlled:report['recovery']={'source_mode':'native_refresh'}
+    if reuse:
+        report['recovery']={**deepcopy(recovery),'source_mode':'verified_cache_reuse'}
+        report['sources']=[{**s,'observation_reused':True,'reused_from_run':source_run_id} for s in recovery['sources']]
     store.record_run(id,report)
     try:
         previous={a['url']:a for a in store.articles()}
@@ -140,7 +239,7 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
             if rejected and state['status']=='ok':state['status']='partial'
             state.update(accepted=len(accepted),rejected=len(rejected));return source.id,state,accepted,rejected,withdrawn,unavailable
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-            futures={pool.submit(ingest,s):s for s in (sources if sources is not None else SOURCES) if s.enabled}
+            futures={} if reuse else {pool.submit(ingest,s):s for s in (sources if sources is not None else SOURCES) if s.enabled}
             for f in concurrent.futures.as_completed(futures):
                 s=futures[f]
                 try:
@@ -165,6 +264,13 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
                 items.sort(key=lambda a:(a.get('identity')=='media_report',a['source_id']=='nbs_analysis',a['published_at']))
                 groups.append({'id':'e_'+hashlib.sha256(key.encode()).hexdigest()[:24],'articles':items})
             groups.sort(key=lambda g:score_article(g['articles'][0])[0],reverse=True)
+            if reuse:
+                allowed={(a['id'],a['version']) for a in recovery['articles']}
+                for group in groups:
+                    identities={(a['id'],a['version']) for a in group['articles']}
+                    _recovery_require(not (identities&allowed) or identities<=allowed,'group_contains_unbound_article')
+                groups=[g for g in groups if {(a['id'],a['version']) for a in g['articles']}<=allowed]
+                _assert_recovery_source(store,source_run_id,recovery_bindings,recovery)
             selected=[];seen=set();weekly_ids=set();now=datetime.now(timezone.utc)
             existing={e['id']:e for e in store.versions('market_events')}
             scopes=([('weekly',a,b,3) for a,b in periods] if 'weekly' in jobs else [])+([('hotspots',now,now,DAILY_CANDIDATE_LIMIT)] if 'hotspots' in jobs else [])
@@ -201,8 +307,10 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
                     # 单事件独立审核，避免一条引文失败阻断其他合格报道。
                     batch=pending[offset:offset+1]
                     try:
+                        if reuse:_assert_recovery_source(store,source_run_id,recovery_bindings,recovery)
                         snapshot=store.capture_event_generation(batch)
                         for e in editor.events(snapshot['groups'],id,generations=snapshot['generations']):
+                            if reuse:_assert_recovery_source(store,source_run_id,recovery_bindings,recovery)
                             h=input_hash(next(g for g in snapshot['groups'] if g['id']==e['id']));e['input_hash']=h
                             store._record_event_review(e)
                             report['published_events']+=int(store.publish('market_events',e['id'],e,h))
@@ -241,6 +349,7 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
         hot_errors=any(x.get('stage') in ('editor','event_review') for x in report['rejected'])
         limited=any(s['status']!='ok' for s in report['sources']) or hot_errors
         if 'hotspots' in jobs:
+            if reuse:_assert_recovery_source(store,source_run_id,recovery_bindings,recovery)
             # Publication fingerprints and the calendar-day edition are independent.
             # An identical approved event set still creates today's first edition.
             report['daily_edition']=store.update_daily(run_id=id,valid_check=good,

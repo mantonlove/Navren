@@ -9,8 +9,9 @@ from market_content import CN, packed, event_primary_publication
 from market_sources import readable_article,cluster_key,evidence_readable,article_reported_at,source_verified_brief_event,source_verified_text_event,text_only_article
 
 from market_source_attribution import first_publication_verified
+from market_statistical_identity import innovation_release_alias, source_release_aliases
 
-RULE_VERSION = 'daily-selection-v10-verified-original-live-slot-replacement'
+RULE_VERSION = 'daily-selection-v12-source-backed-release-families'
 _publication_clock_scope = ContextVar('navren_daily_publication_clock_scope',default=None)
 
 def _clock_execution_owner():
@@ -115,6 +116,9 @@ def event_aliases(event):
     if len(headline)>=8:aliases.add('same_day_headline:'+day+':'+headline)
     statistical_release=_china_gdp_release_alias(event,primary)
     if statistical_release:aliases.add(statistical_release)
+    innovation_release=innovation_release_alias(event,primary)
+    if innovation_release:aliases.add(innovation_release)
+    aliases.update(source_release_aliases(event, primary))
     # 不同标题的开幕综述也会重复同场会议。只识别开幕/召开报道，
     # 不把论坛中的降息、签署等具体新决定按共同会议名称合并。
     opening=event.get('headline','')
@@ -125,6 +129,20 @@ def event_aliases(event):
     # A shared numeric quote can be an effective-date boilerplate for different policies.
     # It is not an identity unless an independently reviewed canonical ID links the objects.
     return aliases
+
+
+def distinct_event_count(events):
+    """Count source-bound identity groups without changing stored snapshots."""
+    groups=[]
+    try:
+        for event in events:
+            aliases=event_aliases(event)
+            linked=[i for i,group in enumerate(groups) if aliases & group]
+            for i in reversed(linked):aliases |= groups.pop(i)
+            groups.append(aliases)
+    except (KeyError,TypeError,ValueError,AttributeError):
+        return None
+    return len(groups)
 
 class DailyMarket:
     def __init__(self, store): self.store=store
@@ -561,9 +579,10 @@ class DailyMarket:
         self.read_snapshot(db)
         edition=self.edition(db,day,revision)
         if revision and edition is None:raise MarketDailyError('edition_not_found',404)
-        if edition is None:return {**self.metadata(now),**self._checks(db,day),'edition_date':day,'status':'missing_archive','archive_state':'missing','total_count':None,'matched_count':None,'original_count':None,'readable_count':None,'events':[],'revision':None,'origin':None,'period_state':None,'category':category}
+        if edition is None:return {**self.metadata(now),**self._checks(db,day),'edition_date':day,'status':'missing_archive','archive_state':'missing','total_count':None,'matched_count':None,'original_count':None,'readable_count':None,'distinct_event_count':None,'events':[],'revision':None,'origin':None,'period_state':None,'category':category}
         rows=db.execute('SELECT * FROM market_daily_items WHERE edition_date=? AND revision=? ORDER BY position',(day,edition['revision'])).fetchall()
         all_events=[self.expose(db,r,edition) for r in rows]
+        distinct_count=distinct_event_count([json.loads(r['snapshot']) for r in rows])
         events=[e for e in all_events if category=='all' or e['category']==category]
         today=self.clock(now).date().isoformat()
         return {**self.metadata(now),**self._checks(db,day),'edition_date':day,'revision':edition['revision'],'origin':edition['origin'],
@@ -571,6 +590,7 @@ class DailyMarket:
             'created_at':edition['created_at'],'rule_version':edition['rule_version'],'content_version':edition['fingerprint'][:16],
             'status':'published' if events else 'no_matching_category' if rows else 'no_qualified_hotspots',
             'archive_state':'archived' if rows else 'no_qualified','total_count':edition['item_count'],
+            'distinct_event_count':distinct_count,
             'matched_count':len(events),'original_count':edition['item_count'],'readable_count':sum(e['availability']=='active' for e in all_events),
             'matched_readable_count':sum(e['availability']=='active' for e in events),'category':category,'events':events,
             'selection_coverage':json.loads(edition['coverage'])}
@@ -603,13 +623,13 @@ class DailyMarket:
         with self.store.db() as db:
             self.read_snapshot(db)
             current=self._read_day(db,today,now=now)
-            current_meta={k:current.get(k) for k in ('edition_date','revision','status','readable_count','total_count')}
+            current_meta={k:current.get(k) for k in ('edition_date','revision','status','readable_count','total_count','distinct_event_count')}
             result=None
             # 单次读事务内选择最近完整且仍有效的六条；局部失效不能展示残缺的2/4条。
             rows=db.execute('SELECT edition_date,revision FROM market_daily_editions WHERE edition_date BETWEEN ? AND ? AND item_count=6 ORDER BY edition_date DESC,revision DESC',(meta['window_start'],today)).fetchall()
             for row in rows:
                 packet=self._read_day(db,row['edition_date'],now=now,revision=row['revision'])
-                if len(packet['events'])!=6 or any(e.get('availability')!='active' for e in packet['events']):continue
+                if len(packet['events'])!=6 or packet.get('distinct_event_count')!=6 or any(e.get('availability')!='active' for e in packet['events']):continue
                 valid=True
                 for event in packet['events']:
                     try:

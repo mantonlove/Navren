@@ -87,8 +87,8 @@ def prepare(args):
     }.items()}
     paths['financial'] = readable(args.financial_database)
     paths['market'] = readable(args.market_database)
-    if not os.environ.get('AIPING_API_KEY'):
-        raise RuntimeError('AIPING_KEY_REQUIRED_USE_CC_WITH_SECRETS')
+    if not all(os.environ.get(name) for name in ('DEEPSEEK_API_KEY', 'GLM_API_KEY')):
+        raise RuntimeError('OFFICIAL_MODEL_KEYS_REQUIRED_USE_CC_WITH_SECRETS')
     key = os.environ.get('NAVREN_PERSONAL_DATA_KEY')
     if not key:
         raise RuntimeError('EXISTING_PERSONAL_KEY_REQUIRED_USE_CC_WITH_SECRETS')
