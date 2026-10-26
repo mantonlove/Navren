@@ -20,7 +20,8 @@ from simulated_bank.agent_guard import POLICY_VERSION, bind_review
 from simulated_bank.service import encoded
 from base_runtime.reply_interaction import build_reply_interaction
 from .bank_tools import BankTools, SPECS, native_tools, safe_data, validate, monetary_literals, METRIC_PARTS_NOTICE
-from .model_adapters import (AIPING_URL, GLM_REVIEW_MODEL, ModelAdapterError,
+from .model_adapters import (ZHIPU_URL, GLM_REVIEW_MODEL, GLM_ALTERNATE_REVIEW_MODEL,
+                             GLM_REASONING_OUTPUT_LIMIT, ModelAdapterError,
                              OpenAICompatibleJsonClient, _unique_object)
 from .native_client import AIPingToolClient, DeepSeekToolClient
 from .data_boundary import CloudDataBoundary, BoundaryError
@@ -419,20 +420,29 @@ def _compose_public_fee_reply(tools, final, boundary):
     return answer
 
 
+def _official_review_client(client):
+    return (type(client) is OpenAICompatibleJsonClient
+            and client.provider == 'zhipu'
+            and client.model_id in (GLM_REVIEW_MODEL, GLM_ALTERNATE_REVIEW_MODEL)
+            and client.url == ZHIPU_URL and client.env_name == 'GLM_API_KEY'
+            and client.keychain_service == 'CC/GLM_API_KEY')
+
+
 class GLMConversationReviewer:
     model_id = GLM_REVIEW_MODEL
     billing_mode = 'paid'
-    output_token_limit = 1400
+    output_token_limit = GLM_REASONING_OUTPUT_LIMIT
     supports_financial_metric_catalog = True
     supports_provider_review_carrier_v2 = True
 
     def __init__(self, client=None, *, review_carrier_version=CARRIER_V2):
-        self.client = client or OpenAICompatibleJsonClient(provider='ai_ping',
-            model_id=self.model_id, url=AIPING_URL, env_name='AIPING_API_KEY',
-            keychain_service='CC/AIPING_GLM_API_KEY', timeout=35, max_retries=0)
-        self.supports_financial_metric_catalog=(type(self.client) is OpenAICompatibleJsonClient
-            and self.client.provider=='ai_ping' and self.client.model_id==GLM_REVIEW_MODEL
-            and self.model_id==GLM_REVIEW_MODEL)
+        self.client = client or OpenAICompatibleJsonClient(provider='zhipu',
+            model_id=self.model_id, url=ZHIPU_URL, env_name='GLM_API_KEY',
+            keychain_service='CC/GLM_API_KEY', timeout=35, max_retries=0)
+        self.model_id = self.client.model_id
+        self.output_token_limit = OpenAICompatibleJsonClient._request_payload(
+            self.client, system='', user='', stage='reviewer.conversation')['max_tokens']
+        self.supports_financial_metric_catalog = _official_review_client(self.client)
         self.review_carrier_version=carrier_version(review_carrier_version)
         self._carrier_active_version=CARRIER_LITERAL
         self._carrier_witnesses=()
@@ -463,14 +473,8 @@ class GLMConversationReviewer:
         return next((w for w in self._carrier_witnesses if w.matches(packet)), None)
 
     def _payload(self, system, user):
-        payload = {'model': self.client.model_id,
-            'messages': [{'role':'system','content':system}, {'role':'user','content':user}],
-            'temperature':0,'max_tokens':self.output_token_limit}
-        if self.client.provider == 'deepseek':
-            payload.update(thinking={'type':'disabled'},response_format={'type':'json_object'})
-        elif self.client.provider == 'ai_ping':
-            payload.update(reasoning_effort='low',response_format={'type':'json_object'})
-        return payload
+        return OpenAICompatibleJsonClient._request_payload(
+            self.client, system=system, user=user, stage='reviewer.conversation')
 
     def _request_parts(self, packet):
         # Estimates, actual paid adapter and fixed guide use this one decision.
@@ -619,9 +623,8 @@ def _turn_reviewer(reviewer, *, financial_catalog):
     local._carrier_active_version = CARRIER_LITERAL
     if (financial_catalog is True and inner.review_carrier_version == CARRIER_V2
             and inner.supports_provider_review_carrier_v2 is True
-            and type(inner.client) is OpenAICompatibleJsonClient
-            and inner.client.provider == 'ai_ping' and inner.client.model_id == GLM_REVIEW_MODEL
-            and inner.model_id == GLM_REVIEW_MODEL):
+            and _official_review_client(inner.client)
+            and inner.model_id == inner.client.model_id):
         local._carrier_active_version = CARRIER_V2
     if inner is reviewer: return local
     from base_runtime.evidence import EvidenceGuardedClient
@@ -1262,7 +1265,7 @@ class ConversationAgent:
         def token_bound(client, args, paid):
             return input_estimate(client, args, paid)['input_token_estimate']
 
-        def review_packet(final_answer, contract=None, widgets=None, *, reserve_only=False, source_tools=None, source_boundary=None):
+        def review_packet(final_answer, contract=None, widgets=None, *, reserve_only=False, source_tools=None):
             source_tools=tools if source_tools is None else source_tools
             scope=None if reserve_only else _review_monetary_scope(final_answer,contract,source_tools.evidence)
             packet = {'question':text,'history':request_history,'server_context':context,
@@ -1275,13 +1278,6 @@ class ConversationAgent:
                 'policy':{'version':POLICY_VERSION,'requires_user_confirmation':True,
                     'effect':'change' if source_tools.changed else 'advice' if source_tools.advice else 'text',
                     'tool_trace':source_tools.trace}}
-            if source_tools.joint_source_receipts:
-                # Existing generic policy references carry the local receipt hash
-                # and complete source bindings through the whole review wire.
-                packet['policy']['references']=[
-                    (source_boundary or boundary).register_public_quote_joint_source_reference(
-                        source_tools._joint_source_plan,receipt)
-                    for receipt in source_tools.joint_source_receipts]
             if contract is not None:packet['amount_contract']=contract
             if presentations is not None:
                 packet['calendar_widgets']=[x for x in packet['calendar_widgets'] if x.get('type')!='financial_presentation']
@@ -1311,7 +1307,7 @@ class ConversationAgent:
             # fictitious validated contract or new claim binding reaches the turn.
             shadow = deepcopy(source_boundary)
             packet = review_packet({'text':'','claims':[],'draft_ids':[],
-                                   'widget_ids':[],'followups':[],'amount_claims':[]},reserve_only=True,source_tools=source_tools,source_boundary=shadow)
+                                   'widget_ids':[],'followups':[],'amount_claims':[]},reserve_only=True,source_tools=source_tools)
             monetary_rows=_review_monetary_rows(source_tools.facts.values())
             projected=_review_reserve_projection(shadow,packet,monetary_rows,
                 compact_metric_sources=compact_metric_sources)
@@ -2338,10 +2334,6 @@ class ConversationAgent:
                                 if name=='prepare_operation'and payment_proposal_parameters is not None:
                                     validate(args,payment_proposal_parameters)
                                 args = boundary.restore_arguments(name,args)
-                            if name=='answer_reviewed':
-                                joint_source_context=boundary.public_quote_joint_source_context(args)
-                                if joint_source_context is not None:
-                                    tools.prepare_joint_source_quotes(args,joint_source_context)
                             if payment_proposal and name=='prepare_operation':
                                 expected_action=(payment_mode['action'] if payment_mode['kind']in('wealth_draft','card_control_draft','subscription_draft','task_draft') else 'transfer')
                                 if args.get('action')!=expected_action:
@@ -2571,9 +2563,7 @@ class ConversationAgent:
                             emit('tool_end',id=call['id'],name=name,status='rejected')
                             emit_activity(call['id'],'tool',name,'工具调用 · '+name,
                                           'failed',attempt=tool_attempt)
-                            if (tools._joint_source_plan is not None
-                                    or error.code in ('STALE_EVIDENCE','AGENT_BUDGET_EXCEEDED','AGENT_REPEATED_REJECTED_FINAL')
-                                    or isinstance(error,ReadResultPrecheckFatal)):raise
+                            if error.code in ('STALE_EVIDENCE','AGENT_BUDGET_EXCEEDED','AGENT_REPEATED_REJECTED_FINAL') or isinstance(error,ReadResultPrecheckFatal): raise
                             if name=='answer_reviewed':remember_rejected_final(model_args)
                             if (wealth_read_selection and name=='answer_reviewed'
                                     and isinstance(args,dict) and ('reply_parts'in args or 'text'in args)):
@@ -2619,22 +2609,7 @@ class ConversationAgent:
                                     error.code=='OPERATION_STATUS_EVIDENCE_REQUIRED'
                                     or boundary.metric_parts_feedback('METRIC_AMOUNT_UNBOUND',
                                         args['reply_parts'])['repair']['text_part_indices']))))
-                            if error.code=='PUBLIC_FEE_SOURCE_REQUIRED':
-                                if not (type(error)is BankError and metric_selection_mode
-                                        and name=='answer_reviewed' and isinstance(args,dict)
-                                        and 'direct_answer'in args):raise
-                                projected_rejection=boundary.public_quote_fee_feedback(
-                                    args,error._fee_source_rejections,
-                                    time_basis_rejections=error._fee_time_basis_rejections,
-                                    time_endpoint_sources=getattr(error,'_fee_time_endpoint_sources',()))
-                                terminal_only=True
-                            elif error.code=='PUBLIC_TIME_BASIS_REQUIRED':
-                                if not (metric_selection_mode and name=='answer_reviewed'
-                                        and isinstance(args,dict) and 'direct_answer'in args):raise
-                                projected_rejection=boundary.public_quote_time_feedback(
-                                    args,error._time_basis_rejection)
-                                terminal_only=True
-                            elif statistic_field_repair:
+                            if statistic_field_repair:
                                 projected_rejection=boundary.private_fields_repair_feedback(
                                     model_args,args,claim_indices=claim_indices,body_error=body_error,
                                     deadline=deadline,evidence_ids=tools.evidence,draft_ids=tools.drafts,
@@ -2784,14 +2759,6 @@ class ConversationAgent:
                         remember_rejected_final(final_private_model_args)
                         final=None
                         continue
-                    # Successful normal and repaired drafts share the same
-                    # source-to-visible-body contract after the original money
-                    # gate, before reviewer projection and FinalProof binding.
-                    delivered_final=tools._complete_public_fee_delivery(final)
-                    if delivered_final is not final:
-                        final=delivered_final
-                        boundary.check_output(final)
-                        amount_contract=tools.amount_contract(final)
                     tools.fresh()
                     selected_widgets=self._widgets(tools,final)
                     if (tools.widgets and not selected_widgets) or set(tools.calendar_drafts)-set(final.get('widget_ids',[])):
@@ -2804,14 +2771,6 @@ class ConversationAgent:
                     packet = review_packet(final,amount_contract,selected_widgets)
                     cloud_packet=(boundary.review_packet(packet,compact_metric_sources=True) if compact_metric_sources
                                   else boundary.review_packet(packet))
-                    if tools.joint_source_receipts:
-                        # Independent of expected==actual projection: reject a
-                        # shared generic filter silently dropping receipt fields
-                        # or list members before any reviewer wire is sent.
-                        projected_refs=cloud_packet.get('policy',{}).get('references')
-                        if boundary._restore(projected_refs,strict=False)!=packet['policy']['references']:
-                            raise BankError('AGENT_FINAL_PARTIAL_PROJECTION',
-                                '联合原文补引收据未完整进入终审，本轮停止。',503)
                     if tools.history_quote_proof is not None:
                         from .historical_quotes import finalize_review_projection
                         cloud_packet=finalize_review_projection(boundary,packet,cloud_packet,

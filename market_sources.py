@@ -2,6 +2,7 @@
 from __future__ import annotations
 import hashlib, json, re, time, urllib.request, urllib.error
 from market_source_attribution import media_attribution, yicai_publication_time
+from market_statistical_identity import source_release_aliases
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
@@ -375,6 +376,8 @@ def score_article(a):
     return round(.35*importance+.25*novelty+.2*quality+.1*recency,4),{'importance':importance,'new_fact':novelty,'support':quality,'recency':recency,'authorized_relevance':0,'weights_are_design_parameters':True}
 
 def cluster_key(a):
+    source_aliases=source_release_aliases({'facts':[]},a)
+    if source_aliases:return sorted(source_aliases)[0]
     # 相同原始指标/政策的官方解读按同期间合并；转载不增加支持质量。
     t=a['title'];d=datetime.fromisoformat(article_reported_at(a)).astimezone(CN).strftime('%Y-%m')
     if a['source_id'].startswith('nbs') and re.search(r'采购经理|PMI',t,re.I):return 'pmi_'+d

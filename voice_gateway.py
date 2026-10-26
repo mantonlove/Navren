@@ -15,49 +15,9 @@ from urllib.parse import parse_qs, urlsplit
 from finance_gateway import request_json
 from simulated_bank import BankError
 
-ASR_MODEL = 'qwen-audio-3.1-asr-flash-streaming'
-TTS_MODEL = 'qwen-audio-3.1-tts-flash'
-ASR_RATE, TTS_RATE = 16000, 24000
-VOICES = {
-    'female_sweet': 'longanwen_v3.1',
-    'male_warm': 'longanyang_v3.1',
-    'male_podcast': 'longsanshu_v3.1',
-}
-
-
-def load_key():
-    key = os.environ.get('DASHSCOPE_API_KEY', '').strip()
-    if not key and sys_platform_mac():
-        try:
-            result = subprocess.run(['security', 'find-generic-password', '-a', os.environ.get('USER', ''),
-                                     '-s', 'CC/DASHSCOPE_API_KEY', '-w'], capture_output=True, timeout=5)
-            if result.returncode == 0:
-                key = result.stdout.decode().strip()
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-    return key
-
-
-def sys_platform_mac():
-    import sys
-    return sys.platform == 'darwin'
-
-
-def endpoint():
-    config_path = Path(__file__).with_name('voice.local.json')
-    config = json.loads(config_path.read_text()) if config_path.exists() else {}
-    host = os.environ.get('DASHSCOPE_API_HOST', '') or config.get('api_host', '')
-    workspace = os.environ.get('DASHSCOPE_WORKSPACE_ID', '') or config.get('workspace_id', '')
-    if not host and workspace:
-        host = f'{workspace}.cn-beijing.maas.aliyuncs.com'
-    if host:
-        host = host.strip().removeprefix('https://').removeprefix('wss://').rstrip('/')
-        if not re.fullmatch(r'[a-zA-Z0-9-]+\.cn-beijing\.maas\.aliyuncs\.com', host):
-            raise ValueError('百炼语音 API Host 应为北京地域的业务空间专属域名。')
-    else:
-        # 官方保留的存量域名；配置业务空间后自动使用专属域名。
-        host = 'dashscope.aliyuncs.com'
-    return f'wss://{host}/api-ws/v1/inference'
+from glm_speech_task import (ASR_MODEL, TTS_MODEL, ASR_RATE, TTS_RATE, VOICES,
+                             APPROVED_SPEECH, CLOUD_ASR_OPT_IN, SpeechTask,
+                             endpoint, load_key)
 
 
 def speech_text(text):
@@ -70,105 +30,6 @@ def speech_text(text):
     text = re.sub(r'(\d+(?:\.\d+)?)\s*%', r'百分之\1', text)
     text = re.sub(r'[¥￥]\s*([\d,]+(?:\.\d+)?)', lambda m: m[1].replace(',', '') + '元', text)
     return re.sub(r'\n+', '。', text).strip()
-
-
-def packet(action, task_id, payload=None):
-    return {'header': {'action': action, 'task_id': task_id, 'streaming': 'duplex'},
-            'payload': payload or {'input': {}}}
-
-
-class SpeechTask:
-    """只暴露选定的两种语音任务；协议可独立用模拟服务验收。"""
-    def __init__(self, kind, options, key, url, connector=None):
-        self.kind, self.id = kind, str(uuid.uuid4())
-        self.ws = None
-        self.lock = threading.Lock()
-        self.done = False
-        if kind == 'tts':
-            text = speech_text(options.get('text'))
-            voice = VOICES.get(options.get('voice', 'female_sweet'))
-            if not voice:
-                raise BankError('INVALID_VOICE', '请选择页面提供的音色。')
-            try:
-                rate = float(options.get('rate', 1.0))
-            except (ValueError, TypeError):
-                rate = float('nan')
-            if not math.isfinite(rate) or not 0.5 <= rate <= 2:
-                raise BankError('INVALID_RATE', '语速应在 0.5 至 2 倍之间。')
-            parameters = {'text_type': 'PlainText', 'voice': voice, 'format': 'pcm',
-                          'sample_rate': TTS_RATE, 'rate': rate, 'volume': 50,
-                          'instruction': '使用普通话，吐字清晰，语气平和，准确朗读金额和风险提示。'}
-        else:
-            text = None
-            parameters = {'format': 'pcm', 'sample_rate': ASR_RATE,
-                          'semantic_punctuation_enabled': False, 'max_sentence_silence': 1000,
-                          'keep_dialect': False,
-                          'vocabulary': {'Navren': 3, '申购': 3, '赎回': 3, '年化收益率': 3,
-                                         '风险等级': 3, '代扣': 3, '应急金': 3}}
-        if not key:
-            raise BankError('SPEECH_NOT_CONFIGURED', '百炼语音密钥尚未配置。', 503)
-        if connector is None:
-            from websocket import create_connection
-            connector = create_connection
-        try:
-            self.ws = connector(url, header={'Authorization': f'Bearer {key}'}, timeout=10,
-                                enable_multithread=True)
-            payload = {'task_group': 'audio', 'task': kind,
-                       'function': 'recognition' if kind == 'asr' else 'SpeechSynthesizer',
-                       'model': ASR_MODEL if kind == 'asr' else TTS_MODEL,
-                       'parameters': parameters, 'input': {}}
-            self.send(packet('run-task', self.id, payload))
-            message = self.receive()
-            if message.get('header', {}).get('event') != 'task-started':
-                raise BankError('SPEECH_START_FAILED', '百炼未能启动语音任务，请核对模型权限和地域。', 502)
-            if text:
-                # 所有文本顺序送达，不再截断五百字或删除风险提示。
-                for offset in range(0, len(text), 1000):
-                    self.send(packet('continue-task', self.id, {'input': {'text': text[offset:offset+1000]}}))
-                self.finish()
-            self.ws.settimeout(1)
-        except Exception:
-            self.close()
-            raise
-
-    def send(self, message):
-        with self.lock:
-            self.ws.send(json.dumps(message, ensure_ascii=False))
-
-    def audio(self, data):
-        if self.done or not data or len(data) > 65536 or len(data) % 2:
-            raise BankError('INVALID_AUDIO', '录音数据无效。')
-        with self.lock:
-            self.ws.send_binary(data)
-
-    def finish(self):
-        if not self.done:
-            self.done = True
-            self.send(packet('finish-task', self.id))
-
-    def receive(self):
-        data = self.ws.recv()
-        if isinstance(data, bytes):
-            return data
-        if not data:
-            raise BankError('SPEECH_DISCONNECTED', '语音连接已断开，请重试。', 502)
-        message = json.loads(data)
-        header = message.get('header', {})
-        if header.get('task_id') != self.id:
-            raise BankError('SPEECH_PROTOCOL_ERROR', '语音任务返回无效。', 502)
-        if header.get('event') == 'task-failed':
-            code = str(header.get('error_code', ''))
-            if 'limit' in code.lower() or 'throttl' in code.lower():
-                raise BankError('SPEECH_RATE_LIMIT', '语音服务繁忙，请稍后重试。', 429)
-            raise BankError('SPEECH_MODEL_ERROR', '百炼语音任务失败，请核对模型权限、音色及账户余额。', 502)
-        return message
-
-    def close(self):
-        if self.ws:
-            try:
-                self.ws.close(timeout=1)
-            except Exception:
-                pass
 
 
 class BrowserSocket:
@@ -263,7 +124,7 @@ class VoiceGateway:
 
     def status(self):
         import importlib.util
-        dependencies = all(importlib.util.find_spec(name) for name in ('websocket', 'wsproto'))
+        dependencies = importlib.util.find_spec('wsproto') is not None
         local_asr_ready = self.local_asr is not None and self.local_asr.ready() and dependencies
         local_tts_ready = self.local_tts is not None and self.local_tts.ready() and dependencies
         cloud_ready = bool(self.key) and dependencies
@@ -281,7 +142,8 @@ class VoiceGateway:
                 'asr_model': self.local_asr.model_id if self.local_asr is not None else ASR_MODEL,
                 'tts_model': 'macos-say' if self.local_tts is not None else TTS_MODEL,
                 'asr_available': asr_ready, 'tts_available': tts_ready,
-                'asr_streaming': self.local_asr is None,
+                'asr_streaming': False,
+                'cloud_provider': 'glm_official',
                 'asr_privacy_mode': ('local_audio_only' if self.local_asr is not None else
                     'explicit_cloud_audio_opt_in' if self.allow_cloud_asr else 'local_asr_required'),
                 'voices': self.local_tts.voices if self.local_tts is not None else VOICES,
@@ -366,11 +228,16 @@ class VoiceGateway:
                                 from local_speech_task import LocalTTSTask
                                 task = LocalTTSTask(entry[1], value, '', '', config=self.local_tts)
                             else:
-                                task = self.task_factory(entry[1], value, self.key, self.url)
+                                task = self.task_factory(entry[1], {**value, 'text': speech_text(approved_text),
+                                    '_speech_approval': APPROVED_SPEECH}, self.key, self.url)
                     elif self.local_asr is not None:
                         from local_speech_task import LocalSpeechTask
                         task = LocalSpeechTask(entry[1], value, '', '', config=self.local_asr)
-                    else:task = self.task_factory(entry[1], value, self.key, self.url)
+                    else:
+                        if not self.allow_cloud_asr:
+                            raise BankError('LOCAL_ASR_REQUIRED', '云端语音识别需要明确授权。', 403)
+                        task = self.task_factory(entry[1], {**value,
+                            '_cloud_asr_opt_in': CLOUD_ASR_OPT_IN}, self.key, self.url)
                     browser.send({'type': 'ready', 'kind': entry[1], 'sample_rate':
                                   ASR_RATE if entry[1] == 'asr' else TTS_RATE})
 
@@ -382,11 +249,6 @@ class VoiceGateway:
                                     message = task.receive()
                                 except (socket.timeout, TimeoutError):
                                     continue
-                                except Exception as error:
-                                    from websocket import WebSocketTimeoutException
-                                    if isinstance(error, WebSocketTimeoutException):
-                                        continue
-                                    raise
                                 # receive可能跨过账户切换；每个输出在银行身份锁内发布。
                                 def publish(value):
                                     finance=handler.server.finance
@@ -403,13 +265,7 @@ class VoiceGateway:
                                 event = message.get('header', {}).get('event')
                                 if event == 'result-generated' and entry[1] == 'asr':
                                     output=message.get('payload', {}).get('output', {})
-                                    if getattr(task, 'local_only', False):
-                                        sentence = output.get('sentence') or {}
-                                    else:
-                                        from dashscope.audio.asr import RecognitionResult
-                                        from dashscope.api_entities.dashscope_response import RecognitionResponse
-                                        response=RecognitionResponse(status_code=200,request_id=task.id,output=output)
-                                        sentence = RecognitionResult(response).get_sentence() or {}
+                                    sentence = output.get('sentence') or {}
                                     if not sentence.get('heartbeat'):
                                         publish({'type': 'transcript', 'text': sentence.get('text', ''),
                                                       'final': bool(sentence.get('sentence_end')),
