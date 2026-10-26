@@ -744,10 +744,11 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     result = { reply: '抱歉，系统遇到了一个小问题，请稍后再试。\n\n⚠️ 理财非存款，产品有风险，投资须谨慎。', isFallback: true };
   }
 
-  loadingMsg.remove();
+  // 最终答复与确认组件真正插入后，再由 finishRuntimeProgress 移除本轮进度。
   chatSending=false;
   syncChatReference();
-  if(!turnCurrent()){taskRequest?.component.destroy();return;}
+  if(!turnCurrent()){loadingMsg.remove();taskRequest?.component.destroy();return;}
+  try {
   result.reply=NavrenPresentation.text(result.reply);
   const attachmentReceived=result.attachment_receipt?.status==='archived'&&result.attachment_receipt.request_id===result.bank_response_id&&
     result.workspace_id===binding.workspace_id&&result.privacy_revision===binding.privacy_revision;
@@ -850,7 +851,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
   checkRiskReassessmentNudge(msgEl);
 
   // 重新读取 history（并发调用时避免覆盖其他 sendMessage 写入的数据）
-  finishRuntimeProgress(loadingMsg, msgEl);
+  finishRuntimeProgress(loadingMsg, msgEl, result);
   const latestHistory = currentChatHistory();
   const originalQuestion=latestHistory.findLast(row=>row.role==='user'&&(row.client_message_id===userMessageId||voiceEntry?.recording_id&&row.recording_id===voiceEntry.recording_id));
   if(originalQuestion&&result.bank_response_id){originalQuestion.bank_response_id=result.bank_response_id;if(userMessage)userMessage.dataset.bankResponseId=result.bank_response_id;}
@@ -898,6 +899,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
   Storage.set('qingzhou_chatHistory', latestHistory);
 
   scrollToBottom();
+  } finally { loadingMsg.remove(); }
 }
 
 // 仅渲染本轮实际收到的活动；不读取工具参数、原始结果或模型推理。
@@ -921,40 +923,126 @@ function runtimeSafeName(value) {
   return /^[A-Za-z][A-Za-z0-9_.:/-]{0,95}$/.test(name) ? name : '';
 }
 
+// 名称来自实际能力目录；未知能力保留真实标识，不猜测用途或补造调用。
+const RUNTIME_TOOL_LABELS = Object.freeze({
+  "load_skill": "加载专业技能",
+  "knowledge_status": "检查知识资料接入",
+  "knowledge_search": "检索公开知识与条款",
+  "market_hotspots": "查询市场热点",
+  "market_status": "核对市场来源与更新",
+  "market_event": "读取市场事件与分析",
+  "market_article": "核对报道原文",
+  "market_weekly": "读取市场周报",
+  "calendar_query": "查询财务日历",
+  "calendar_day": "读取当日事项",
+  "calendar_item": "核对日历事项",
+  "calendar_budget_scenario": "计算日历预算情景",
+  "calendar_prepare_event": "准备日历事项草案",
+  "wealth_product": "核对基金与组合数据",
+  "wealth_versions": "核对组合版本与来源",
+  "personal_graph": "读取财务关系资料",
+  "graph_scenario": "计算资金规划情景",
+  "remember_profile": "整理待确认资料",
+  "public_products": "查询公开产品资料",
+  "research_plans": "读取已保存研究方案",
+  "customer_records": "读取相关业务档案",
+  "account_summary": "查询账户概览",
+  "budget": "核对可安排资金",
+  "statement_source": "核对账单来源",
+  "monthly_statement": "查询月度账单",
+  "annual_statement": "查询年度账单",
+  "statement_details": "核对账单明细",
+  "anomalies": "核对异常收支",
+  "periodic_charges": "查询周期扣费",
+  "cashflow": "分析现金流",
+  "money_calculation": "进行金额计算",
+  "products": "核对模拟产品与适配条件",
+  "service_offer_rules": "查询服务条件",
+  "service_offer_preview": "核对服务条件预览",
+  "service_application_status": "查询服务申请回执",
+  "business_records": "读取相关业务记录",
+  "operation_status": "核对操作回执",
+  "user_memory": "读取已确认资料",
+  "prepare_operation": "准备待确认操作草案",
+  "withdraw_draft": "撤回待确认草案",
+  "answer_facts": "组织已核验事实",
+  "answer_reviewed": "提交答复审核",
+  "presentation_query": "查询图表依据",
+  "presentation_detail": "核对图表明细",
+  "run_generated_code": "执行受限计算"
+});
+const RUNTIME_SKILL_LABELS = Object.freeze({
+  "goal-planning": "目标规划",
+  "financial-diagnosis": "财务诊断",
+  "reviewer": "独立审核",
+  "payments": "支付与转账",
+  "wealth": "理财与投资",
+  "calendar": "财务日历",
+  "asset-allocation": "资产配置",
+  "product-research": "产品研究",
+  "cards": "卡片与银行业务",
+  "portfolio-review": "持仓复核",
+  "code-sandbox": "受限代码计算",
+  "cashflow": "收支与现金流",
+  "subscriptions": "订阅与代扣",
+  "banking": "银行业务",
+  "profile": "财务资料与偏好",
+  "knowledge-retrieval": "知识检索",
+  "conversation-components": "对话内容编排",
+  "market": "市场研究",
+  "bank-service": "银行服务条件"
+});
+const RUNTIME_SOURCE_LABELS = Object.freeze({
+  "public_knowledge": "公开知识资料",
+  "local_knowledge_status": "知识资料接入状态",
+  "verified_public_market": "已核验市场资料",
+  "webank_public_disclosure": "银行公开资料",
+  "profile_sources": "已登记资料",
+  "maintainer_skill": "专业技能资料",
+  "conversation_candidate": "待核实资料",
+  "simulation": "模拟账户数据",
+  "imported": "导入资料",
+  "local_rule": "本地规则"
+});
+
+function runtimeActivityPresentation(activity) {
+  if (activity.kind === 'skill' && activity.name === 'intent_route')
+    return {category: '任务识别', label: '识别任务范围', code: ''};
+  if (activity.kind === 'skill' || activity.name === 'load_skill') {
+    const skill = runtimeSafeName(activity.summary?.skill);
+    return {category: '技能调用', label: Object.hasOwn(RUNTIME_SKILL_LABELS, skill)
+      ? RUNTIME_SKILL_LABELS[skill] : '加载专业技能', code: skill || 'load_skill'};
+  }
+  if (activity.kind === 'review') {
+    const labels = {independent_review: '独立审核答复', answer_boundary: '核对回答范围',
+      amount_contract: '核对金额依据', evidence_reference: '核对引用来源'};
+    return {category: '结果核验', label: Object.hasOwn(labels, activity.name)
+      ? labels[activity.name] : '核验答复', code: ''};
+  }
+  if (activity.kind === 'model') return {category: '分析处理', label: '分析当前问题与已有资料', code: ''};
+  return {category: '工具调用', label: Object.hasOwn(RUNTIME_TOOL_LABELS, activity.name)
+    ? RUNTIME_TOOL_LABELS[activity.name] : '调用工具', code: activity.name};
+}
+
 function runtimeActivitySummary(kind, summary) {
   if (!summary || typeof summary !== 'object' || Array.isArray(summary)) return [];
   const parts = [];
   for (const key of RUNTIME_ACTIVITY_FIELDS[kind] || []) {
     const value = summary[key];
-    if(['model','review'].includes(kind)&&['provider','model'].includes(key))continue;
+    // 调用轮次、供应商、失败代码属于审计信息，保留原事件，不在用户进度中混排。
+    if (['provider', 'model', 'round', 'failure_type', 'skill'].includes(key)) continue;
     if (key === 'record_count') {
       if (Number.isSafeInteger(value) && value >= 0 && value <= 10000000) parts.push(value + ' 条记录');
-    } else if (key === 'round') {
-      if (Number.isSafeInteger(value) && value > 0 && value <= 1000) parts.push('第 ' + value + ' 轮');
     } else if (key === 'period') {
       if (typeof value === 'string' && value.length <= 64 && /^\d{4}-\d{2}(?:-\d{2})?(?:\s*(?:至|—|~|\/|\.\.)\s*\d{4}-\d{2}(?:-\d{2})?)?$/.test(value)) parts.push(value);
     } else if (key === 'verdict') {
       const verdicts = {approve: '审核通过', revise: '需要修订', reject: '审核未通过', insufficient_evidence: '审核证据不足'};
       if (Object.hasOwn(verdicts, value)) parts.push(verdicts[value]);
-    } else {
-      const text = key === 'source' ? runtimeSafeText(value, 64) : runtimeSafeName(value);
-      if(text&&['model','review'].includes(kind)&&/deepseek|glm|ai[_-]?ping|provider|model/i.test(text))continue;
-      if (text) parts.push(({source: '来源：', skill: '技能：', provider: '提供方：', model: '模型：', failure_type: '失败类型：'}[key] || '') + text);
+    } else if (key === 'source' && Object.hasOwn(RUNTIME_SOURCE_LABELS, value)) {
+      parts.push(RUNTIME_SOURCE_LABELS[value]);
     }
   }
   return parts;
-}
-
-function runtimeActivityRole(activity){
-  if(activity.kind==='review')return '审核';
-  if(activity.kind==='model')return /(?:^|[^a-z])jev(?:[^a-z]|$)/i.test(String(activity.summary?.model||activity.name))?'Jev':'主模型';
-  return activity.label;
-}
-function runtimeActivityIdentity(activity) {
-  if(['model','review'].includes(activity.kind))return runtimeActivityRole(activity);
-  const identity=activity.kind==='skill'?(runtimeSafeName(activity.summary?.skill)||activity.name):activity.name;
-  const count=activity.kind==='data'&&Number.isSafeInteger(activity.summary?.record_count)&&activity.summary.record_count>=0&&activity.summary.record_count<=10000000?' · '+activity.summary.record_count+' 条记录':'';
-  return (activity.label.includes(identity)?activity.label:activity.label+' · '+identity)+count;
 }
 
 function runtimeActivityPanel(message) {
@@ -962,51 +1050,53 @@ function runtimeActivityPanel(message) {
   if (state) return state;
   const bubble = message.querySelector('.bubble') || message;
   bubble.replaceChildren();
-  const panel = document.createElement('details'); panel.className = 'runtime-panel runtime-activity-panel';
-  const summary = document.createElement('summary'); summary.className = 'runtime-activity-current';
+  const panel = document.createElement('section'); panel.className = 'runtime-panel runtime-activity-panel';
+  panel.setAttribute('aria-label', '本次处理进度');
+  const heading = document.createElement('div'); heading.className = 'runtime-activity-current';
   const latest = document.createElement('span'); latest.className = 'runtime-activity-latest';
   latest.setAttribute('role', 'status'); latest.setAttribute('aria-live', 'polite'); latest.setAttribute('aria-atomic', 'true');
-  const count = document.createElement('span'); count.className = 'runtime-activity-count';
-  summary.append(latest, count);
+  heading.append(latest);
   const list = document.createElement('ol'); list.className = 'runtime-steps runtime-activity-list';
-  panel.append(summary, list); bubble.append(panel);
-  state = {panel, latest, count, list, records: new Map(), attempts: new Map(), steps: new Map(), sequence: 0, requestId: '', typedSeen: false, finished: false};
+  list.setAttribute('aria-label', '本次实际调用');
+  list.tabIndex = 0;
+  panel.append(heading, list); bubble.append(panel);
+  state = {panel, latest, list, records: new Map(), steps: new Map(), sequence: 0,
+    requestId: '', typedSeen: false, finished: false, transportFinished: false, runError: false};
   runtimeActivityStates.set(message, state);
   return state;
 }
 
 function updateRuntimeActivity(state, activity) {
+  const followLatest = state.list.scrollHeight - state.list.scrollTop - state.list.clientHeight <= 24;
   let record = state.records.get(activity.callId);
   if (record?.typed && !activity.typed) return;
   if (!record) {
     const row = document.createElement('li'); row.className = 'runtime-step';
+    const category = document.createElement('span'); category.className = 'runtime-activity-kind';
     const title = document.createElement('span'); title.className = 'runtime-activity-label';
     const name = document.createElement('code'); name.className = 'runtime-activity-name';
     const status = document.createElement('span'); status.className = 'runtime-activity-state';
     const details = document.createElement('span'); details.className = 'runtime-activity-data';
-    row.append(title, name, status, details); state.list.append(row);
-    const key = activity.kind + ':' + activity.name;
-    const attempt = (state.attempts.get(key) || 0) + 1; state.attempts.set(key, attempt);
-    record = {row, title, name, status, details, attempt}; state.records.set(activity.callId, record);
+    row.append(category, title, status, name, details); state.list.append(row);
+    record = {row, category, title, name, status, details}; state.records.set(activity.callId, record);
   }
-  // 兼容事件重复到达不能把已经结束的同一次调用重新变成“进行中”。
+  // 同一调用只更新这一行；重复或兼容事件不能重新打开已结束的调用。
   if (record.activity?.status !== 'started' && record.activity && activity.status === 'started') return;
   record.typed = record.typed || activity.typed;
-  if (Number.isSafeInteger(activity.attempt) && activity.attempt > 0 && activity.attempt <= 1000) record.attempt = activity.attempt;
   record.activity = activity;
   state.latestRecord = record;
-  const statuses = {started: '进行中', completed: '已完成', failed: '失败'};
+  const view = runtimeActivityPresentation(activity);
+  const statuses = {started: '进行中', completed: '已完成', failed: '未完成'};
   record.row.className = 'runtime-step ' + ({started: 'running', completed: 'done', failed: 'rejected'}[activity.status]);
-  record.title.textContent = runtimeActivityRole(activity);
-  record.name.textContent = ['model','review'].includes(activity.kind)?'':activity.name;
-  record.name.hidden=['model','review'].includes(activity.kind)||activity.label.includes(activity.name);
+  record.category.textContent = view.category;
+  record.title.textContent = view.label;
+  record.name.textContent = view.code; record.name.hidden = !view.code;
   record.status.textContent = statuses[activity.status];
   const details = runtimeActivitySummary(activity.kind, activity.summary);
-  if (record.attempt > 1) details.unshift('第 ' + record.attempt + ' 次调用');
   record.details.textContent = details.join(' · '); record.details.hidden = !details.length;
-  state.latest.textContent = runtimeActivityIdentity(activity) + (record.attempt > 1 ? ' · 第 ' + record.attempt + ' 次调用' : '') + ' · ' + statuses[activity.status];
-  state.count.textContent = state.records.size + ' 项调用';
-  state.panel.dataset.status = activity.status;
+  state.latest.textContent = activity.status === 'started' ? '正在' + view.label : '正在处理';
+  state.panel.dataset.status = 'running';
+  if (followLatest) state.list.scrollTop = state.list.scrollHeight;
 }
 
 function renderRuntimeEvent(message, event) {
@@ -1046,11 +1136,18 @@ function renderRuntimeEvent(message, event) {
     activity = {...record.activity, status: 'completed'};
   } else if (event.type === 'RUN_FINISHED' || event.type === 'RUN_ERROR') {
     const state = runtimeActivityStates.get(message);
-    if (state) { state.finished = true; state.panel.remove(); }
+    if (state) {
+      state.transportFinished = true;
+      state.runError = event.type === 'RUN_ERROR';
+      if (state.runError) {
+        state.latest.textContent = '本次处理未完成';
+        state.panel.dataset.status = 'failed';
+      }
+    }
     return;
   } else return;
   const state = runtimeActivityPanel(message);
-  if (state.finished) return;
+  if (state.finished || state.transportFinished) return;
   if (activity.typed && !state.typedSeen) {
     state.typedSeen = true;
     // typed活动有实际调用ID；移除旧模型阶段兼容项，避免同次模型调用显示两遍。
@@ -1064,14 +1161,19 @@ function renderRuntimeEvent(message, event) {
   scrollToBottom();
 }
 
-function finishRuntimeProgress(loadingMessage, replyMessage) {
+function finishRuntimeProgress(loadingMessage, replyMessage, result = {}) {
   const state = runtimeActivityStates.get(loadingMessage);
   if (state) {
     state.finished = true; state.panel.remove();
     runtimeActivityStates.delete(loadingMessage);
-    runtimeActivityStates.set(replyMessage, state);
+    // 失败只保留简短状态；具体原因和重试沿用真实答复，不从参数或异常文本拼接。
+    if (state.runError || result.isFallback === true || result.task_result_rejected === true) {
+      const notice = document.createElement('p'); notice.className = 'runtime-panel runtime-activity-notice';
+      notice.textContent = '本次处理未完成';
+      (replyMessage.querySelector('.bubble') || replyMessage).prepend(notice);
+    }
   }
-  replyMessage.querySelectorAll('.runtime-panel').forEach(panel => panel.remove());
+  loadingMessage.remove();
   ensureMessageTools(replyMessage);
 }
 
@@ -2441,7 +2543,7 @@ function chatUserMessageHtml(text,ref,returnView=null){
   if(!snapshot)return body;
   const href=chatReferenceHref(returnView);
   const summary='<span class="chat-user-reference" role="group" aria-label="'+escapeHtml(chatReferenceUi('随此消息发送的关联资料'))+'">'+
-    '<span class="chat-user-reference-label">'+escapeHtml(chatReferenceUi('关联资料'))+'</span><span class="chat-user-reference-title" translate="no" data-i18n-skip>'+
+    '<span class="chat-user-reference-label">'+escapeHtml(chatReferenceUi('关联资料'))+'</span><span class="chat-user-reference-title" translate="no" data-i18n-skip>'+ 
     escapeHtml(chatReferenceTitle(snapshot))+'</span>'+(href?'<a class="chat-user-reference-open" href="'+
       escapeHtml(href).replace(/"/g,'&quot;')+'">'+escapeHtml(chatReferenceUi('查看资料'))+'</a>':'')+'</span>';
   return summary+(body?'<span class="chat-user-text">'+body+'</span>':'');
