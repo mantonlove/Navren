@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from market_sources import SOURCES, discover, read_article, score_article, cluster_key, now_iso, readable_article, ArticleUnavailable, text_only_article, source_verified_text_event
 from market_content import MarketStore, week_periods, packed, CN, WEEKLY_GENERATION_CONTRACT, event_input_hash, EVENT_EDITOR_POLICY
 from market_editor import MarketEditor
+from market_model import market_model_session
 from market_schedule import plan
 from market_daily import DailyMarket
 from market_source_attribution import first_publication_verified
@@ -81,6 +82,7 @@ def unchanged_historical_contract_upgrade(old,article,now):
 def daily_qualified_count(store):
     with store.db() as db:return len(DailyMarket(store).candidates(db,datetime.now(CN)))
 
+@market_model_session
 def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_only=False,total_seconds=720,force_check=False,scheduled=False,sources=None,hotspots_only=False):
     store=store or MarketStore();id=uuid.uuid4().hex;started=now_iso();deadline=time.monotonic()+total_seconds
     lock=open(str(store.path)+'.lock','a')
