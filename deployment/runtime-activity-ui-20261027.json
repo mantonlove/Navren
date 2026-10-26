@@ -1,0 +1,24 @@
+{
+  "schema": "navren.runtime-activity-ui-deployment/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "base_commit": "310dd062d29939ac4c7c6c52056bb4bc76d07b47",
+  "scope": "runtime activity presentation: real tool/skill names, default visible, final reply replaces progress, failure/confirmation retained, follow latest only near list bottom",
+  "candidate_manifest_sha256": "08ca46ea0e0d35a314a85f8c8a5ced9029624a42b9e30494c0da3716749445bf",
+  "candidate_patch_sha256": "6c76819767cd99df20ade0be3b2bdfced8e2db6f5116b8cfafc249f47ef83df2",
+  "files": {
+    "js/chat.js": "7c45d82ee83a68ec386279044f48c392f708101824b16d8a5e0d089bfac2bbd6",
+    "css/chat_reading.css": "9a3783ad9b4489a7f0cad14828eb21caefc1b3a7b0688f48628b379d927b0543",
+    "chat.html": "4e2472a1670849ca51ee04a87f551c10649a9894afb665299a11f0665f4fac8a"
+  },
+  "cloud_before_sha256": {
+    "js/chat.js": "04f23720236b917aead4f74b1225cd6a3529d9ee23850a9ad8914bdc9affb0b5",
+    "css/chat_reading.css": "691e12a633127b798c19df83a79e4e653ad4457bfe969df6d1a8e89d03eb99a4",
+    "chat.html": "7a0ed983b7e6f2446bea46df9d6f0c73d26cd320f31fec75b9aaf45658c02a38"
+  },
+  "server_root": "/opt/navren/releases/navren-20261022-market-cutover-1/app",
+  "server_restart_required": false,
+  "model_calls_added": 0,
+  "business_protocol_changed": false,
+  "private_records_included": false,
+  "business_accepted": false
+}
