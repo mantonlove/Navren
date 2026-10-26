@@ -97,9 +97,22 @@ def official_market_client(role, *, urlopen=None, key_loader=None, log_path=None
                'NAVREN_MARKET_BUDGET_LEDGER','NAVREN_MARKET_BUDGET_PHASE')
         values={name:os.environ.get(name,'') for name in names}
         if not all(values.values()):raise MarketBudgetError('market_budget_control_required')
+        budget_phase=budget_phase or values[names[3]]
+        if budget_phase=='native_scheduled':
+            # 临时验收账只适用于指定恢复与下一早slot。后续普通产品业务
+            # 继续原scheduler的日期/slot/3次、18候选、deadline与逐笔usage。
+            if os.environ.get('NAVREN_MARKET_SCHEDULER_MODE')!='server_timer':
+                raise MarketBudgetError('native_scheduled_trusted_launcher_required')
+            return MarketJsonClient(
+                provider='zhipu' if reviewer else 'deepseek',
+                model_id='glm-5.3-flash' if reviewer else 'deepseek-flash',
+                url='https://open.bigmodel.cn/api/paas/v4/chat/completions' if reviewer else 'https://api.deepseek.com/chat/completions',
+                env_name='GLM_API_KEY' if reviewer else 'DEEPSEEK_API_KEY',
+                keychain_service='CC/GLM_API_KEY' if reviewer else 'CC/DEEPSEEK_API_KEY',
+                timeout=90 if role=='weekly' else 45,max_retries=0,
+                urlopen=urlopen,key_loader=key_loader,log_path=log_path)
         budget_guard=MarketBudgetGuard.from_control_file(
             control_path=values[names[0]],expected_file_sha256=values[names[1]],ledger_path=values[names[2]])
-        budget_phase=budget_phase or values[names[3]]
     return BudgetedMarketJsonClient(
         budget_guard=budget_guard,budget_phase=budget_phase,
         provider='zhipu' if reviewer else 'deepseek',

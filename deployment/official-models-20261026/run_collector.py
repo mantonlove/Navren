@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+from zoneinfo import ZoneInfo
 import pwd
 import re
 import runpy
@@ -224,6 +225,16 @@ def load_only_collector_credential() -> None:
         os.environ[name] = value
 
 
+def temporary_budget_phase(control: dict, now: datetime, controlled: bool) -> str:
+    if controlled:
+        return 'controlled_recovery'
+    local = now.astimezone(ZoneInfo('Asia/Shanghai'))
+    if (local.date().isoformat() == control['automatic_date']
+            and (local.hour, local.minute) < (12, 30)):
+        return 'automatic_morning'
+    return 'native_scheduled'
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--preflight', action='store_true',
@@ -289,8 +300,8 @@ def main() -> int:
                                                  'claimed_at': now.isoformat(), 'run_kind': 'controlled_recovery'}))
                         handle.flush(); os.fsync(handle.fileno())
                     args.controlled_recovery = True
-        os.environ['NAVREN_MARKET_BUDGET_PHASE'] = ('controlled_recovery' if args.controlled_recovery
-                                                  else 'automatic_morning')
+        os.environ['NAVREN_MARKET_BUDGET_PHASE'] = temporary_budget_phase(
+            control_value, datetime.now(timezone.utc), args.controlled_recovery)
         mode = ['--controlled-recovery', '--hotspots-only'] if args.controlled_recovery else ['--scheduled', '--backfill-weeks', '1']
         report = 'market-controlled-recovery-20261026.json' if args.controlled_recovery else 'market-refresh-latest.json'
         sys.argv = [str(entrypoint), *mode, '--database', str(DATABASE), '--report', str(LOG_DIRECTORY / report)]
