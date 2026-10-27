@@ -112,6 +112,30 @@ class DirectProbeTests(unittest.TestCase):
             self.assertEqual(code, 5)
             self.assertEqual(receipt['error_code'], 'linux_private_network_required')
 
+    def test_private_network_requires_root_supplied_host_namespace(self):
+        cases = (
+            ({}, 'net:[100]', False),
+            ({'NAVREN_HOST_NETNS_ID': 'invalid'}, 'net:[100]', False),
+            ({'NAVREN_HOST_NETNS_ID': 'net:[100]'}, 'net:[100]', False),
+            ({'NAVREN_HOST_NETNS_ID': 'net:[200]'}, 'invalid', False),
+            ({'NAVREN_HOST_NETNS_ID': 'net:[200]'}, 'net:[100]', True),
+        )
+        for environment, own_namespace, expected in cases:
+            with self.subTest(environment=environment, own_namespace=own_namespace), patch.dict(
+                os.environ, environment, clear=True
+            ), patch.object(probe.os, 'readlink', return_value=own_namespace) as readlink:
+                self.assertEqual(probe._private_network(), expected)
+                self.assertEqual(readlink.call_count, 1 if environment.get('NAVREN_HOST_NETNS_ID')
+                                 and environment['NAVREN_HOST_NETNS_ID'].startswith('net:[') else 0)
+                if readlink.call_count:
+                    readlink.assert_called_once_with('/proc/self/ns/net')
+
+    def test_private_network_rejects_unreadable_self_namespace(self):
+        with patch.dict(os.environ, {'NAVREN_HOST_NETNS_ID': 'net:[200]'}, clear=True), patch.object(
+            probe.os, 'readlink', side_effect=PermissionError
+        ):
+            self.assertFalse(probe._private_network())
+
     def test_probe_has_no_direct_db_or_network_import(self):
         tree = ast.parse(Path(probe.__file__).read_text())
         imports = [alias.name.split('.')[0] for node in ast.walk(tree)
