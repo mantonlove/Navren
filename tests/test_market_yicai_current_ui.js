@@ -11,6 +11,7 @@ const calls=[];
 w.Date.now=()=>now;
 w.setTimeout=()=>1;
 w.clearTimeout=()=>{};
+w.setInterval=()=>1;
 w.NavrenHelp={button:()=>w.document.createElement('button')};
 w.NavrenAccountData={itemKey:JSON.stringify};
 w.BankClient={identity:()=>({registered_user_id:'fixture',workspace_id:'fixture',privacy_revision:1})};
@@ -23,11 +24,17 @@ const article=(id,url)=>({id,version:1,publisher:id==='yicai'?'第一财经':'�
 const official='https://www.news.cn/fortune/20261027/14c8c3e6bd60471ca01d7fe998cd84cf/c.html';
 const yicai='https://www.yicai.com/news/103410851.html';
 const cards=[0,1,2,3,4,5].map(i=>{const id=i===0?'yicai':'official-'+i,a=article(id,i===0?yicai:official);return {id,version:1,status:'published',availability:'active',headline:id,summary:'已核验摘要',primary_article_id:a.id,articles:[a],category:'investment',archive:{edition_date:'2026-10-27',revision:3,event_version:1}};});
-let packet={edition_date:'2026-10-27',revision:3,events:cards,is_fallback:true,display_mode:'retained'};
+const fixture={edition_date:'2026-10-27',revision:3,events:cards,is_fallback:true,display_mode:'retained'};
+let packet={...fixture,events:[{...cards[0],articles:[{...cards[0].articles[0],url:official}]},...cards.slice(1)]};
 w.fetch=async url=>{calls.push(url);const body=url==='/api/market/hotspots'?packet:url==='/api/market/hotspots/history'?{dates:[]}:null;if(body===null)throw Error('unexpected API '+url);return {ok:true,headers:{get:()=>new Date(now).toUTCString()},json:async()=>structuredClone(body)};};
+const pageReady=new Promise(resolve=>{if(w.document.readyState==='loading')w.document.addEventListener('DOMContentLoaded',resolve,{once:true});else resolve();});
 w.eval(fs.readFileSync(process.env.MARKET_UI_SOURCE||'js/market_ui.js','utf8'));
 
 (async()=>{
+ await pageReady;
+ await w.MarketUI.recommend();
+ assert.equal(w.MarketUI.hotspot().data?.events?.length,6,'页面初始化须先完成');
+ calls.length=0;
  if(process.env.MARKET_PACKET_PATH){
   packet=JSON.parse(fs.readFileSync(process.env.MARKET_PACKET_PATH,'utf8'));
   assert.equal(packet.edition_date,'2026-10-27');
@@ -35,8 +42,9 @@ w.eval(fs.readFileSync(process.env.MARKET_UI_SOURCE||'js/market_ui.js','utf8'));
   await w.MarketUI.refreshHotspots();
   assert.equal(w.MarketUI.hotspot().data?.events?.length,6,'实际公开同日包应通过六卡前端筛选；请求：'+calls.join(','));
   assert(!calls.includes('/api/market/hotspots/history'),'实际公开同日包不得转查旧版');
-  packet={edition_date:'2026-10-27',revision:3,events:cards,is_fallback:true,display_mode:'retained'};
+  packet=fixture;
  }
+ else packet=fixture;
  await w.MarketUI.refreshHotspots();
  assert.equal(w.MarketUI.hotspot().data.events.length,6,'同日有效六卡必须完整保留');
  assert(w.document.getElementById('marketHotHeading').textContent.includes('当日精选 · 2026-10-27'));
