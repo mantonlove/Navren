@@ -23,7 +23,7 @@
     "worker_proto/navren-encoder-worker.service.prototype": "6e32b36f586f7a58d4c27bb6286768eb54b5284c2a3a44bcf2058c85a8c35e9f",
     "worker_proto/profile_spec.py": "67d48e750750b646791151c9a82c5fb07e3d4fa91b40502765088fa80c92c42e",
     "worker_proto/protocol.py": "2859a66272f5d5effe617d7906070f334be3f7047498bc5a09557ac620fe3c75",
-    "worker_proto/supervisor.py": "cdfbf7f9a22a5bd0c69d4f77a2d82f59d26ba8ddc826f29db3381d9adef0e7dc",
+    "worker_proto/supervisor.py": "823498f739cc7ef3e3e560331fbc7d8f3b89ac5f3dba95b1f21e289645c5ac39",
     "worker_proto/install_worker_account.sh.prototype": "3b2d0351ebf4add304a71e850fc2307990a76f625f206eb2d94bc228583d1e13"
   }
 }

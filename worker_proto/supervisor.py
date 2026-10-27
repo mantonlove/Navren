@@ -229,7 +229,7 @@ def serve(path: Path, manager: SingleProfileManager, *, allowed_uid: int) -> Non
         raise RuntimeError('unsafe_socket_directory')
     if path.exists() or path.is_symlink():
         raise RuntimeError('socket_already_exists')
-    os.umask(0o117)
+    os.umask(0o077)
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     stopping = False
     workers: set[threading.Thread] = set()
