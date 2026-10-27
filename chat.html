@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="navren-shell" data-navren-page-load="loading">
 <head>
 <meta charset="UTF-8">
+<script src="js/page_load.js?v=chat-ready-20261027"></script>
 <script data-navren-theme-bootstrap>
 (() => {
   try {
@@ -31,6 +32,7 @@
   <link rel="stylesheet" href="css/navigation_gestures.css?ui=dc4db77b8cb5">
 <link rel="stylesheet" href="css/form_controls.css?dq=546db5bc506d">
   <link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
+<link rel="stylesheet" href="css/page_load.css?v=chat-ready-20261027">
 </head>
 <body data-page="chat">
 <a class="skip-link" href="#mainContent">跳到主要内容</a>
@@ -51,6 +53,7 @@
     </header>
     <section id="accountSwitcher" aria-label="演示账户" class="account-switcher" hidden></section>
 
+    <section class="navren-page-loader" data-npl-page="chat" data-state="loading" data-i18n-skip aria-label="对话加载"><div class="npl-stage npl-chat-stage"><div class="npl-chat-art" aria-hidden="true"><svg class="npl-mark" viewBox="0 0 72 64" aria-hidden="true"><path class="npl-wave npl-wave-back" d="M9 37C19 37 23 30 31 23S46 12 63 12"/><path class="npl-wave npl-wave-front" d="M9 51C25 51 29 43 38 36S51 26 63 26"/></svg><div class="npl-chat-sheet"><i></i><i></i><i></i></div><span class="npl-chat-dot"></span></div><p class="npl-title" role="status" aria-live="polite">正在准备对话</p><p class="npl-description">历史消息与附件就绪后，将一起呈现</p><p class="npl-note"></p><a class="npl-retry" href="">重新加载对话页</a></div></section>
     <div class="chat-messages" id="chatMessages">
       <div class="message ai">
         <div class="avatar"><img class="brand-icon" src="assets/brand/navren-icon.png" width="1254" height="1254" alt=""></div>
@@ -131,7 +134,7 @@
 <script src="js/chat_markdown.js"></script>
 <script src="js/reply_components.js?dq=e9d7aa06afd1"></script>
 <script src="js/reply_interactions.js?dq=9aa29f5f6bdb"></script>
-<script src="js/chat.js?dq=runtime-7c45d82ee83a"></script>
+<script src="js/chat.js?v=chat-ready-20261027"></script>
   <script src="js/navigation_gestures.js?ui=acce6603cf27"></script>
 <script src="js/form_controls.js?dq=b4539a70b618"></script>
 </body>
