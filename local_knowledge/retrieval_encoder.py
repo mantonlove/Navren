@@ -6,6 +6,7 @@ queries. Each needs its own provisioned artifacts and derived index. Missing
 branches have explicit diagnostics, never an automatic model download.
 """
 import os
+from functools import lru_cache
 from .embeddings import VectorError
 
 
@@ -26,7 +27,23 @@ def selected_model_directory():
     return default_model_directory()
 
 
+@lru_cache(maxsize=4)
+def _worker_proxy(socket_path, profile):
+    # The Web process imports only this lightweight proxy, never ONNX Runtime.
+    from worker_proto.client import EncoderProxy
+    return EncoderProxy(socket_path, profile)
+
+
 def get_retrieval_encoder():
+    socket_path = os.environ.get('NAVREN_VECTOR_WORKER_SOCKET', '').strip()
+    if socket_path:
+        mode = selection()
+        if mode == 'dual':
+            return EncoderBundle(lambda: _worker_proxy(socket_path, 'e5'),
+                                 lambda: _worker_proxy(socket_path, 'aligned'))
+        if mode in ('e5', 'aligned'):
+            return _worker_proxy(socket_path, mode)
+        raise VectorError('vector_model_invalid')
     if selection() == 'bge':
         from .embeddings import get_encoder
         return get_encoder()

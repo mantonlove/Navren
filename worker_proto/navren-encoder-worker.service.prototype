@@ -1,0 +1,35 @@
+[Unit]
+Description=Navren local single-profile encoder worker (prototype)
+After=local-fs.target
+
+[Service]
+Type=simple
+User=navren-web
+Group=navren-web
+WorkingDirectory=/opt/navren/releases/navren-20261022-market-cutover-1/app
+RuntimeDirectory=navren-encoder-worker
+RuntimeDirectoryMode=0700
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=NAVREN_MULTILINGUAL_EMBEDDING_DIR=/opt/navren/releases/navren-20261020-3cac15d49164/models/multilingual-e5-small-onnx-q8
+Environment=NAVREN_ALIGNED_EMBEDDING_DIR=/opt/navren/releases/navren-20261020-3cac15d49164/models/paraphrase-multilingual-minilm-l12-v2-onnx-q8
+Environment=NAVREN_ONNX_MODEL_INPUT=disk-snapshot
+Environment=NAVREN_ONNX_DISABLE_CPU_ARENA=1
+Environment=NAVREN_ONNX_SNAPSHOT_DIR=/var/lib/navren-public/onnx-snapshots
+ExecStart=/opt/navren/public-runtime-20261020/bin/python -B -m worker_proto.supervisor --socket /run/navren-encoder-worker/worker.sock --backend real
+Restart=on-failure
+RestartSec=3
+OOMPolicy=continue
+MemoryMax=1024M
+MemorySwapMax=256M
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/var/lib/navren-public/onnx-snapshots
+
+[Install]
+WantedBy=multi-user.target

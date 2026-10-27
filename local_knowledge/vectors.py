@@ -36,6 +36,7 @@ RRF_K = 60
 MAX_REUSE_RELEASES = 8  # 增量只扫描最近的有界历史，不随保留年限无限增长。
 _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='navren-public-vector')
 _jobs = {}
+_retry_timers = {}
 _lock = threading.Lock()
 
 
@@ -152,8 +153,20 @@ class VectorIndex:
                     except Exception as error:statuses.append({'ready':False,'reason':self._reason(error)})
                 ready=all(item['ready'] for item in statuses)
                 return {'ready':ready,'reason':None if ready else 'vector_partial',
+                        'index_ready':all(item.get('index_ready',item['ready']) for item in statuses),
                         'profiles':statuses,'method':'sqlite_exact_cosine','document_policy':INPUT_POLICY}
             rows, _, _ = self._load(db, release_id, encoder)
+            if getattr(encoder, 'is_worker_proxy', False):
+                # The index may be intact while the model has never been
+                # successfully loaded by this worker. A no-load socket peek
+                # must not turn static profile metadata into a false ready.
+                try:runtime_ready=encoder.runtime_verified()
+                except Exception:runtime_ready=False
+                if not runtime_ready:
+                    return {'ready':False,'index_ready':True,
+                            'reason':'vector_model_not_loaded','profile_id':encoder.profile_id,
+                            'dimension':encoder.dimension,'vector_count':len(rows),
+                            'method':'sqlite_exact_cosine','document_policy':INPUT_POLICY}
             return {'ready':True,'reason':None,'profile_id':encoder.profile_id,
                     'dimension':encoder.dimension,'vector_count':len(rows),'method':'sqlite_exact_cosine',
                     'document_policy':INPUT_POLICY}
@@ -350,6 +363,44 @@ def schedule(provider, release_id):
         for old in [k for k,f in _jobs.items() if f.done()]:_jobs.pop(old)
         if key in _jobs or len(_jobs) >= 8:return
         def work():
-            try:provider.build_vector_index(release_id)
-            except Exception:pass  # 降级原因由 status/search 读侧呈现，不记录查询/业务异常文本。
+            try:
+                if os.environ.get('NAVREN_VECTOR_WORKER_SOCKET', '').strip():
+                    # Full persisted-index validation uses static proxy
+                    # metadata; no worker/ONNX session is opened on startup.
+                    from .retrieval_encoder import get_retrieval_encoder,is_bundle
+                    selected=get_retrieval_encoder()
+                    members=[factory() for factory in selected.factories] if is_bundle(selected) else [selected]
+                    try:
+                        with provider.db() as db:
+                            for member in members:
+                                VectorIndex(provider,member)._load(db,release_id,member)
+                        return
+                    except Exception:
+                        pass
+                    # New/invalid index builds run outside the request path.
+                    # A short bounded grace leaves startup responsive.
+                    time.sleep(15)
+                provider.build_vector_index(release_id)
+            except Exception as error:
+                # Only transient worker failure gets a low-rate retry. Source,
+                # permission, model-artifact and index errors need explicit
+                # investigation; do not spin on them or log private text.
+                if (os.environ.get('NAVREN_VECTOR_WORKER_SOCKET', '').strip()
+                        and getattr(error,'code',None) == 'vector_inference_failed'):
+                    def retry():
+                        with _lock:_retry_timers.pop(key,None)
+                        try:
+                            with provider.db() as db:
+                                current=db.execute("SELECT release_id FROM current_release WHERE scope='public'").fetchone()
+                            if (current and current[0] == release_id
+                                    or getattr(provider,'fixed_release',None) == release_id):
+                                schedule(provider,release_id)
+                        except Exception:pass
+                    with _lock:
+                        if key not in _retry_timers and len(_retry_timers) < 8:
+                            timer=threading.Timer(900,retry)
+                            timer.daemon=True
+                            _retry_timers[key]=timer
+                            timer.start()
+                # 降级原因由 status/search 读侧呈现，不记录查询/业务异常文本。
         _jobs[key] = _pool.submit(work)
