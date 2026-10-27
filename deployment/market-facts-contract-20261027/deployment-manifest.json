@@ -1,0 +1,11 @@
+{
+  "schema": "navren.github-deployment-manifest/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "codex/market-facts-contract-20261027",
+  "files": {
+    "market_editor.py": "dd744b95632c0f48bccb4c3f7bdc1cb5c11cae2fc5bbef13f74e1c833b63953c",
+    "deployment/market-facts-contract-20261027/collector-manifest.json": "6b30ded6fc34fd3427f09c02a50b81ab917bdc17d1f738d78594c4c8b066ab97",
+    "deployment/market-facts-contract-20261027/approved-cutover.json": "86a90a2b788527d54b69e1ef13dde82e1ad9de50dc0dc133e60d4e6b00188e34"
+  },
+  "purpose": "Only align Market facts generation prompt with existing 1..12 guard and preserve a distinct over-limit rejection; collector and web approval pins update together."
+}
