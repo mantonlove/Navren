@@ -148,6 +148,24 @@ class VerifiedFactsArchiveHTTPTests(unittest.TestCase):
                 entry['packet']['facts_witness'])
         self.assertEqual(caught.exception.code, 'VERIFIED_FACTS_WITNESS_INVALID')
 
+    def test_sent_local_reply_keeps_speech_receipt_when_attestation_fails(self):
+        attestation_seen = threading.Event()
+        def reject_attestation(*_args, **_kwargs):
+            attestation_seen.set()
+            raise RuntimeError('synthetic_local_attestation_failure')
+        with (patch.object(self.gateway.dialogue_archive, 'attest_published',
+                           side_effect=reject_attestation) as attestation,
+              patch.object(self.gateway, 'discard_unpublished_answer') as withdraw):
+            answer = self.read('/api/agent', {'text': '你好'})
+            self.assertTrue(attestation_seen.wait(3), self.errors)
+            self.assertTrue(self.error_seen.wait(3), self.errors)
+        self.assertEqual(answer['answer_contract']['kind'], 'social_reply')
+        receipt = answer['speech_receipt']
+        self.assertIn(receipt, self.gateway._speech_receipts)
+        self.assertEqual(attestation.call_count, 1)
+        withdraw.assert_not_called()
+        self.assertEqual(self.primary.messages, [])
+
     def test_missing_original_stays_neutral_after_restart(self):
         with closing(self.gateway.bank.connect()) as db:
             privacy = privacy_revision(db, self.workspace)

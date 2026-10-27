@@ -823,7 +823,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                     gateway.dialogue_archive.attest_published(workspace,request_id,bank_db=publication_db)
             return result
         except Exception as error:
-            if local_speech_receipt:
+            if local_speech_receipt and not send_completed:
                 with gateway._speech_lock:
                     gateway._speech_receipts.pop(local_speech_receipt, None)
             if history_attempted and result is not None and not send_completed:
