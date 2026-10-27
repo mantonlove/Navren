@@ -1,0 +1,64 @@
+/* 内容就绪门与首帧稳定壳；不覆盖侧栏、顶栏或移动导航。 */
+html[data-navren-page-load] .app > .main { position:relative; }
+html[data-navren-page-load="loading"] .app > .main > :not(.header):not(.navren-page-loader),
+html[data-navren-page-load="error"] .app > .main > :not(.header):not(.navren-page-loader) {
+  visibility:hidden;
+  opacity:0;
+  pointer-events:none;
+}
+.navren-page-loader {
+  position:absolute;
+  inset:64px 0 0;
+  z-index:24;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  background:var(--surface, #edf3fa);
+  color:var(--ink, #26364b);
+  contain:layout paint;
+}
+.navren-page-loader[hidden] { display:none; }
+.npl-stage { display:flex; flex-direction:column; align-items:center; text-align:center; gap:10px; padding:24px; max-width:100%; }
+.npl-mark { width:64px; height:56px; overflow:visible; }
+.npl-wave { fill:none; stroke-width:7; stroke-linecap:round; stroke-dasharray:88 112; animation:npl-flow 2.2s cubic-bezier(.45,0,.3,1) infinite; }
+.npl-wave-back { stroke:var(--primary, #357cca); opacity:.5; }
+.npl-wave-front { stroke:var(--primary-deep, #285f9c); animation-delay:-1.1s; }
+.npl-title { margin:0; font-size:var(--font-size-base, 16px); font-weight:550; letter-spacing:.035em; line-height:1.5; }
+.npl-note { margin:0; font-size:var(--font-size-sm, 14px); line-height:1.6; color:var(--ink-50); }
+.npl-note:empty { display:none; }
+.npl-retry { min-height:42px; padding:7px 18px; margin-top:4px; border:1px solid var(--border); border-radius:10px; background:var(--surface-card); color:var(--ink); font:inherit; font-size:var(--font-size-sm, 14px); cursor:pointer; }
+.npl-retry[hidden] { display:none; }
+.npl-retry:focus-visible { outline:1px solid var(--ink-50); outline-offset:3px; }
+.navren-page-loader[data-state="error"] .npl-wave { animation:none; stroke-dasharray:none; opacity:.4; }
+html[data-navren-page-load="ready"] .page-scroll,
+html[data-navren-page-load="ready"] .chat-messages { animation:npl-reveal .16s ease-out both; }
+@keyframes npl-flow { 0% {stroke-dashoffset:200;opacity:.35;} 50% {opacity:1;} 100% {stroke-dashoffset:0;opacity:.35;} }
+@keyframes npl-reveal { from {opacity:0;} to {opacity:1;} }
+@media (prefers-reduced-motion:reduce) {
+  .npl-wave { animation:none; stroke-dasharray:none; }
+  html[data-navren-page-load="ready"] .page-scroll,
+  html[data-navren-page-load="ready"] .chat-messages { animation:none; }
+}
+
+/* 对话专用等待画面：图形仅表达读取中，不模拟消息或完成进度。 */
+.navren-page-loader[data-npl-page="chat"] { background:var(--bg, var(--surface, #edf3fa)); }
+.npl-chat-stage { width:min(400px, 100%); gap:9px; padding:32px 24px; }
+.npl-chat-art { width:170px; height:124px; position:relative; margin:0 0 17px; }
+.npl-chat-art .npl-mark { position:absolute; width:54px; height:48px; top:8px; left:0; z-index:1; }
+.npl-chat-art .npl-wave { animation:npl-chat-wave 2.4s ease-in-out infinite; stroke-dasharray:none; }
+.npl-chat-art .npl-wave-front { animation-delay:-1.2s; }
+.npl-chat-sheet { position:absolute; left:41px; right:0; top:29px; height:82px; padding:20px 18px; border:1px solid var(--border, #d1ddeb); border-radius:5px 19px 19px 19px; background:var(--surface-card, #f8fbff); box-shadow:0 5px 18px rgb(37 83 128 / .035); display:flex; flex-direction:column; gap:9px; }
+.npl-chat-sheet i { display:block; height:5px; border-radius:3px; background:var(--primary, #357cca); opacity:.14; animation:npl-chat-line 2.4s ease-in-out infinite; }
+.npl-chat-sheet i:nth-child(2) { width:79%; animation-delay:.15s; }
+.npl-chat-sheet i:nth-child(3) { width:47%; animation-delay:.3s; }
+.npl-chat-dot { position:absolute; width:7px; height:7px; border-radius:50%; background:var(--primary, #357cca); opacity:.45; left:15px; bottom:14px; }
+.npl-chat-stage .npl-title { font-size:var(--font-size-base, 16px); font-weight:550; letter-spacing:.02em; }
+.npl-description { margin:0; color:var(--ink-50, #64778e); font-size:var(--font-size-sm, 14px); line-height:1.7; max-width:28em; text-wrap:balance; }
+.npl-description:empty { display:none; }
+.npl-chat-stage .npl-retry { display:inline-flex; align-items:center; text-decoration:none; }
+.npl-chat-stage .npl-retry[hidden] { display:none; }
+.navren-page-loader[data-state="error"] .npl-chat-art * { animation:none; }
+@keyframes npl-chat-wave { 0%,100% { opacity:.45; } 50% { opacity:1; } }
+@keyframes npl-chat-line { 0%,100% { opacity:.12; } 50% { opacity:.28; } }
+@media (max-width:540px) { .npl-chat-stage { padding:24px; } .npl-chat-art { margin-bottom:12px; } }
+@media (prefers-reduced-motion:reduce) { .npl-chat-art .npl-wave,.npl-chat-sheet i { animation:none; } }

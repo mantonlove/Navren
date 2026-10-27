@@ -128,6 +128,7 @@ let chatArchiveRun=0;
 let chatArchiveReady=false;
 let chatArchiveBusy=false;
 let chatArchiveNodes=new Map();
+const chatArchiveMediaTasks=new Set();
 const chatWelcomeTemplate=document.getElementById('welcomeMsg')?.closest('.message')?.cloneNode(true)||null;
 
 function unloadChatArchive(){
@@ -135,7 +136,7 @@ function unloadChatArchive(){
   window.VoiceMessages?.clear?.();
   window.NavrenChatMedia?.clear();
   const old=chatArchive;chatArchive=null;
-  chatArchiveReady=false;chatArchiveBusy=false;chatArchiveNodes.clear();
+  chatArchiveReady=false;chatArchiveBusy=false;chatArchiveNodes.clear();chatArchiveMediaTasks.clear();
   old?.unload();
   document.getElementById('chatMessages')?.replaceChildren();
   updateChatSendState();
@@ -157,6 +158,7 @@ function archivedUserMessageHtml(row){
   return references+attachment+(row.text?'<span class="chat-user-text">'+escapeHtml(row.text)+'</span>':'');
 }
 function mountArchivedMedia(message,row,run,guard){
+  const tasks=[];
   const current=()=>run===chatArchiveRun&&guard.valid()&&message.isConnected;
   for(const raw of row.attachments||[]){
     if(raw?.storage_status==='not_archived')continue;
@@ -165,23 +167,24 @@ function mountArchivedMedia(message,row,run,guard){
     if(!media)continue;
     if(media.kind==='audio'){
       if(row.kind==='safe-status')continue;
-      Promise.resolve(window.VoiceMessages?.restoreMedia(message,media,row.text,{assistant:row.role==='assistant'})).catch(error=>{
+      tasks.push(Promise.resolve(window.VoiceMessages?.restoreMedia(message,media,row.text,{assistant:row.role==='assistant'})).catch(error=>{
         if(!current()||error?.name==='AbortError'||['MEDIA_ABORTED','MEDIA_STALE'].includes(error?.code))return;
         const note=document.createElement('span');note.className='chat-user-text';note.textContent='语音暂时无法读取。';message.querySelector('.bubble')?.append(note);
-      });
+      }));
       continue;
     }
     if(row.role!=='user')continue;
     const host=message.querySelector('.message-body');if(!host)continue;
     const note=document.createElement('span');note.className='chat-user-text';note.textContent='正在读取图片…';host.prepend(note);
-    window.NavrenChatMedia.open(media).then(handle=>{
+    tasks.push(window.NavrenChatMedia.open(media).then(handle=>{
       if(!current()){handle.dispose();return;}
       const image=document.createElement('img');image.alt='聊天图片';image.style.cssText='max-width:200px;border-radius:8px;margin-bottom:6px;display:block';
       image.onload=()=>{if(!current()){handle.dispose();image.remove();}};
       image.onerror=()=>{handle.dispose();if(current()){image.remove();note.textContent='图片暂时无法读取。';host.prepend(note);}};
       image.src=handle.url;note.replaceWith(image);
-    }).catch(()=>{if(current())note.textContent='图片暂时无法读取。';});
+    }).catch(()=>{if(current())note.textContent='图片暂时无法读取。';}));
   }
+  return Promise.allSettled(tasks);
 }
 function renderArchivedComponents(message,row,guard){
   const display=row.readonly_components;
@@ -244,7 +247,11 @@ function renderChatArchiveState(state,run,guard){
       renderArchivedComponents(message,row,guard);
       chatArchiveNodes.set(row.message_id,message);
       // 下一微任务时消息已在本次排序后的容器内；旧页/旧身份不允许挂载原件。
-      queueMicrotask(()=>{if(run===chatArchiveRun&&guard.valid()&&message.isConnected)mountArchivedMedia(message,row,run,guard);});
+      queueMicrotask(()=>{
+        if(run!==chatArchiveRun||!guard.valid()||!message.isConnected)return;
+        const mediaTask=mountArchivedMedia(message,row,run,guard);
+        chatArchiveMediaTasks.add(mediaTask);mediaTask.finally(()=>chatArchiveMediaTasks.delete(mediaTask));
+      });
     }
     ordered.push(message);
   }
@@ -269,16 +276,20 @@ function renderChatArchiveState(state,run,guard){
     const known=new Set(state.messages.map(row=>row.request_id));
     const liveEntries=currentChatHistory().filter(row=>row.client_origin==='live'&&!known.has(row.bank_response_id));
     Storage.set('qingzhou_chatHistory',[...archived,...liveEntries]);
-    if(state.is_empty===true)personalizeWelcome();
+    if(state.is_empty===true){
+      personalizeWelcome();renderPresets();
+      const welcomeText=document.getElementById('welcomeMsg');
+      if(welcomeText)attachMessageSpeech(welcomeText.closest('.message'),welcomeText.textContent||'');
+    }
     if(first)scrollToBottom();else container.scrollTop=oldTop+Math.max(0,container.scrollHeight-oldHeight);
   }
   updateChatSendState();
 }
-async function initializeChatArchive(){
+async function initializeChatArchive({identity:verifiedIdentity=null}={}){
   unloadChatArchive();
   const run=chatArchiveRun;
   try{
-    const identity=await BankClient.refreshIdentity();if(run!==chatArchiveRun)return false;
+    const identity=verifiedIdentity||await BankClient.refreshIdentity();if(run!==chatArchiveRun)return false;
     const guard=BankClient.guard();if(!guard.valid(identity)||!window.NavrenChatArchive)throw Error('archive_unavailable');
     const archive=NavrenChatArchive.create({identityProvider:()=>BankClient.identity(),
       readPage:async({cursor,limit,signal})=>{
@@ -307,6 +318,8 @@ async function initializeChatArchive(){
       }
     }
     await archive.loadNext();
+    if(run!==chatArchiveRun||!guard.valid())return false;
+    await Promise.allSettled([...chatArchiveMediaTasks]);
     return run===chatArchiveRun&&guard.valid();
   }catch(_){
     if(run!==chatArchiveRun)return false;
@@ -344,20 +357,41 @@ function resetPrivateChat(){
 for(const event of ['navren:privacy-reset','navren:identity-revoked','navren:account-change','navren:account-switched','pagehide'])window.addEventListener(event,resetPrivateChat);
 window.addEventListener('storage',event=>{
   const identity=Storage.privateIdentity?.();
-  if(identity&&event.key==='navren:private-cache:provisional:v1:'+identity.registered_user_id+':'+identity.workspace_id+':meta')resetPrivateChat();
+  if(identity&&event.key==='navren:private-cache:provisional:v1:'+identity.registered_user_id+':'+identity.workspace_id+':meta'){
+    window.NavrenPageLoad?.invalidate();resetPrivateChat();
+  }
 });
-window.addEventListener('pageshow',event=>{if(event.persisted&&document.body.dataset.page==='chat')initializeChatArchive();});
+window.addEventListener('pageshow',async event=>{
+  if(!event.persisted||document.body.dataset.page!=='chat')return;
+  let pageLoad=window.NavrenPageLoad?.join();let run;
+  try{
+    const identity=await BankClient.refreshIdentity();await Storage.ready();
+    if(!BankClient.guard().valid(identity))return;
+    pageLoad=window.NavrenPageLoad?.resume();
+    const restoration=initializeChatArchive({identity});run=chatArchiveRun;
+    const restored=await restoration;if(run!==chatArchiveRun)return;
+    if(!restored){pageLoad?.fail(new Error('聊天历史暂时无法读取，请重试。'));return;}
+    await pageLoad?.ready();
+  }catch(error){if(run==null||run===chatArchiveRun)pageLoad?.fail(error);}
+});
 
 // ── Init ──
 document.addEventListener('DOMContentLoaded', async () => {
   if(document.body.dataset.page!=='chat')return;
+  let pageLoad=window.NavrenPageLoad?.join();
+  try{
   const params = new URLSearchParams(window.location.search);
-  try{await BankClient.refreshIdentity();}catch(e){
-    const welcome=document.getElementById('welcomeMsg');if(welcome)welcome.textContent='账户身份暂时无法核对，请刷新后重试。';return;
+  let initialIdentity;
+  try{initialIdentity=await BankClient.refreshIdentity();}catch(e){
+    const welcome=document.getElementById('welcomeMsg');if(welcome)welcome.textContent='账户身份暂时无法核对，请刷新后重试。';pageLoad?.fail(e);return;
   }
-  try { await Storage.ready(); } catch (_) {
-    const welcome=document.getElementById('welcomeMsg');if(welcome)welcome.textContent='账号设置暂时无法恢复，请刷新后重试。';return;
+  try { await Storage.ready(); } catch (error) {
+    const welcome=document.getElementById('welcomeMsg');if(welcome)welcome.textContent='账号设置暂时无法恢复，请刷新后重试。';pageLoad?.fail(error);return;
   }
+  const pageGuard=BankClient.guard(),privacyTurn=globalThis.NavrenChatPrivacyVersion||0;
+  if(!pageGuard.valid(initialIdentity))return;
+  pageLoad=window.NavrenPageLoad?.resume();
+  const pageCurrent=()=>pageGuard.valid()&&privacyTurn===(globalThis.NavrenChatPrivacyVersion||0);
   // 旧URL只作预填。图谱对象必须由服务器重新核对，不能信任URL里的个人JSON。
   window.NavrenGraphContext=null;
   if(['event','article','weekly'].includes(params.get('market_kind'))&&params.get('market_id')){
@@ -369,23 +403,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.body.className = 'mode-' + currentMode;
   // mode badge removed from chat header
 
-  // 智能欢迎语
-  personalizeWelcome();
+  // 欢迎内容只在服务端确认空归档后一次构建。
 
   // 应用字体：优先用户保存的，否则按模式默认
   const savedFontSize = getModeFont(currentMode);
   const defaultFont = savedFontSize || MODE_DEFAULT_FONT[currentMode] || 'medium';
   applyFontSize(defaultFont);
 
-  renderPresets();
   setupVoice();
   checkPrivacyGuide();
   await checkVoiceGuide();
-  const welcomeText = document.getElementById('welcomeMsg');
-  if (welcomeText) attachMessageSpeech(welcomeText.closest('.message'), welcomeText.textContent || '');
 
   // 恢复当前注册用户实例的服务端完整归档；浏览器缓存不作为恢复真源。
-  await initializeChatArchive();
+  const archiveLoaded=await initializeChatArchive({identity:initialIdentity});
+  if(!pageCurrent())return;
 
   const input = document.getElementById('userInput');
   input.addEventListener('input', () => {
@@ -393,20 +424,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
   });
-  input.focus();
 
   const queuedQuestion=params.get('context')?'':params.get('q') || (params.get('action')==='reassess'?'了解我的风险偏好与当前业务风险配置':params.get('action')==='handoff'?'我想联系人工顾问':'');
   if(queuedQuestion){input.value=queuedQuestion;input.dispatchEvent(new Event('input'));}
   // 清理旧私密查询参数，不赋予任何自动执行语义。
   const clean=new URL(location.href);for(const key of ['q','action','reason','graph_context'])clean.searchParams.delete(key);
   history.replaceState(history.state,'',clean.pathname+clean.search+clean.hash);
-  if(params.get('context'))await receivePageQuestion(params.get('context'));
+  if(params.get('context'))await receivePageQuestion(params.get('context'),{focus:false});
 
   // 回访变化摘要
   showReengagementSummary();
 
   // 场景引导提示
   await showContextualTip('chat');
+  if(!pageCurrent())return;
+  if(!archiveLoaded){pageLoad?.fail(new Error('聊天历史暂时无法读取，请重试。'));return;}
+  const revealed=await pageLoad?.ready();
+  if(revealed!==false&&pageCurrent()&&input.isConnected&&!document.hidden)input.focus({preventScroll:true});
+  }catch(error){pageLoad?.fail(error);throw error;}
 });
 
 // ── Presets ──
@@ -2603,7 +2638,7 @@ window.addEventListener('navren:language',()=>{
     if(label)label.textContent=chatReferenceUi('关联资料');if(link)link.textContent=chatReferenceUi('查看资料');
   });
 });
-async function receivePageQuestion(id){
+async function receivePageQuestion(id,{focus=true}={}){
   const input=document.getElementById('userInput'),draftAtClaim=input.value;
   const guard=BankClient.guard(),privacyTurn=globalThis.NavrenChatPrivacyVersion||0,referenceTurn=chatReferenceRevision;
   try{
@@ -2616,7 +2651,7 @@ async function receivePageQuestion(id){
     window.NavrenChatReturnView=ref?data.return_view:null;window.NavrenPageContextId=null;
     // 关联跳转只添加附件。无引用旧文字票据仅兼容空且未变化的输入框。
     if(!ref&&!draftAtClaim&&!input.value&&typeof data.question==='string')input.value=data.question;
-    input.dispatchEvent(new Event('input'));syncChatReference();input.focus({preventScroll:true});
+    input.dispatchEvent(new Event('input'));syncChatReference();if(focus)input.focus({preventScroll:true});
   }catch(e){if(guard.valid()&&privacyTurn===(globalThis.NavrenChatPrivacyVersion||0))addMessage('ai',escapeHtml(e.message));}
 }
 for(const type of ['navren:privacy-reset','navren:identity-revoked','navren:account-change','navren:account-switched','pagehide'])
