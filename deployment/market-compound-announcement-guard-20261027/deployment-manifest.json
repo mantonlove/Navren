@@ -1,0 +1,13 @@
+{
+  "schema": "navren.github-deployment-manifest/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "main",
+  "files": {
+    "market_semantic_checks.py": "9319d87394c252ba5118067502b6806783f9b2b5b9cc4741fec922024ba78fcd",
+    "market_daily.py": "5a14c1380fb07642f4c1e59ab7323a627ac9f9e6b3d31de1be46b2d7b1708f57",
+    "market_editor.py": "ba11e89b52eff0c112eee4d0667b577a52ba2805a1cfe496d145bcacb074b011",
+    "deployment/market-compound-announcement-guard-20261027/collector-manifest.json": "f20865a6adc247de92d5ed4b6e2242e3dc99da80b7b4585b8afe3a1232ca23d9",
+    "deployment/market-compound-announcement-guard-20261027/approved-cutover.json": "2f55380b5051d4be5ac225d7033b08ce01d45656ecb06d1766d7887c44df7aa4"
+  },
+  "purpose": "Reject mixed-company announcement roundups in Market generation and reading while preserving existing daily history, review and timer."
+}
