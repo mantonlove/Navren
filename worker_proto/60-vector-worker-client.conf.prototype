@@ -1,0 +1,2 @@
+[Service]
+Environment=NAVREN_VECTOR_WORKER_SOCKET=/run/navren-encoder-worker/worker.sock
