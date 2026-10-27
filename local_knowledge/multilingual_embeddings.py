@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 from .embeddings import VectorError
+from .onnx_memory import create_cpu_session
 
 MODEL_REPOSITORY = 'Xenova/multilingual-e5-small'
 MODEL_REVISION = '761b726dd34fb83930e26aab4e9ac3899aa1fa78'
@@ -153,9 +154,9 @@ class MultilingualEncoder:
             options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
             options.log_severity_level = 4
             options.enable_profiling = False
-            self._session = ort.InferenceSession(
-                artifacts['onnx/model_quantized.onnx'], sess_options=options,
-                providers=['CPUExecutionProvider'],
+            self._session, self._model_snapshot = create_cpu_session(
+                ort, artifacts, 'onnx/model_quantized.onnx',
+                MODEL_ARTIFACTS['onnx/model_quantized.onnx'], options,
             )
             self._input_names = {item.name for item in self._session.get_inputs()}
             self._output_name = self._session.get_outputs()[0].name

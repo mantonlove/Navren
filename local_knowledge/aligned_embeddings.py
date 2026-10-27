@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 from .embeddings import VectorError
+from .onnx_memory import create_cpu_session
 
 MODEL_REPOSITORY = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
 MODEL_REVISION = 'e8f8c211226b894fcb81acc59f3b34ba3efd5f42'
@@ -148,9 +149,9 @@ class AlignedEncoder:
             options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
             options.log_severity_level = 4
             options.enable_profiling = False
-            self._session = ort.InferenceSession(
-                artifacts['onnx/model_qint8_arm64.onnx'], sess_options=options,
-                providers=['CPUExecutionProvider'],
+            self._session, self._model_snapshot = create_cpu_session(
+                ort, artifacts, 'onnx/model_qint8_arm64.onnx',
+                MODEL_ARTIFACTS['onnx/model_qint8_arm64.onnx'], options,
             )
             self._input_names = {item.name for item in self._session.get_inputs()}
             self._output_name = self._session.get_outputs()[0].name
