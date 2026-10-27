@@ -15,7 +15,7 @@ from simulated_bank import BankError
 from user_memory import privacy_revision
 from agent_runtime.final_proof import CONTRACT as FINAL_PROOF, strict_equal
 from agent_runtime import social_reply
-from base_runtime.approved_response_store import CONTRACT as APPROVED, COMMIT
+from base_runtime.approved_response_store import CONTRACT as APPROVED, COMMIT, VERIFIED_FACTS
 from base_runtime.historical_source_attestation import HistoricalSourceAttestor
 from registered_instances import registered_id, persona_id
 
@@ -30,6 +30,8 @@ _ATTESTATION_FIELDS = {'contract', 'codec', 'binding', 'archive_epoch', 'respons
     'saved_widget_hash', 'save_generation', 'original_response_hash', 'source_attestation',
     'issued_at', 'rule_validation'}
 LOCAL_ORIGINAL = 'navren.local-rule-response/1'
+_RULE_VALIDATION = {APPROVED: 'agent_final_proof', LOCAL_ORIGINAL: 'local_fixed_rule',
+                    VERIFIED_FACTS: 'host_verified_facts'}
 CODE = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 MODEL_CONTEXT_LIMIT = 16
 DEFAULT_LIMIT = 20
@@ -226,6 +228,33 @@ class DialogueArchiveReader:
             fail('DIALOGUE_ARCHIVE_ORIGINAL_CHANGED')
         return proof
 
+    def _facts(self, packet, publication, original, envelope, saved, scope, rid, *, issuing):
+        witness=packet.get('facts_witness')
+        try:
+            self.approved._verify_facts_witness(scope['workspace_id'],rid,packet.get('language'),
+                                                original,witness,current_code=issuing)
+        except BankError:
+            fail('DIALOGUE_ARCHIVE_FACTS_CHANGED')
+        if (type(original) is not dict or packet.get('response_id')!=rid
+                or type(packet.get('privacy_revision')) is not int
+                or not 0<=packet['privacy_revision']<=scope['privacy_revision']
+                or original.get('privacy_revision')!=packet['privacy_revision']
+                or original.get('personal_revision')!=packet.get('personal_revision')
+                or type(packet.get('personal_revision')) is not int
+                or not 0<=packet['personal_revision']<=scope['personal_revision']
+                or saved['privacy_revision']!=packet['privacy_revision']
+                or saved['personal_revision']!=packet['personal_revision']
+                or type(packet.get('source_versions')) is not dict
+                or fingerprint(original)!=packet.get('original_response_hash')
+                or publication.get('response_id')!=rid
+                or publication.get('original_response_hash')!=packet['original_response_hash']
+                or publication.get('prepared_envelope_hash')!=fingerprint(envelope)
+                or publication.get('publication_state')!='server_send_completed'
+                or publication.get('original_guarded_writer_committed') is not True
+                or publication.get('bank_binding_committed_before_publication') is not True):
+            fail('DIALOGUE_ARCHIVE_FACTS_CHANGED')
+        return witness
+
     @contextmanager
     def _public_sources(self, packet, db):
         # 独立历史证明只检查原来源及显式撤回，不复用105秒/256条当前pin。
@@ -263,7 +292,7 @@ class DialogueArchiveReader:
                 or grant['codec'] != ORIGINAL_CODEC or not strict_equal(grant['binding'], binding)
                 or type(grant['archive_epoch']) is not int or grant['archive_epoch'] != scope['archive_epoch']
                 or grant['response_id'] != rid or grant['original_contract'] != envelope['contract']
-                or grant['original_contract'] not in (APPROVED, LOCAL_ORIGINAL)
+                or grant['original_contract'] not in _RULE_VALIDATION
                 or type(grant['issuer_code']) is not str or len(grant['issuer_code']) != 64
                 or any(c not in '0123456789abcdef' for c in grant['issuer_code'])
                 or grant['original_envelope_hash'] != fingerprint(envelope)
@@ -273,7 +302,7 @@ class DialogueArchiveReader:
                 or grant['saved_widget_hash'] != self.store._guarded_row_hash(raw, 'widgets_cipher', 'created_at')
                 or type(grant['issued_at']) not in (int, float) or not math.isfinite(grant['issued_at'])
                 or not strict_equal(grant['issued_at'], row['created_at'])
-                or grant['rule_validation'] != ('agent_final_proof' if envelope['contract'] == APPROVED else 'local_fixed_rule')):
+                or grant['rule_validation'] != _RULE_VALIDATION[envelope['contract']]):
             fail('DIALOGUE_ARCHIVE_ATTESTATION_INVALID')
         return grant
 
@@ -305,7 +334,7 @@ class DialogueArchiveReader:
                     self._user(row, scope, db)
                     _, packet = self._assistant(private, scope, response_id, db, _issuing=True)
                     widgets = self.store.published_turn_widgets(private, w, response_id)
-                    envelope = next(x for x in widgets if type(x) is dict and x.get('contract') in (APPROVED, LOCAL_ORIGINAL))
+                    envelope = next(x for x in widgets if type(x) is dict and x.get('contract') in _RULE_VALIDATION)
                     marker = next(x for x in widgets if type(x) is dict and x.get('contract') == COMMIT)
                     if (not strict_equal(envelope, entry['envelope']) or not strict_equal(marker, entry['publication'])
                             or fingerprint(packet) != fingerprint(entry['packet'])):
@@ -324,7 +353,7 @@ class DialogueArchiveReader:
                              'saved_widget_hash': saved['widget_hash'], 'save_generation': saved['save_generation'],
                              'original_response_hash': packet['original_response_hash'],
                              'source_attestation': source, 'issued_at': stamp,
-                             'rule_validation': 'agent_final_proof' if envelope['contract'] == APPROVED else 'local_fixed_rule'}
+                             'rule_validation': _RULE_VALIDATION[envelope['contract']]}
                     existing = private.execute('SELECT * FROM agent_dialogue_attestations WHERE workspace_id=? AND response_id=?',
                                                (w, response_id)).fetchone()
                     if existing is not None:
@@ -397,9 +426,11 @@ class DialogueArchiveReader:
         w = scope['workspace_id']
         widgets = self.store.published_turn_widgets(private, w, rid)
         if widgets is None:
-            return {'message_id': rid, 'role': 'assistant', 'status': 'not_published', 'content': None,
+            # A missing original cannot prove whether the reply was delivered.
+            # In particular, older host fact replies saved no widget envelope.
+            return {'message_id': rid, 'role': 'assistant', 'status': 'archive_unavailable', 'content': None,
                     'historical_readonly': True, 'current_fact_eligible': False, 'execution_authority': False}, None
-        originals = [x for x in widgets if type(x) is dict and x.get('contract') in (APPROVED, LOCAL_ORIGINAL)]
+        originals = [x for x in widgets if type(x) is dict and x.get('contract') in _RULE_VALIDATION]
         markers = [x for x in widgets if type(x) is dict and x.get('contract') == COMMIT]
         if len(originals) != 1 or len(markers) != 1:
             fail('DIALOGUE_ARCHIVE_NOT_PUBLISHED')
@@ -431,6 +462,10 @@ class DialogueArchiveReader:
             proof = self._proof(packet, publication, original, originals[0], saved, scope, rid)
             original_review = {'source': 'agent_review', 'status': 'approved_at_publication',
                                'reviewer_model': proof['reviewer_model'], 'review_id': proof['review_id']}
+        elif original_contract == VERIFIED_FACTS:
+            self._facts(packet,publication,original,originals[0],saved,scope,rid,issuing=_issuing)
+            original_review={'source':'host_verified_facts','status':'not_required',
+                             'reviewer_model':None,'review_id':None}
         else:
             # Base 尚须在原固定规则发布点生成此同表封套；缺失时绝不从短历史重造。
             if _issuing:
@@ -468,7 +503,8 @@ class DialogueArchiveReader:
                 pass
         current_versions = self.p.source_versions(w, db)
         dto = {'message_id': rid, 'role': 'assistant',
-               'status': 'published_original' if original_contract == APPROVED else 'published_local_rule',
+               'status': {APPROVED:'published_original',LOCAL_ORIGINAL:'published_local_rule',
+                          VERIFIED_FACTS:'published_verified_facts'}[original_contract],
                'content': original['reply'], 'language': packet['language'],
                'historical_readonly': True, 'current_fact_eligible': False, 'execution_authority': False,
                'source_versions_state': 'unchanged' if strict_equal(packet['source_versions'], current_versions) else 'changed',

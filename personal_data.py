@@ -1202,6 +1202,16 @@ class PersonalDataStore:
                     db.rollback();return saved['status']=='discarded'
                 if saved['status']!='saved':
                     db.rollback();return False
+                # A server-completed publication must never be compensated as an
+                # unpublished turn, even if the later archive attestation fails.
+                # Keep the legacy inline marker under the same conservative gate.
+                publication=db.execute('SELECT 1 FROM guarded_turn_publications WHERE workspace_id=? AND response_id=?',
+                                       (owner,response_id)).fetchone()
+                widget=self._raw_widget(db,owner,response_id)
+                if publication is not None or (widget is not None and any(
+                        type(item) is dict and item.get('contract')=='navren.response-publication/1'
+                        for item in json.loads(self._decode(widget['widgets_cipher'])))):
+                    db.rollback();return False
                 dialogue = self._raw_dialogue(db,owner)
                 history_matches = self._guarded_row_hash(dialogue,'messages_cipher','updated_at')==saved['history_hash']
                 previous = self._previous_guarded_history(db,owner,saved) if history_matches else None
@@ -1213,7 +1223,6 @@ class PersonalDataStore:
                     else:
                         db.execute('UPDATE agent_dialogues SET messages=?,updated_at=? WHERE workspace_id=? AND messages=? AND updated_at=?',
                                    (previous['messages_cipher'],previous['updated_at'],owner,dialogue['messages_cipher'],dialogue['updated_at']))
-                widget = self._raw_widget(db,owner,response_id)
                 widgets_match = (saved['widget_hash'] is None or widget is None
                                  or self._guarded_row_hash(widget,'widgets_cipher','created_at')==saved['widget_hash'])
                 if saved['widget_hash'] is not None and widget is not None and widgets_match:

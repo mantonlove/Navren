@@ -156,7 +156,7 @@ class ChatMediaWiringTests(unittest.TestCase):
         turn = page['items'][0]
         self.assertEqual(turn['user']['content'], '')
         self.assertEqual([x['media_id'] for x in turn['user']['attachments']], [image['media_id'], audio['media_id']])
-        self.assertEqual(turn['assistant']['status'], 'not_published')
+        self.assertEqual(turn['assistant']['status'], 'archive_unavailable')
         self.assertEqual(self.read(image), raw); self.assertEqual(self.read(audio), audio_bytes())
         self.assert_http(413, lambda: self.request('/api/agent', json.dumps({'text': 'a'*1050000}).encode(), headers={'Content-Type':'application/json'}))
 
@@ -288,7 +288,7 @@ class ChatMediaWiringTests(unittest.TestCase):
             with self.assertRaises(Exception):self.post_json('/api/agent',{'text':'你好'})
         self.assertEqual(self.server.finance._speech_receipts,{})
         page=self.get_json('/api/finance/dialogue/history')
-        self.assertEqual(page['items'][0]['assistant']['status'],'not_published')
+        self.assertEqual(page['items'][0]['assistant']['status'],'archive_unavailable')
 
     def test_partial_binary_expiry_closes_without_json_append(self):
         from http.client import IncompleteRead

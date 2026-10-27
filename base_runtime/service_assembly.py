@@ -43,6 +43,8 @@ class AssembledGateway(DesignQualityGateway):
             expected_personal=expected_personal,history_saved=history_saved,failure_stage=failure_stage,failure_code=failure_code)
         if (history_saved and failure_stage=='publication' and not result.get('isFallback')
                 and (result.get('agent_review',{}).get('status')=='approved'
+                    or (isinstance(result.get('answer_contract'),dict)
+                        and result['answer_contract'].get('kind')=='verified_facts')
                     or (self.dialogue_archive is not None
                         and result.get('answer_contract',{}).get('kind')=='social_reply'
                         and result.get('answer_contract',{}).get('source')=='local_rule'))):

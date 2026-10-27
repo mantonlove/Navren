@@ -14,7 +14,9 @@ import sys
 from contextlib import closing
 from copy import copy, deepcopy
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
+from financial_metrics import fingerprint
 from simulated_bank import BankError
 from simulated_bank.agent_guard import POLICY_VERSION, bind_review
 from simulated_bank.service import encoded
@@ -976,6 +978,7 @@ class ConversationAgent:
         deadline = start+self.timeout_seconds
         publication_sources=capture_publication_sources(publication_sources,private_context_disabled=private_context_disabled)
         approval_token=None
+        verified_facts_capture=None
         tools = BankTools(g,w,request_id,private_context_disabled=private_context_disabled,audit_request_id=audit_request_id,
             language=language,request_privacy=privacy_policy,metric_selections=(
                 getattr(self.primary,'metric_selection_support',False) is True
@@ -2467,6 +2470,28 @@ class ConversationAgent:
                                     result['reply']=presentation['text']
                                 result['answer_contract'] = {'kind':'verified_facts','fact_ids':ids}
                                 result['agent_review'] = {'status':'not_required','reason':'只读事实合同由后端生成'}
+                                # Capture only the selected host facts and their evidence as
+                                # digests. The original objects stay in this request's trusted
+                                # closure and are rechecked at the publication boundary.
+                                from base_runtime import reply_presentation as facts_renderer
+                                selected_evidence_ids=tuple(dict.fromkeys(tools.facts[i]['evidence_id'] for i in ids))
+                                selected_facts={i:tools.facts[i] for i in ids}
+                                selected_evidence={i:tools.evidence[i] for i in selected_evidence_ids}
+                                verified_facts_capture={
+                                    'fact_ids':tuple(ids),
+                                    'widget_ids':tuple(output.get('widget_ids',[])),
+                                    'selected_facts_hash':fingerprint(selected_facts),
+                                    'selected_evidence_hash':fingerprint(selected_evidence),
+                                    'header_dates_hash':fingerprint([e['data'].get('as_of') for e in tools.evidence.values()
+                                        if isinstance(e.get('data'),dict) and e['data'].get('as_of')]),
+                                    'reply_hash':hashlib.sha256(result['reply'].encode()).hexdigest(),
+                                    'presentation_hash':fingerprint(result['reply_presentation']),
+                                    'widgets_hash':fingerprint(result['widgets']),
+                                    'statement_query':deepcopy(statement_query),
+                                    'income_window_query':deepcopy(income_window_fact_query),
+                                    'cashflow_requires_presentation':bool(cashflow_fact_query or income_window_fact_query),
+                                    'agent_code_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                                    'renderer_code_sha256':hashlib.sha256(Path(facts_renderer.__file__).read_bytes()).hexdigest()}
                                 break
                             elif name == 'answer_reviewed':
                                 final = output
@@ -3064,6 +3089,71 @@ class ConversationAgent:
             # Trusted HTTP finalization can reuse the same turn deadline at
             # each immutable financial frame, without serializing a callback.
             commit_history.assert_budget=lambda:None if result.get('isFallback') else enforce_budget()
+            if verified_facts_capture is not None:
+                def validate_verified_facts(canonical, *, bank_db, language):
+                    """Rebuild the host facts response under the original publication guard.
+
+                    This is a one-turn witness, not model approval or a historical
+                    reconstruction from the short context.
+                    """
+                    invalid=lambda:BankError('VERIFIED_FACTS_WITNESS_INVALID',
+                        '只读事实回复无法核验，已停止发布。',503)
+                    captured=verified_facts_capture
+                    ids=list(captured['fact_ids'])
+                    if (type(canonical) is not dict or bank_db is None or language not in ('zh','en')
+                            or canonical.get('workspace_id')!=w or canonical.get('bank_response_id')!=request_id
+                            or canonical.get('language')!=language or canonical.get('isFallback') is not False
+                            or canonical.get('answer_contract')!={'kind':'verified_facts','fact_ids':ids}
+                            or canonical.get('agent_review')!={'status':'not_required','reason':'只读事实合同由后端生成'}
+                            or canonical.get('bank_actions')!=[] or canonical.get('follow_up_questions')!=[]
+                            or canonical.get('reply_interaction') is not None or tools.advice or tools.changed or tools.drafts
+                            or not 1<=len(ids)<=24 or len(set(ids))!=len(ids)):
+                        raise invalid()
+                    try:
+                        g.bank._workspace(bank_db,w)
+                        from base_runtime import reply_presentation as facts_renderer
+                        if (hashlib.sha256(Path(__file__).read_bytes()).hexdigest()!=captured['agent_code_sha256']
+                                or hashlib.sha256(Path(facts_renderer.__file__).read_bytes()).hexdigest()!=captured['renderer_code_sha256']
+                                or any(i not in tools.facts for i in ids)):
+                            raise invalid()
+                        evidence_ids=tuple(dict.fromkeys(tools.facts[i]['evidence_id'] for i in ids))
+                        if any(i not in tools.evidence for i in evidence_ids):
+                            raise invalid()
+                        facts_hash=fingerprint({i:tools.facts[i] for i in ids})
+                        evidence_hash=fingerprint({i:tools.evidence[i] for i in evidence_ids})
+                        dates_hash=fingerprint([e['data'].get('as_of') for e in tools.evidence.values()
+                            if isinstance(e.get('data'),dict) and e['data'].get('as_of')])
+                        expected_widgets=self._widgets(tools,{'widget_ids':list(captured['widget_ids'])})
+                        expected_presentation=facts_renderer.build_reply_presentation(w,request_id,tools.facts,
+                            tools.evidence,ids,statement_query=captured['statement_query'],
+                            income_window_query=captured['income_window_query'])
+                        if (captured['cashflow_requires_presentation'] and expected_presentation is None
+                                or facts_hash!=captured['selected_facts_hash']
+                                or evidence_hash!=captured['selected_evidence_hash']
+                                or dates_hash!=captured['header_dates_hash']
+                                or expected_widgets!=canonical.get('widgets')
+                                or fingerprint(expected_widgets)!=captured['widgets_hash']
+                                or expected_presentation!=canonical.get('reply_presentation')
+                                or fingerprint(expected_presentation)!=captured['presentation_hash']):
+                            raise invalid()
+                        expected_reply=(expected_presentation['text'] if expected_presentation is not None
+                                        else self._fact_text(g,w,tools,ids))
+                        if (expected_reply!=canonical.get('reply')
+                                or hashlib.sha256(expected_reply.encode()).hexdigest()!=captured['reply_hash']):
+                            raise invalid()
+                        return {'contract':'navren.verified-facts-witness/1',
+                            'workspace_id':w,'response_id':request_id,'language':language,
+                            'response_hash':fingerprint(canonical),'reply_hash':captured['reply_hash'],
+                            'reply_presentation_hash':captured['presentation_hash'],
+                            'widgets_hash':captured['widgets_hash'],
+                            'metric_batch_hash':fingerprint(canonical.get('metric_batch')),
+                            'financial_metric_batches_hash':fingerprint(canonical.get('financial_metric_batches')),
+                            'fact_ids':ids,'selected_facts_hash':facts_hash,'selected_evidence_hash':evidence_hash,
+                            'agent_code_sha256':captured['agent_code_sha256'],
+                            'renderer_code_sha256':captured['renderer_code_sha256']}
+                    except (KeyError,TypeError,ValueError,AttributeError):
+                        raise invalid() from None
+                commit_history.validate_verified_facts=validate_verified_facts
             def remaining_publication_seconds():
                 if result.get('isFallback'):return None
                 enforce_budget()

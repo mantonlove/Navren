@@ -124,6 +124,8 @@ function restoreReplyProjection(message,entry){
 }
 
 let chatArchive=null;
+let chatHistoryView=null;
+function historyView(){return chatHistoryView||=(window.NavrenChatHistoryView?.create());}
 let chatArchiveRun=0;
 let chatArchiveReady=false;
 let chatArchiveBusy=false;
@@ -133,6 +135,7 @@ const chatWelcomeTemplate=document.getElementById('welcomeMsg')?.closest('.messa
 
 function unloadChatArchive(){
   chatArchiveRun++;
+  historyView()?.reset();
   window.VoiceMessages?.clear?.();
   window.NavrenChatMedia?.clear();
   const old=chatArchive;chatArchive=null;
@@ -234,7 +237,7 @@ function renderChatArchiveState(state,run,guard){
     window.VoiceMessages?.clear?.();window.NavrenChatMedia?.clear();
     container.replaceChildren();chatArchiveNodes.clear();chatArchiveReady=false;
   }
-  const live=[...container.children].filter(node=>!node.matches('[data-chat-archive-row],.chat-archive-page-control')&&!node.querySelector('#welcomeMsg'));
+  const live=[...container.children].filter(node=>!node.matches('[data-chat-archive-row],.chat-archive-page-control,[data-chat-history]')&&!node.querySelector('#welcomeMsg'));
   const ordered=[];
   for(const row of state.messages){
     let message=chatArchiveNodes.get(row.message_id);
@@ -269,7 +272,12 @@ function renderChatArchiveState(state,run,guard){
   if(state.phase==='ready'&&state.is_empty===true&&!live.length&&chatWelcomeTemplate){
     const welcome=chatWelcomeTemplate.cloneNode(true);ordered.push(welcome);
   }
-  container.replaceChildren(...(control.childNodes.length?[control]:[]),...ordered,...live);
+  const archivedNodes=[...(control.childNodes.length?[control]:[]),...ordered];
+  const history=state.messages.length?historyView()?.render(archivedNodes):null;
+  if(history){
+    history.style.setProperty('--chat-history-gap',getComputedStyle(container).rowGap);
+    container.replaceChildren(history,...live);
+  }else container.replaceChildren(...archivedNodes,...live);
   if(state.phase==='ready'){
     chatArchiveReady=true;
     const binding=chatBinding(),archived=state.messages.map(row=>archiveHistoryEntry(row,binding));
@@ -281,7 +289,10 @@ function renderChatArchiveState(state,run,guard){
       const welcomeText=document.getElementById('welcomeMsg');
       if(welcomeText)attachMessageSpeech(welcomeText.closest('.message'),welcomeText.textContent||'');
     }
-    if(first)scrollToBottom();else container.scrollTop=oldTop+Math.max(0,container.scrollHeight-oldHeight);
+    if(first){
+      if(state.messages.length&&historyView()&&!historyView().isExpanded())container.scrollTop=0;
+      else scrollToBottom();
+    }else container.scrollTop=oldTop+Math.max(0,container.scrollHeight-oldHeight);
   }
   updateChatSendState();
 }
@@ -290,7 +301,7 @@ async function initializeChatArchive({identity:verifiedIdentity=null}={}){
   const run=chatArchiveRun;
   try{
     const identity=verifiedIdentity||await BankClient.refreshIdentity();if(run!==chatArchiveRun)return false;
-    const guard=BankClient.guard();if(!guard.valid(identity)||!window.NavrenChatArchive)throw Error('archive_unavailable');
+    const guard=BankClient.guard();if(!guard.valid(identity)||!window.NavrenChatArchive||!window.NavrenChatHistoryView?.create)throw Error('archive_unavailable');
     const archive=NavrenChatArchive.create({identityProvider:()=>BankClient.identity(),
       readPage:async({cursor,limit,signal})=>{
         if(signal.aborted||run!==chatArchiveRun||!guard.valid())throw Error('stale_archive');
