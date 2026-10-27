@@ -1,0 +1,29 @@
+{
+  "schema": "navren.github-deployment-manifest/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "main",
+  "purpose": "bounded vector worker and Web integration; exact deployed content gate",
+  "files": {
+    "deployment/web-memory-worker-20261027/design.md": "d7e7b8860bfb6c49b6a8a2db7eb73c10c53009c44f7fe8f0fe022cb6ebdc3dcb",
+    "deployment/web-memory-worker-20261027/worker-integration.patch": "248856854dd8ca2161a5b02f75d209ffe360512374e7b4cf0007ea01108b5fdc",
+    "local_knowledge/retrieval_encoder.py": "925cef6e23c9be62a0a5a506d64a04e57afcb5d7880438ee0b114957bce04026",
+    "local_knowledge/vectors.py": "17b86abe20e6fd3962a032b9c9555adbcd545cd851129e0accbfb034f562600c",
+    "tests/web_memory_worker/test_static_profile_spec.py": "037279472dc525267d57ae9f47f137cba8209ad77dd5b33696b1375e4bf40c31",
+    "tests/web_memory_worker/test_worker_proto.py": "91f83917a94da9bf609963eee2d96fe96ac15e08180f3c3fc95799ee73a9ce0c",
+    "tests/web_memory_worker/test_worker_schedule.py": "746624fd73fd98acff9ef5638940a833a8990672c5fb3070fb4dd361984b262f",
+    "tests/web_memory_worker/test_worker_vector_integration.py": "dc09ec064e083e71a4841e58a1e0780bf5fd49ad817ff6bb917a1fedb8791efc",
+    "tests/web_memory_worker/test_worker_account_setup.py": "4b9ad995706f0995b18d6c3d39b5969173a7d05de3785929167a5d8fd05dddce",
+    "tests/web_memory_worker/test_worker_peer_identity.py": "b2b458d8f64b01f9d27eeb304b788dda50a0408b1ab58184e9c32963770b166f",
+    "worker_proto/60-vector-worker-client.conf.prototype": "f3ad09663c79353d5c6b59bd0b01845671cfe952fdfcb39352b22812a9639384",
+    "worker_proto/README.md": "bdc3679ab267dd8a10b9628f8b66267b6f5e78fd03accaf9a01cf1554bf84e99",
+    "worker_proto/__init__.py": "17781c65073d5d1bf931789f58b159e44706b8bb76f94f231ac03eeca7fa531f",
+    "worker_proto/child.py": "1bf9e87893e20c94c73e5c81c8b628239e40b55a0e9d44642ac214cd93e70ea4",
+    "worker_proto/client.py": "4d5eecb1be02d60a2b5e3f9d4f7f005da7018d31b5c7c78e8869e3035cb551a4",
+    "worker_proto/measure_public_fixture.py": "cc3d306de009b70ca2c2a7551416758a664023599307e24dbef04afa957763cf",
+    "worker_proto/navren-encoder-worker.service.prototype": "6e32b36f586f7a58d4c27bb6286768eb54b5284c2a3a44bcf2058c85a8c35e9f",
+    "worker_proto/profile_spec.py": "67d48e750750b646791151c9a82c5fb07e3d4fa91b40502765088fa80c92c42e",
+    "worker_proto/protocol.py": "2859a66272f5d5effe617d7906070f334be3f7047498bc5a09557ac620fe3c75",
+    "worker_proto/supervisor.py": "cdfbf7f9a22a5bd0c69d4f77a2d82f59d26ba8ddc826f29db3381d9adef0e7dc",
+    "worker_proto/install_worker_account.sh.prototype": "3b2d0351ebf4add304a71e850fc2307990a76f625f206eb2d94bc228583d1e13"
+  }
+}
