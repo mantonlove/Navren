@@ -37,8 +37,8 @@ window.MarketUI=(()=>{
     finally{bookmarkWrites.delete(write);if(control)delete control.dataset.accountSaving;syncBookmarks();}
   }
   const date=(x,precision='minute')=>x?new Date(x).toLocaleString(window.NavrenI18n?.locale||'zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',...(precision==='date'?{}:{hour:'2-digit',minute:'2-digit'})}):t('暂无核验日期');
-  const allowed=new Set(['www.stats.gov.cn','www.pbc.gov.cn','www.federalreserve.gov','www.ecb.europa.eu','www.news.cn','finance.cctv.com','tv.cctv.com']);
-  function safeLink(url){try{const u=new URL(url);return u.protocol==='https:'&&allowed.has(u.hostname)&&u.pathname.length>12&&(u.hostname!=='tv.cctv.com'||/^\/2026\/(?:0[1-9]|1[0-2])\/(?:0[1-9]|[12]\d|3[01])\/VIDE[A-Za-z0-9]+\.shtml$/.test(u.pathname))&&!u.username&&!u.password&&(!u.port||u.port==='443');}catch{return false;}}
+  const allowed=new Set(['www.stats.gov.cn','www.pbc.gov.cn','www.federalreserve.gov','www.ecb.europa.eu','www.news.cn','finance.cctv.com','tv.cctv.com','www.yicai.com']);
+  function safeLink(url){try{const u=new URL(url);return u.protocol==='https:'&&allowed.has(u.hostname)&&u.pathname.length>12&&(u.hostname!=='tv.cctv.com'||/^\/2026\/(?:0[1-9]|1[0-2])\/(?:0[1-9]|[12]\d|3[01])\/VIDE[A-Za-z0-9]+\.shtml$/.test(u.pathname))&&(u.hostname!=='www.yicai.com'||/^\/news\/[0-9]+\.html$/.test(u.pathname)&&!u.search&&!u.hash)&&!u.username&&!u.password&&(!u.port||u.port==='443');}catch{return false;}}
   const readable=a=>!!a&&a.status==='active'&&a.link_status==='verified'&&safeLink(a.url)&&((a.read_scope==='full_text'&&a.access_status==='free_full_text')||(a.content_mode==='source_brief'&&a.read_scope==='source_brief'&&a.access_status==='free_video_with_brief'&&a.source_verified===true&&a.video_content_read===false&&a.reported_time_kind==='source_page_updated_at'&&a.source_check?.method==='official_page_title_brief_date_binding'));
   function link(text,url,article){const a=el('a',text);if(safeLink(url)&&(!article||readable(article))){a.href=url;a.target='_blank';a.rel='noopener noreferrer';}return a;}
   let marketClock=null,marketBoundaryTimer=null,marketBoundaryDue=false;
