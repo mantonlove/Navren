@@ -12,6 +12,7 @@ import math
 import multiprocessing
 import os
 from pathlib import Path
+import re
 import sys
 import time
 
@@ -77,8 +78,15 @@ def _host_memory() -> dict[str, int | None]:
 
 
 def _private_network() -> bool:
+    # The service user cannot read /proc/1/ns/net on the production host.
+    # The root-side launcher must capture that link before starting the unit.
+    host_namespace = os.environ.get('NAVREN_HOST_NETNS_ID', '')
+    if not re.fullmatch(r'net:\[[1-9][0-9]*\]', host_namespace):
+        return False
     try:
-        return os.readlink('/proc/self/ns/net') != os.readlink('/proc/1/ns/net')
+        own_namespace = os.readlink('/proc/self/ns/net')
+        return (bool(re.fullmatch(r'net:\[[1-9][0-9]*\]', own_namespace))
+                and own_namespace != host_namespace)
     except OSError:
         return False
 
