@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
+import sqlite3
 import threading
 import time
 
@@ -34,9 +35,133 @@ MAX_SCORE_DISTANCE = 0.12  # 与本次最佳候选的差距上限，避免弱相
 SEMANTIC_WEIGHT = 1.25
 RRF_K = 60
 MAX_REUSE_RELEASES = 8  # 增量只扫描最近的有界历史，不随保留年限无限增长。
+WORKER_SEARCH_BUDGET_SECONDS = 60.0  # 单次检索含双 profile / 多视图，低于聊天总预算。
+RETRY_DELAYS_SECONDS = (900, 1800, 3600)  # 只对现行公开版本的瞬时构建故障重试。
+MAX_BUILD_STATES = 16
 _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='navren-public-vector')
 _jobs = {}
+_retry_timers = {}
+_build_states = {}
 _lock = threading.Lock()
+
+
+def _build_key(provider, release_id):
+    return (str(provider.path.resolve()), release_id)
+
+
+def _remember_build_state(key, state):
+    """Called with _lock held; retain only bounded, non-sensitive codes."""
+    _build_states.pop(key, None)
+    _build_states[key] = state
+    while len(_build_states) > MAX_BUILD_STATES:
+        removable = next((old for old in _build_states if old not in _retry_timers and old != key), None)
+        if removable is None:
+            break
+        _build_states.pop(removable, None)
+
+
+def _transient_build_code(error):
+    code = getattr(error, 'code', None)
+    if code in ('vector_inference_failed', 'vector_build_timeout'):
+        return code
+    if isinstance(error, sqlite3.OperationalError):
+        sqlite_code = getattr(error, 'sqlite_errorcode', None)
+        if (isinstance(sqlite_code, int) and sqlite_code & 0xff in
+                (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)):
+            return 'sqlite_busy'
+        # Older sqlite3 builds may not expose sqlite_errorcode. Never retain
+        # or return the exception message, which may include a file path.
+        if any(word in str(error).lower() for word in ('locked', 'busy')):
+            return 'sqlite_busy'
+    return None
+
+
+def _build_failure_code(error):
+    transient = _transient_build_code(error)
+    if transient:
+        return transient
+    code = getattr(error, 'code', None)
+    return code if code in {
+        'vector_model_missing', 'vector_model_invalid', 'vector_dependency_missing',
+        'vector_index_invalid', 'vector_evidence_changed', 'release_manifest_mismatch',
+        'vector_disabled', 'vector_input_invalid', 'vector_text_too_long',
+    } else 'vector_build_failed'
+
+
+def _visible_build_state(provider, release_id):
+    if not release_id:
+        return None
+    try:
+        key = _build_key(provider, release_id)
+    except (AttributeError, OSError, TypeError):
+        return None
+    with _lock:
+        state = _build_states.get(key)
+        return dict(state) if state else None
+
+
+def _with_build_state(provider, release_id, result):
+    # A validated index is authoritative over an older asynchronous failure.
+    if not result['ready']:
+        state = _visible_build_state(provider, release_id)
+        if state:
+            result['build_state'] = state
+    return result
+
+
+def _retry_current_release(provider, release_id, key):
+    with _lock:
+        _retry_timers.pop(key, None)
+        state = _build_states.get(key)
+        if not state or state['state'] != 'retry_wait':
+            return
+    try:
+        fixed = getattr(provider, 'fixed_release', None) == release_id
+        if not fixed:
+            with provider.db() as db:
+                row = db.execute("SELECT release_id FROM current_release WHERE scope='public'").fetchone()
+            fixed = bool(row and row[0] == release_id)
+    except Exception as error:
+        _record_build_failure(provider, release_id, key, error)
+        return
+    if not fixed:
+        with _lock:
+            _remember_build_state(key, {'state':'stale_release','code':'release_changed',
+                                        'retries_scheduled':state['retries_scheduled']})
+        return
+    schedule(provider, release_id, _from_retry=True)
+
+
+def _record_build_failure(provider, release_id, key, error):
+    code = _build_failure_code(error)
+    transient = _transient_build_code(error)
+    timer = None
+    with _lock:
+        state = _build_states.get(key) or {}
+        retries = int(state.get('retries_scheduled', 0))
+        if (transient and retries < len(RETRY_DELAYS_SECONDS)
+                and key not in _retry_timers and len(_retry_timers) < 8):
+            delay = RETRY_DELAYS_SECONDS[retries]
+            retries += 1
+            timer = threading.Timer(delay, lambda:_retry_current_release(provider, release_id, key))
+            timer.daemon = True
+            _retry_timers[key] = timer
+            _remember_build_state(key, {'state':'retry_wait','code':code,
+                                        'retries_scheduled':retries,'retry_delay_seconds':delay})
+        else:
+            result = ('retry_exhausted' if transient and retries >= len(RETRY_DELAYS_SECONDS)
+                      else 'retry_unavailable' if transient else 'manual_attention')
+            _remember_build_state(key, {'state':result,'code':code,
+                                        'retries_scheduled':retries})
+    if timer is not None:
+        try:
+            timer.start()
+        except RuntimeError:
+            with _lock:
+                if _retry_timers.get(key) is timer:
+                    _retry_timers.pop(key, None)
+                    _remember_build_state(key, {'state':'retry_unavailable','code':code,
+                                                'retries_scheduled':retries})
 
 
 def _text(row):
@@ -151,18 +276,48 @@ class VectorIndex:
                     try:statuses.append(VectorIndex(self.provider,factory()).status(db,release_id))
                     except Exception as error:statuses.append({'ready':False,'reason':self._reason(error)})
                 ready=all(item['ready'] for item in statuses)
-                return {'ready':ready,'reason':None if ready else 'vector_partial',
-                        'profiles':statuses,'method':'sqlite_exact_cosine','document_policy':INPUT_POLICY}
+                return _with_build_state(self.provider, release_id,
+                        {'ready':ready,'reason':None if ready else 'vector_partial',
+                         'index_ready':all(item.get('index_ready',item['ready']) for item in statuses),
+                         'profiles':statuses,'method':'sqlite_exact_cosine','document_policy':INPUT_POLICY})
             rows, _, _ = self._load(db, release_id, encoder)
-            return {'ready':True,'reason':None,'profile_id':encoder.profile_id,
-                    'dimension':encoder.dimension,'vector_count':len(rows),'method':'sqlite_exact_cosine',
-                    'document_policy':INPUT_POLICY}
+            if getattr(encoder, 'is_worker_proxy', False):
+                # The index may be intact while the model has never been
+                # successfully loaded by this worker. A no-load socket peek
+                # must not turn static profile metadata into a false ready.
+                try:runtime_ready=encoder.runtime_verified()
+                except Exception:runtime_ready=False
+                if not runtime_ready:
+                    return _with_build_state(self.provider, release_id,
+                            {'ready':False,'index_ready':True,
+                             'reason':'vector_model_not_loaded','profile_id':encoder.profile_id,
+                             'dimension':encoder.dimension,'vector_count':len(rows),
+                             'method':'sqlite_exact_cosine','document_policy':INPUT_POLICY})
+            return _with_build_state(self.provider, release_id,
+                    {'ready':True,'reason':None,'profile_id':encoder.profile_id,
+                     'dimension':encoder.dimension,'vector_count':len(rows),'method':'sqlite_exact_cosine',
+                     'document_policy':INPUT_POLICY})
         except Exception as error:
-            return {'ready':False,'reason':self._reason(error),'method':'sqlite_exact_cosine',
-                    'document_policy':INPUT_POLICY}
+            return _with_build_state(self.provider, release_id,
+                    {'ready':False,'reason':self._reason(error),'method':'sqlite_exact_cosine',
+                     'document_policy':INPUT_POLICY})
 
     def search(self, db, release_id, query, eligible_ids, *, projected_query=None, cross_language=False,
                translated_query=None):
+        if os.environ.get('NAVREN_VECTOR_WORKER_SOCKET', '').strip():
+            from worker_proto.client import encoder_budget
+            with encoder_budget(WORKER_SEARCH_BUDGET_SECONDS):
+                return self._search_with_budget(db,release_id,query,eligible_ids,
+                                                projected_query=projected_query,
+                                                cross_language=cross_language,
+                                                translated_query=translated_query)
+        return self._search_with_budget(db,release_id,query,eligible_ids,
+                                        projected_query=projected_query,
+                                        cross_language=cross_language,
+                                        translated_query=translated_query)
+
+    def _search_with_budget(self, db, release_id, query, eligible_ids, *, projected_query=None,
+                            cross_language=False, translated_query=None):
         try:
             encoder = self._encoder()
             from .retrieval_encoder import is_bundle
@@ -335,21 +490,63 @@ class VectorIndex:
                 'build_seconds':round(time.monotonic()-started,3)}
 
 
-def schedule(provider, release_id):
+def schedule(provider, release_id, *, _from_retry=False):
     """新封存公共版本后台建索引；最多一个CPU作业，排队有界，不阻塞用户检索。"""
     if not release_id or provider.vector_encoder is not None or os.environ.get('NAVREN_VECTOR_ENABLED','1') == '0':
+        if _from_retry and release_id:
+            _record_build_failure(provider, release_id, _build_key(provider, release_id),
+                                  KnowledgeError('vector_disabled'))
         return
     from .retrieval_encoder import selected_model_directory
     from .embeddings import VectorError
     try:
-        if not (selected_model_directory()/'manifest.json').is_file():return
-    except (KnowledgeError, VectorError):
+        if not (selected_model_directory()/'manifest.json').is_file():
+            if _from_retry:
+                _record_build_failure(provider, release_id, _build_key(provider, release_id),
+                                      KnowledgeError('vector_model_missing'))
+            return
+    except (KnowledgeError, VectorError) as error:
+        if _from_retry:
+            _record_build_failure(provider, release_id, _build_key(provider, release_id), error)
         return
-    key = (str(provider.path.resolve()),release_id)
+    key = _build_key(provider, release_id)
     with _lock:
         for old in [k for k,f in _jobs.items() if f.done()]:_jobs.pop(old)
-        if key in _jobs or len(_jobs) >= 8:return
+        state = _build_states.get(key)
+        if (key in _jobs or key in _retry_timers or len(_jobs) >= 8
+                or state and state['state'] in
+                   ('manual_attention','retry_exhausted','retry_unavailable','stale_release')
+                or state and state['state'] == 'retry_wait' and not _from_retry):
+            return
+        if _from_retry and (not state or state['state'] != 'retry_wait'):
+            return
+        retries = int(state.get('retries_scheduled', 0)) if state else 0
+        _remember_build_state(key, {'state':'running','retries_scheduled':retries})
         def work():
-            try:provider.build_vector_index(release_id)
-            except Exception:pass  # 降级原因由 status/search 读侧呈现，不记录查询/业务异常文本。
+            try:
+                if os.environ.get('NAVREN_VECTOR_WORKER_SOCKET', '').strip():
+                    # Full persisted-index validation uses static proxy
+                    # metadata; no worker/ONNX session is opened on startup.
+                    from .retrieval_encoder import get_retrieval_encoder,is_bundle
+                    selected=get_retrieval_encoder()
+                    members=[factory() for factory in selected.factories] if is_bundle(selected) else [selected]
+                    try:
+                        with provider.db() as db:
+                            for member in members:
+                                VectorIndex(provider,member)._load(db,release_id,member)
+                        with _lock:_build_states.pop(key,None)
+                        return
+                    except Exception:
+                        pass
+                    # New/invalid index builds run outside the request path.
+                    # A short bounded grace leaves startup responsive.
+                    time.sleep(15)
+                provider.build_vector_index(release_id)
+                with _lock:_build_states.pop(key,None)
+            except Exception as error:
+                # Only worker failure, bounded build timeout and SQLite busy
+                # can recover automatically. Other failures need inspection.
+                # Preserve only an error code and retry count, never raw text.
+                if os.environ.get('NAVREN_VECTOR_WORKER_SOCKET', '').strip():
+                    _record_build_failure(provider, release_id, key, error)
         _jobs[key] = _pool.submit(work)

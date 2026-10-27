@@ -1,0 +1,73 @@
+#!/bin/sh
+# Run as root only after these exact bytes are merged and checked on GitHub.
+# A separate worker group lets Web traverse its socket directory but not write it.
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo 'root_required' >&2
+    exit 1
+fi
+if ! getent passwd navren-web >/dev/null || ! getent group navren-web >/dev/null; then
+    echo 'web_identity_missing' >&2
+    exit 1
+fi
+if [ ! -x /usr/sbin/nologin ]; then
+    echo 'nologin_missing' >&2
+    exit 1
+fi
+
+web_uid=$(id -u navren-web)
+web_gid=$(id -g navren-web)
+if getent group navren-encoder >/dev/null; then
+    worker_gid=$(getent group navren-encoder | cut -d: -f3)
+    if [ "$worker_gid" -eq 0 ] || [ "$worker_gid" -ge 1000 ] || \
+       [ "$worker_gid" -eq "$web_gid" ]; then
+        echo 'worker_group_mismatch' >&2
+        exit 1
+    fi
+else
+    groupadd --system navren-encoder
+    worker_gid=$(getent group navren-encoder | cut -d: -f3)
+fi
+if [ "$worker_gid" -eq 0 ] || [ "$worker_gid" -ge 1000 ] || \
+   [ "$worker_gid" -eq "$web_gid" ]; then
+    echo 'worker_group_mismatch' >&2
+    exit 1
+fi
+
+account_status=worker_account_verified
+if getent passwd navren-encoder >/dev/null; then
+    worker_uid=$(id -u navren-encoder)
+    if [ "$worker_uid" -eq 0 ] || [ "$worker_uid" -ge 1000 ] || \
+       [ "$worker_uid" -eq "$web_uid" ] || \
+       [ "$(id -g navren-encoder)" -ne "$worker_gid" ] || \
+       [ "$(getent passwd navren-encoder | cut -d: -f6)" != /nonexistent ] || \
+       [ "$(getent passwd navren-encoder | cut -d: -f7)" != /usr/sbin/nologin ]; then
+        echo 'worker_account_mismatch' >&2
+        exit 1
+    fi
+else
+    useradd --system --no-create-home --home-dir /nonexistent \
+        --shell /usr/sbin/nologin --gid navren-encoder navren-encoder
+    if [ "$(id -g navren-encoder)" -ne "$worker_gid" ] || \
+       [ "$(id -u navren-encoder)" -eq "$web_uid" ]; then
+        echo 'worker_account_creation_failed' >&2
+        exit 1
+    fi
+    account_status=worker_account_created
+fi
+if [ "$(id -G navren-encoder)" != "$worker_gid" ]; then
+    echo 'worker_extra_groups' >&2
+    exit 1
+fi
+
+# -a preserves every other supplementary group already assigned to Web.
+case " $(id -G navren-web) " in
+    *" $worker_gid "*) ;;
+    *) usermod -aG navren-encoder navren-web ;;
+esac
+case " $(id -G navren-web) " in
+    *" $worker_gid "*) ;;
+    *) echo 'web_socket_group_missing' >&2; exit 1 ;;
+esac
+echo "$account_status"
