@@ -109,6 +109,9 @@ def evidence_scope_issues(row, articles):
         if not article:continue
         claim=fact.get('text','');quote=fact.get('quote','');source=article.get('evidence_text','')
         for m in ATTRIBUTED.finditer(claim):
+            # 报道称/报道说是报道引导词，不是两字人名；只豁免这两种
+            # 完整匹配，句内后续真实姓名仍逐条绑定自己的原文quote。
+            if m['speaker']=='报道' and m[0].endswith(('称','说')):continue
             # An attributed fact must carry the named speaker in its exact evidence,
             # rather than borrowing a matching sentence spoken by another person.
             if m['speaker'] not in quote:

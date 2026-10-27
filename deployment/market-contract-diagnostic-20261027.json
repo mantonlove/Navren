@@ -1,0 +1,22 @@
+{
+  "kind": "market_contract_diagnostic_and_reporting_leadin_fix",
+  "source_repository": "mantonlove/Navren",
+  "base_main_commit": "ecdf6828134f2e1dcbbfce438ca9608e83a3e6b1",
+  "candidate_manifest_sha256": "159581d6b1ab0ecc92225281d9d655bc385adc6951ee4c09965f5e0acb90a4ee",
+  "files": [
+    {
+      "path": "market_model.py",
+      "baseline_sha256": "08283c8cde465fd865d8f799c7bd7d8997679393b037eeaf2cc5876e39090380",
+      "deploy_sha256": "1b34a80e24172a7f73ce716ac537910f175579ddffea9fcc1e6311cdce15cad7"
+    },
+    {
+      "path": "market_semantic_checks.py",
+      "baseline_sha256": "f565fa76fbacb38073c14b64ed115b17b6913538414d6e6010c2ce44c2315a42",
+      "deploy_sha256": "9f6a4c9da8d8d7a3b093e192ec8c791e6ccffd86edcfee7eb37e8e071d9220d0"
+    }
+  ],
+  "intent": "Fixed-code Market response contract diagnostics plus exact generic 报道称/说 named-speaker false-positive fix. No response acceptance, API retry, quote length, GLM, six-item publication, source, date, schedule, budget, or user-data change.",
+  "offline_verification": "24 isolated contracts passed in owner candidate; natural Market run remains required.",
+  "git_before_server": "Commit and verify remote main file blobs before CAS to Web and collector.",
+  "business_accepted": false
+}

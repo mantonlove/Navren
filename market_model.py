@@ -19,6 +19,42 @@ def market_model_session(function):
         finally:_run_blocks.reset(token)
     return guarded
 
+class _DuplicateMarketJsonKey(ValueError):
+    pass
+
+
+def _market_response_contract_diagnostic(raw):
+    """仅返回固定结构错误码；不修复响应、不保存正文/键名/异常文本。"""
+    def unique(pairs):
+        result={}
+        for key,value in pairs:
+            if key in result:raise _DuplicateMarketJsonKey()
+            result[key]=value
+        return result
+    try:
+        try:envelope=json.loads(raw.decode('utf-8'))
+        except UnicodeError:return 'provider_utf8_invalid'
+        except json.JSONDecodeError:return 'provider_json_invalid'
+        if (not isinstance(envelope,dict) or not isinstance(envelope.get('choices'),list)
+                or not envelope['choices'] or not isinstance(envelope['choices'][0],dict)):
+            return 'provider_envelope_invalid'
+        choice=envelope['choices'][0];message=choice.get('message')
+        if not isinstance(message,dict):return 'provider_message_invalid'
+        # length有原有明确拒绝码，不归入JSON结构子类。
+        if choice.get('finish_reason')=='length':return None
+        content=message.get('content')
+        if not isinstance(content,str):return 'model_content_not_string'
+        if not content.strip():return 'model_content_empty'
+        if len(content)>24000:return 'model_content_too_long'
+        try:parsed=json.loads(content,object_pairs_hook=unique)
+        except json.JSONDecodeError:return 'content_json_invalid'
+        except _DuplicateMarketJsonKey:return 'content_duplicate_key'
+        return None if isinstance(parsed,dict) else 'content_object_required'
+    except Exception:
+        # 观察器不可改变父适配器是否接受、错误分类或原有调用次数。
+        return 'contract_detail_unavailable'
+
+
 class _ObservedResponse:
     def __init__(self,response):self.response=response
     def __getattr__(self,name):return getattr(self.response,name)
@@ -28,6 +64,7 @@ class _ObservedResponse:
         raw=self.response.read(*args,**kwargs)
         note=_observation.get()
         if note is not None:
+            note['_response_contract_detail']=_market_response_contract_diagnostic(raw)
             try:
                 envelope=json.loads(raw.decode('utf-8'));usage=envelope.get('usage')
                 if isinstance(usage,dict):
@@ -76,6 +113,9 @@ class MarketJsonClient(OpenAICompatibleJsonClient):
                 elif self.provider in ('deepseek','zhipu'):blocks.add(('official_workflow_http402',))
             raise
         finally:
+            detail=note.pop('_response_contract_detail',None)
+            if note.get('error_code')=='invalid_model_contract':
+                note['contract_diagnostic']=detail or 'contract_detail_unavailable'
             _observation.reset(token);note['ended_at']=datetime.now(timezone.utc).isoformat();note['usage_unknown']=note['usage'] is None
             path=Path(os.environ.get('NAVREN_MARKET_MODEL_LOG',str(Path.home()/'Library/Logs/Navren/market-model-calls.jsonl')))
             path.parent.mkdir(parents=True,exist_ok=True)
