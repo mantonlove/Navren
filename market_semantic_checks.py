@@ -142,10 +142,78 @@ def equity_price_only_issues(row, articles):
     return issues
 
 
+_ANNOUNCEMENT_ROUNDUP = re.compile(r'(?:早间|午间|晚间|盘后)公告|公告(?:汇总|一览|合集)|这些公告')
+_ISSUER_HEADER = re.compile(r'(?:^|[\s。；;】])(?P<issuer>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9*·-]{1,23})[：:]')
+
+
+def _announcement_sections(article):
+    """Only explicitly labelled corporate roundups with repeated issuer heads.
+
+    The issuer must recur as the announcer/discloser after its heading; a colon,
+    ticker list, or multiple parties to a normal report is not sufficient.
+    Positions are in the complete source text, never generated prose.
+    """
+    if not _ANNOUNCEMENT_ROUNDUP.search(article.get('title', '')):
+        return []
+    text = article.get('evidence_text', '')
+    headers = list(_ISSUER_HEADER.finditer(text))
+    sections = []
+    for index, header in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
+        issuer = header['issuer']
+        lead = text[header.end():min(end, header.end() + 256)]
+        announcement = re.escape(issuer) + r'(?:\([^)]{0,30}\)|（[^）]{0,30}）)?(?:公告|披露)'
+        if re.search(announcement, lead):
+            sections.append((header.start('issuer'), end, issuer))
+    return sections if len({s[2] for s in sections}) > 1 else []
+
+
+def compound_announcement_issues(row, articles):
+    """A card may select one issuer's concrete release from a real roundup.
+
+    This is a bounded rejection gate, not a general event classifier. Unknown
+    quote positions in a confirmed roundup fail closed; the full independent
+    review still judges whether that issuer's facts concern one actual event.
+    """
+    issues = []
+    for article in articles:
+        sections = _announcement_sections(article)
+        if not sections:
+            continue
+        facts = [f for f in row.get('facts', []) if f.get('article_id') == article['id']]
+        if not facts:
+            continue
+        selected = set()
+        text = article.get('evidence_text', '')
+        for fact in facts:
+            quote = fact.get('quote', '')
+            matches = list(re.finditer(re.escape(quote), text)) if quote else []
+            owners = set()
+            for match in matches:
+                owner = {issuer for start, end, issuer in sections
+                         if start <= match.start() and match.end() <= end}
+                if len(owner) != 1:
+                    owners.add(None)
+                else:
+                    owners.update(owner)
+            if len(owners) != 1 or None in owners:
+                issues.append({'code': 'announcement_roundup_quote_scope_unproven', 'article_id': article['id']})
+                break
+            selected.update(owners)
+        else:
+            if len(selected) != 1:
+                issues.append({'code': 'compound_company_announcements_in_one_card', 'article_id': article['id']})
+            elif (next(iter(selected)) not in row.get('headline', '') or
+                  _ANNOUNCEMENT_ROUNDUP.search(row.get('headline', ''))):
+                issues.append({'code': 'announcement_roundup_requires_specific_event_headline', 'article_id': article['id']})
+    return issues
+
+
 def semantic_issues(row, articles):
     """Facts are checked against their own source, never another event's body."""
     refs = {a['id']:a for a in articles}
-    issues = evidence_scope_issues(row, articles)+equity_price_only_issues(row, articles)
+    issues = (evidence_scope_issues(row, articles)+equity_price_only_issues(row, articles)
+              +compound_announcement_issues(row, articles))
     for index, fact in enumerate(row.get('facts',[])):
         article = refs.get(fact.get('article_id'))
         if article:

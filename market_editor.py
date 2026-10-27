@@ -75,7 +75,10 @@ class MarketEditor:
         self.weekly_primary=weekly_primary if weekly_primary is not None else (self.primary if primary is not None else
             official_market_client('weekly'))
     def review(self,draft,materials,kind,request_id,*,primary_model=None):
-        result=self.reviewer.complete_json(system=REVIEW_SYSTEM,user=packed({'kind':kind,'draft':draft,'materials':materials}),stage='reviewer.market',request_id=request_id)
+        system=REVIEW_SYSTEM
+        if kind=='hotspots':
+            system+='每张热点卡必须是一个有原文支持的实质事件。公告汇编只能选取其中一件具体公告，不得把不同公司的财报、投资、回购、订单或退市拼为一张卡；即使每个数字及quote都正确也须拒绝。同一次统计发布的多个指标、同一合同的多个参与方、同一交易日的一个市场统计报告可作为一个事件，不能仅凭主体或指标数量拆分；仍须逐卡核对共同事件。'
+        result=self.reviewer.complete_json(system=system,user=packed({'kind':kind,'draft':draft,'materials':materials}),stage='reviewer.market',request_id=request_id)
         if result.get('verdict')!='approve':raise ValueError('independent_review_rejected')
         return {'status':'approved','primary_model':primary_model or self.primary.model_id,'reviewer_model':self.reviewer.model_id,'reviewed_at':now_iso(),'reason':require_text(result.get('reason'),'review_reason',800)}
     def events(self,groups,request_id,*,generations=None):

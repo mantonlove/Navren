@@ -10,8 +10,9 @@ from market_sources import readable_article,cluster_key,evidence_readable,articl
 
 from market_source_attribution import first_publication_verified
 from market_statistical_identity import innovation_release_alias, source_release_aliases
+from market_semantic_checks import compound_announcement_issues
 
-RULE_VERSION = 'daily-selection-v13-industrial-profit-release-family'
+RULE_VERSION = 'daily-selection-v14-single-announcement-card'
 _publication_clock_scope = ContextVar('navren_daily_publication_clock_scope',default=None)
 
 def _clock_execution_owner():
@@ -288,6 +289,7 @@ class DailyMarket:
         if row['status']!='published' or event.get('review',{}).get('status')!='approved':return None
         articles=self.bound_articles(db,event)
         if not articles or any(a['status']!='active' or not text_only_article(a) for a in articles):return None
+        if compound_announcement_issues(event,articles):return None
         if any(self.article_row(db,a['id'])['version']!=a['version'] for a in articles):return None
         primary=event.get('primary_article_id') or event['article_ids'][0]
         if primary not in event['article_ids']:return None
@@ -325,6 +327,7 @@ class DailyMarket:
     def selection_eligibility(self,db,event,now):
         try:
             articles=self.bound_articles(db,event) or []
+            if compound_announcement_issues(event,articles):return None
             primary,published=event_primary_publication(event,articles)
             now=self.clock(now)
             age=(now-published).total_seconds()/3600
@@ -522,6 +525,8 @@ class DailyMarket:
         elif latest['status'] in WITHDRAWN:states.append('withdrawn')
         elif latest['version']!=snapshot['version'] or latest['status']=='source_revised':states.append('revised')
         elif latest['status']!='published':states.append('temporarily_unavailable')
+        if not states and compound_announcement_issues(snapshot,self.bound_articles(db,snapshot) or []):
+            states.append('temporarily_unavailable')
         status=next((s for s in ('withdrawn','revised','temporarily_unavailable') if s in states),'active')
         return status,pointer
 

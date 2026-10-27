@@ -1,0 +1,30 @@
+{
+  "manifest_sha256": "f20865a6adc247de92d5ed4b6e2242e3dc99da80b7b4585b8afe3a1232ca23d9",
+  "db_path": "/var/lib/navren-market/public/market.sqlite3",
+  "local_collector_disabled": true,
+  "allow_paid_collection": true,
+  "local_handoff_sha256": "f65228cb4e2f92a6551f93d1307fce7c7211d77cc7e4bafc748551eb5f7142ea",
+  "not_before": "2026-10-22T11:57:25.400795+00:00",
+  "web_market_contract_sha256": {
+    "src/market_sources.py": "6203942ac2753ecab5266568efbfc4fde7df6738a469147378fa2a38954e4b0e",
+    "src/market_content.py": "dac14d20f788ec1d44ffa61ddabceca541727647eacb146787ee8c934c54ec8b",
+    "src/market_editor.py": "ba11e89b52eff0c112eee4d0667b577a52ba2805a1cfe496d145bcacb074b011",
+    "src/market_daily.py": "5a14c1380fb07642f4c1e59ab7323a627ac9f9e6b3d31de1be46b2d7b1708f57",
+    "src/market_pipeline.py": "d907809a3d74e974ee15dc6e82f6992a1618e7d0f25cf91fdfc541586184bd30",
+    "src/market_schedule.py": "1a7e54300208d3ca60202f1dd76cddf5865f83cef76c168ac030c58231eddfc5",
+    "src/market_source_attribution.py": "6ae41479f28ee05f9093d08e43e31d6f01e1ebd59af02dce1aaf58e5542383e5",
+    "src/market_semantic_checks.py": "9319d87394c252ba5118067502b6806783f9b2b5b9cc4741fec922024ba78fcd",
+    "src/market_model.py": "1b34a80e24172a7f73ce716ac537910f175579ddffea9fcc1e6311cdce15cad7",
+    "src/public_market_history.py": "0638bfb3f4fd375d27ee528c48d511acd368f4b11831c87c4e2bc6d10475e60b",
+    "src/market_statistical_identity.py": "d5d3674fd37e10edd3c4133d0965166383c906e5626618b0ad90d2b7a9b8db22",
+    "src/market_budget.py": "436058ece4df24750ae2a29313b7afd71d64764c8d9dabeda820fd1748b037ca"
+  },
+  "activation_kind": "late_automatic_recovery_original_2026-10-22T18:30:00+08:00_not_on_time",
+  "authorization_source": "Root existing once constrained cutover and normal business remaining attempts; not paid diagnostic or registered97 budget",
+  "github_deployment": {
+    "repository": "https://github.com/mantonlove/Navren",
+    "branch": "main",
+    "commit": null,
+    "manifest_path": "deployment/market-compound-announcement-guard-20261027/deployment-manifest.json"
+  }
+}
