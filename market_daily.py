@@ -11,7 +11,7 @@ from market_sources import readable_article,cluster_key,evidence_readable,articl
 from market_source_attribution import first_publication_verified
 from market_statistical_identity import innovation_release_alias, source_release_aliases
 
-RULE_VERSION = 'daily-selection-v12-source-backed-release-families'
+RULE_VERSION = 'daily-selection-v13-industrial-profit-release-family'
 _publication_clock_scope = ContextVar('navren_daily_publication_clock_scope',default=None)
 
 def _clock_execution_owner():

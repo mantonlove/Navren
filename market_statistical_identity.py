@@ -1,8 +1,7 @@
-"""Only identify the same annual China Innovation Index release.
+"""原文支持的统计发布、政策公告和收盘事件身份。
 
-The alias is supported by the bound primary article/quotes, not by a shared
-topic, arbitrary number, summary, source name or collection timestamp.
-This module never mutates an event, article, database or review.
+只识别同一底层事件，不作为来源、事实、独立审核或发布通过证明。
+本模块不修改事件、原文、数据库或审核记录。
 """
 from decimal import Decimal
 import re
@@ -155,6 +154,62 @@ def _market_close_alias(primary, proofs, day):
     return 'market_close:cn_ashare:' + next(iter(identities))
 
 
+def _industrial_profit_release_alias(primary, proofs, day):
+    """同一全国规上工业利润统计期间的原发布和解读只占一个事件。"""
+    from urllib.parse import urlsplit
+    from market_sources import REGISTRY
+    title=_compact(primary.get('title'))
+    # 只识别标题的主要统计对象；政策、预测、企业/地方/境外新闻中的
+    # 背景数据不因此并入全国统计发布。期间和年份必须来自原标题。
+    if re.search(r'预测|预计|预期|目标|展望|假设|如果|政策|措施|办法|方案|贷款|融资|上市公司|集团|美国|英国|日本|德国|法国|印度',title):
+        return None
+    period=r'(20\d{2})年(\d{1,2})[—–－至-](\d{1,2})月(?:份)?'
+    matches=list(re.finditer(period+r'(?:全国)?(?:规模以上)?工业企业利润',title))
+    identities={(int(m[1]),int(m[2]),int(m[3])) for m in matches}
+    if len(identities)!=1:return None
+    prefix=title[:matches[0].start()]
+    if prefix and not re.fullmatch(r'国家统计局(?:[^。；;！？!?]{0,60}(?:解读|发布|公布)[：:]?|[：:]?)',prefix):
+        return None
+    year,start,end=next(iter(identities))
+    if not (1<=start<=end<=12 and year<=day.year):return None
+    # 全国口径在主标题期间后必须直接接统计对象，不能跳过省市名称。
+    # 本增量只认已登记的国家统计局原站；媒体原报道者不等于数据发布机关。
+    url=urlsplit(primary.get('url',''));host=(url.hostname or '').lower()
+    registered=REGISTRY.get(primary.get('source_id'))
+    if (registered is None or url.scheme!='https' or host!=registered.domain
+            or not re.fullmatch(registered.pattern,url.path)
+            or primary.get('publisher')!=registered.publisher):return None
+    official=(host in ('stats.gov.cn','www.stats.gov.cn') and
+              (primary.get('origin_publisher') or primary.get('publisher'))=='国家统计局')
+    if not official:return None
+    # 原文必须有全国总体、相同期间的利润增减事实，不能借某行业、
+    # 企业、营收或模型summary推定。数值差异不制造第二个事件身份；
+    # 数字是否准确仍由原事实校验与完整GLM分别拒绝。
+    claim=re.compile(r'(?:(20\d{2})年)?(\d{1,2})[—–－至-](\d{1,2})月(?:份)?[，,:：]?'
+                     r'全国规模以上工业企业(?:实现)?利润(?:总额)?'
+                     r'(?:(?:为|达|达到)?\d+(?:\.\d+)?(?:万)?亿元[，,])?'
+                     r'(?:同比)?(?P<direction>增长|下降)(?P<rate>[+-]?\d+(?:\.\d+)?)%')
+    rates=set()
+    for original in proofs:
+        text=_compact(original)
+        explicit_years={int(m[1]) for m in re.finditer(period,text)
+                        if (int(m[2]),int(m[3]))==(start,end)}
+        if explicit_years and year not in explicit_years:continue
+        for m in claim.finditer(text):
+            if (int(m[2]),int(m[3]))!=(start,end) or m[1] and int(m[1])!=year:continue
+            prefix=re.split(r'[。；;！？!?]',text[:m.start()])[-1][-40:]
+            if re.search(r'假设|如果|假如|若|预测|预计|预期|目标',prefix):continue
+            if not m[1] and re.search(r'去年|上年|前年',prefix):continue
+            rate=Decimal(m['rate'])
+            if rate<0:return None
+            rates.add(rate if m['direction']=='增长' else -rate)
+    # 同篇、同期间的增减值自相矛盾时不据此建立正常身份。不同原文
+    # 同一次发布仍只占一格，其矛盾保留在完整材料中交原GLM/版本门。
+    if len(rates)==1:
+        return 'statistical_release:cn_nbs:industrial_enterprise_profits:'+str(year)+':%02d-%02d'%(start,end)
+    return None
+
+
 def source_release_aliases(event, primary):
     """只为有原文支持的同公告/同交易日同收盘建立身份；共同主题不合并。"""
     day = _publication_day(primary)
@@ -162,4 +217,5 @@ def source_release_aliases(event, primary):
     if day is None or not proofs:
         return set()
     return {alias for alias in (_policy_announcement_alias(primary, proofs, day),
-                               _market_close_alias(primary, proofs, day)) if alias}
+                               _market_close_alias(primary, proofs, day),
+                               _industrial_profit_release_alias(primary, proofs, day)) if alias}
