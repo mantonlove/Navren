@@ -13,6 +13,8 @@ from user_memory import privacy_revision
 
 CONTRACT='navren.approved-response/1'
 COMMIT='navren.response-publication/1'
+VERIFIED_FACTS='navren.verified-facts-response/1'
+FACTS_WITNESS='navren.verified-facts-witness/1'
 CODE=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 DISPLAY=('bank_response_id','request_id','message_id','reply','presentation','metric_batch','wire_ref','message_state',
          'presentation_review','follow_up_questions','agent_review')
@@ -107,7 +109,7 @@ class ApprovedResponseStore:
     def _open_historical_codec(self,obj,contract,*,issuer_code,codec):
         """只供有pd1逐轮发行证明的只读reader；不提供当前批准、执行或旧包补签。"""
         if (codec!='navren.approved-original-seal/1'
-            or contract not in (CONTRACT,COMMIT,'navren.local-rule-response/1')
+            or contract not in (CONTRACT,COMMIT,'navren.local-rule-response/1',VERIFIED_FACTS)
             or type(issuer_code) is not str or re.fullmatch(r'[a-f0-9]{64}',issuer_code) is None
             or type(obj) is not dict or set(obj)!={'contract','sealed_original'} or obj['contract']!=contract):
             fail('HISTORICAL_ORIGINAL_CODEC_INVALID')
@@ -127,7 +129,9 @@ class ApprovedResponseStore:
         else:
             required={'contract','response_id','actor','language','original_response','original_response_hash',
                       'source_versions','personal_revision','privacy_revision','prepared_at','server_state','execution_authority'}
-            required.update({'agent_final_proof'} if contract==CONTRACT else {'local_rule_id','local_rule_code'})
+            if contract==CONTRACT:required.add('agent_final_proof')
+            elif contract==VERIFIED_FACTS:required.add('facts_witness')
+            else:required.update({'local_rule_id','local_rule_code'})
         if set(body)!=required:fail('HISTORICAL_ORIGINAL_SCHEMA_UNSUPPORTED')
         return body
 
@@ -167,6 +171,87 @@ class ApprovedResponseStore:
                 envelope=self._seal(local_contract,packet)
                 self._pending[(w,rid)]={'packet':packet,'envelope':envelope,'publication':None}
             return deepcopy(envelope)
+
+    @staticmethod
+    def _verify_facts_witness(w,rid,language,canonical,witness,*,current_code=False):
+        """Check the bounded host witness; an old witness never becomes a model review."""
+        required={'contract','workspace_id','response_id','language','response_hash','reply_hash',
+                  'reply_presentation_hash','widgets_hash','metric_batch_hash','financial_metric_batches_hash',
+                  'fact_ids','selected_facts_hash','selected_evidence_hash','agent_code_sha256','renderer_code_sha256'}
+        review=canonical.get('agent_review') if type(canonical) is dict else None
+        answer=canonical.get('answer_contract') if type(canonical) is dict else None
+        if (type(witness) is not dict or set(witness)!=required or witness['contract']!=FACTS_WITNESS
+                or type(answer) is not dict or set(answer)!={'kind','fact_ids'} or answer['kind']!='verified_facts'
+                or review!={'status':'not_required','reason':'只读事实合同由后端生成'}
+                or canonical.get('isFallback') is not False or canonical.get('bank_actions')!=[]
+                or canonical.get('follow_up_questions')!=[] or canonical.get('reply_interaction') is not None
+                or type(canonical.get('reply')) is not str or not 1<=len(canonical['reply'])<=6000
+                or type(canonical.get('widgets')) is not list
+                or type(answer['fact_ids']) is not list or not 1<=len(answer['fact_ids'])<=24
+                or any(type(fid) is not str or not fid for fid in answer['fact_ids'])
+                or len(set(answer['fact_ids']))!=len(answer['fact_ids'])
+                or witness['workspace_id']!=w or witness['response_id']!=rid or witness['language']!=language
+                or witness['fact_ids']!=answer['fact_ids'] or canonical.get('workspace_id')!=w
+                or canonical.get('bank_response_id')!=rid or canonical.get('language')!=language
+                or witness['response_hash']!=fingerprint(canonical)
+                or witness['reply_hash']!=hashlib.sha256(canonical['reply'].encode()).hexdigest()
+                or witness['reply_presentation_hash']!=fingerprint(canonical.get('reply_presentation'))
+                or witness['widgets_hash']!=fingerprint(canonical.get('widgets',[]))
+                or witness['metric_batch_hash']!=fingerprint(canonical.get('metric_batch'))
+                or witness['financial_metric_batches_hash']!=fingerprint(canonical.get('financial_metric_batches'))):
+            fail('VERIFIED_FACTS_WITNESS_INVALID')
+        presentation=canonical.get('reply_presentation')
+        if presentation is not None and (type(presentation) is not dict
+                or presentation.get('schema_version')!='navren.reply-presentation.v1'
+                or presentation.get('status')!='verified' or presentation.get('workspace_id')!=w
+                or presentation.get('response_id')!=rid or presentation.get('text')!=canonical['reply']):
+            fail('VERIFIED_FACTS_WITNESS_INVALID')
+        for key in ('selected_facts_hash','selected_evidence_hash','agent_code_sha256','renderer_code_sha256'):
+            if type(witness[key]) is not str or re.fullmatch(r'[a-f0-9]{64}',witness[key]) is None:
+                fail('VERIFIED_FACTS_WITNESS_INVALID')
+        if current_code:
+            root=Path(__file__).resolve().parents[1]
+            if (witness['agent_code_sha256']!=hashlib.sha256((root/'agent_runtime/conversation.py').read_bytes()).hexdigest()
+                    or witness['renderer_code_sha256']!=hashlib.sha256((root/'base_runtime/reply_presentation.py').read_bytes()).hexdigest()):
+                fail('VERIFIED_FACTS_WITNESS_STALE')
+        return True
+
+    def prepare_verified_facts(self,w,response,*,bank_db,language,witness_validator):
+        """Seal only a same-round host-rebuilt fact answer, without inventing GLM approval."""
+        if type(response) is not dict or language not in {'zh','en'} or not callable(witness_validator):
+            fail('VERIFIED_FACTS_VALIDATOR_REQUIRED',503)
+        rid=response.get('bank_response_id')
+        if type(rid) is not str or not re.fullmatch(r'[A-Za-z0-9_-]{1,160}',rid):fail()
+        with self.p._publication(bank_db) as db:
+            actor=self._actor(w,db)
+            canonical=deepcopy(response)
+            witness=witness_validator(deepcopy(canonical),bank_db=db,language=language)
+            self._verify_facts_witness(w,rid,language,canonical,witness,current_code=True)
+            if (canonical.get('privacy_revision')!=privacy_revision(db,w)
+                    or canonical.get('personal_revision')!=self.store.revision(w)):
+                fail('APPROVED_RESPONSE_BINDING')
+            packet={'contract':VERIFIED_FACTS,'response_id':rid,'actor':actor,'language':language,
+                    'original_response':canonical,'original_response_hash':fingerprint(canonical),
+                    'facts_witness':deepcopy(witness),'source_versions':self.p.source_versions(w,db),
+                    'personal_revision':self.store.revision(w),'privacy_revision':privacy_revision(db,w),
+                    'prepared_at':self.g.bank.clock(),
+                    'server_state':'prepared_under_original_publication_guard','execution_authority':False}
+            with self._lock:
+                if (w,rid) in self._pending:fail('APPROVED_RESPONSE_ALREADY_PREPARED')
+                envelope=self._seal(VERIFIED_FACTS,packet)
+                self._pending[(w,rid)]={'packet':packet,'envelope':envelope,'publication':None}
+            return deepcopy(envelope)
+
+    def guarded_verified_facts_writer(self,w,response,writer,*,bank_db,language,witness_validator):
+        def save(owner,messages,response_id,widgets,**kwargs):
+            if (owner!=w or response_id!=response['bank_response_id'] or type(widgets) is not list
+                    or not messages or messages[-1].get('role')!='assistant'
+                    or messages[-1].get('content')!=response['reply']):fail('APPROVED_RESPONSE_BINDING')
+            envelope=self.prepare_verified_facts(w,response,bank_db=bank_db,language=language,
+                                                 witness_validator=witness_validator)
+            kwargs.pop('message_state',None);kwargs.pop('validate_message_state',None)
+            return writer(owner,messages,response_id,[*widgets,envelope],**kwargs)
+        return save
 
     @classmethod
     def _contains(cls,value,original):

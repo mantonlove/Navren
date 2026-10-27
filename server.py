@@ -573,6 +573,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                     setattr(request_agent,client_name,guarded)
             def finalize_result(result,commit_history=None):
                 history_attempted=False
+                send_completed=False
                 failure_stage='finalization'
                 try:
                     result['financial_metric_batches']=metric_observer.batches
@@ -628,6 +629,14 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                                 raise BankError('AGENT_FINAL_TRANSPORT_WIRING_REQUIRED','Agent尚未接入原发布事务的最终封存。',503)
                             sealer(bank_db=bank_db,language=response_language,server_gateway=gateway,session_token=token)
                             selected_writer=approved.guarded_writer(workspace,result,guarded_writer,bank_db=bank_db,language=response_language)
+                        elif (approved is not None and not result.get('isFallback')
+                                and isinstance(result.get('answer_contract'),dict)
+                                and result['answer_contract'].get('kind')=='verified_facts'):
+                            witness_validator=getattr(commit_history,'validate_verified_facts',None)
+                            if not callable(witness_validator):
+                                raise BankError('VERIFIED_FACTS_WITNESS_REQUIRED','只读事实答复缺少本轮宿主见证。',503)
+                            selected_writer=approved.guarded_verified_facts_writer(workspace,result,guarded_writer,
+                                bank_db=bank_db,language=response_language,witness_validator=witness_validator)
                         if approved is not None:
                             commit_history(writer=selected_writer,bank_db=bank_db,server_gateway=gateway,session_token=token)
                         else:commit_history(writer=selected_writer)
@@ -644,21 +653,32 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                             stream.finish(result)
                             if not stream.connected:raise PublicationInterrupted('publication_client_disconnected')
                         else:self._finance_json(200,result)
+                        send_completed=True
                         approved=getattr(gateway,'approved_responses',None)
-                        if approved is not None and history_attempted and result.get('agent_review',{}).get('status')=='approved' and not result.get('isFallback'):
+                        answer_contract=result.get('answer_contract')
+                        sealed_answer=(result.get('agent_review',{}).get('status')=='approved'
+                            or isinstance(answer_contract,dict) and answer_contract.get('kind')=='verified_facts')
+                        if approved is not None and history_attempted and sealed_answer and not result.get('isFallback'):
                             approved.published(workspace,request_id,bank_db=publication_db)
                             archive=getattr(gateway,'dialogue_archive',None)
                             if archive is not None:archive.attest_published(workspace,request_id,bank_db=publication_db)
                     return result
                 except Exception as error:
-                    try:
-                        gateway.discard_unpublished_answer(workspace,request_id,result,
-                            expected_privacy=request_privacy,expected_personal=request_personal,history_saved=history_attempted,
-                            failure_stage=failure_stage,failure_code=error.code if isinstance(error,BankError) else 'PUBLICATION_FAILED')
-                    except Exception as cleanup_error:
-                        # 清理异常不能把部分发送改成第二个结果；只记固定类型，不记正文或异常原文。
+                    if not send_completed:
+                        try:
+                            gateway.discard_unpublished_answer(workspace,request_id,result,
+                                expected_privacy=request_privacy,expected_personal=request_personal,
+                                history_saved=history_attempted,
+                                failure_stage=failure_stage,failure_code=error.code if isinstance(error,BankError) else 'PUBLICATION_FAILED')
+                        except Exception as cleanup_error:
+                            # 清理异常不能把部分发送改成第二个结果；只记固定类型，不记正文或异常原文。
+                            import logging
+                            logging.getLogger(__name__).error('未发布答复清理未完成，阶段=%s，类型=%s',failure_stage,type(cleanup_error).__name__)
+                    else:
+                        # The client has already received the reply. A marker or
+                        # attestation failure cannot withdraw its speech/drafts.
                         import logging
-                        logging.getLogger(__name__).error('未发布答复清理未完成，阶段=%s，类型=%s',failure_stage,type(cleanup_error).__name__)
+                        logging.getLogger(__name__).error('已发送答复的归档完成失败，类型=%s',type(error).__name__)
                     raise
             from agent_runtime.conversation import ConversationAgent
             if isinstance(request_agent,ConversationAgent):
@@ -751,6 +771,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         result = None
         local_speech_receipt = None
         history_attempted = False
+        send_completed = False
         try:
             result = build_social_reply_result(workspace, request_id, match)
             validate_social_reply_result(result)
@@ -796,6 +817,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                         raise PublicationInterrupted('publication_client_disconnected')
                 else:
                     self._finance_json(200, wire_result)
+                send_completed = True
                 if getattr(gateway,'dialogue_archive',None) is not None:
                     gateway.approved_responses.published(workspace,request_id,bank_db=publication_db)
                     gateway.dialogue_archive.attest_published(workspace,request_id,bank_db=publication_db)
@@ -804,7 +826,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             if local_speech_receipt:
                 with gateway._speech_lock:
                     gateway._speech_receipts.pop(local_speech_receipt, None)
-            if history_attempted and result is not None:
+            if history_attempted and result is not None and not send_completed:
                 gateway.discard_unpublished_answer(workspace, request_id, result,
                     expected_privacy=request_privacy, expected_personal=request_personal,
                     history_saved=True, failure_stage='publication',

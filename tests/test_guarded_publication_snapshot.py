@@ -86,6 +86,28 @@ class GuardedPublicationSnapshotTests(unittest.TestCase):
         with closing(self.store.connect()) as db:
             self.assertEqual(self.store.published_turn_widgets(db, self.w, 'prior')[-1]['contract'], COMMIT)
 
+    def test_completed_publication_cannot_be_discarded_after_attestation_failure(self):
+        self.assertTrue(self.save('sent', 'sent'))
+        self.assertTrue(self.publish('sent'))
+        original = self.raw()
+        self.assertFalse(self.discard('sent'))
+        self.assertEqual(self.raw(), original)
+        with closing(self.store.connect()) as db:
+            saved = db.execute('SELECT status FROM guarded_turn_saves WHERE workspace_id=? AND response_id=?',
+                               (self.w, 'sent')).fetchone()
+            self.assertEqual(saved['status'], 'saved')
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM guarded_turn_publications WHERE workspace_id=? AND response_id=?',
+                                        (self.w, 'sent')).fetchone()[0], 1)
+
+    def test_legacy_inline_publication_cannot_be_discarded(self):
+        marker = self.marker('legacy-sent')
+        with self.bank.transaction() as db:
+            self.assertTrue(self.store.save_turn_guarded(self.w, self.messages('legacy-sent'), 'legacy-sent', [marker],
+                bank_db=db, expected_revision=0, expected_privacy=0))
+        original = self.raw()
+        self.assertFalse(self.discard('legacy-sent'))
+        self.assertEqual(self.raw(), original)
+
     def test_late_cleanup_preserves_later_originals_and_prior_successful_publications(self):
         self.assertTrue(self.save('prior', 'prior'))
         self.assertTrue(self.publish('prior'))

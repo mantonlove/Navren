@@ -35,7 +35,8 @@
     'proto', 'constructor', 'prototype']);
   const SAFE_STATUS = Object.freeze({
     withheld: '该条历史回复当前无法核验，正文暂不展示。',
-    not_published: '这次回复未发布。'
+    not_published: '这次回复未发布。',
+    archive_unavailable: '这条历史回复未完整保存，暂时无法恢复。'
   });
 
   function fail(code) {
@@ -213,11 +214,11 @@
         value.current_fact_eligible !== false || value.execution_authority !== false) throw fail('INVALID_ARCHIVE_DTO');
     if (own(value, 'readonly_components')) archivedDisplay(value.readonly_components);
     if (own(value,'attachments')) mediaList(value.attachments);
-    if (value.status === 'withheld' || value.status === 'not_published') {
+    if (value.status === 'withheld' || value.status === 'not_published' || value.status === 'archive_unavailable') {
       if (value.content !== null || own(value,'attachments') && value.attachments.length) throw fail('INVALID_ARCHIVE_DTO');
       return;
     }
-    if (!['published_original', 'published_local_rule'].includes(value.status) ||
+    if (!['published_original', 'published_local_rule', 'published_verified_facts'].includes(value.status) ||
         published.some(key => !own(value, key)) || !text(value.content, 6000) ||
         !['zh', 'en'].includes(value.language) || !['unchanged', 'changed'].includes(value.source_versions_state) ||
         !integer(value.original_personal_revision, 0) || value.original_personal_revision > page.personal_revision ||
@@ -229,6 +230,8 @@
         !(review.review_id === null || typeof review.review_id === 'string')) throw fail('INVALID_ARCHIVE_DTO');
     if (value.status === 'published_original') {
       if (review.source !== 'agent_review' || review.status !== 'approved_at_publication') throw fail('INVALID_ARCHIVE_DTO');
+    } else if (value.status === 'published_verified_facts') {
+      if (review.source !== 'host_verified_facts' || review.status !== 'not_required' || review.reviewer_model !== null || review.review_id !== null || own(review,'rule_id')) throw fail('INVALID_ARCHIVE_DTO');
     } else if (review.source !== 'local_rule' || review.status !== 'not_required' || !text(review.rule_id, 160)) {
       throw fail('INVALID_ARCHIVE_DTO');
     }
@@ -280,7 +283,7 @@
       text: item.user.content, created_at: iso(item.received_at), status: 'archived',
       references: clone(item.user.references), attachments: clone(item.user.attachments) };
     const a = item.assistant;
-    const readable = a.status === 'published_original' || a.status === 'published_local_rule';
+    const readable = a.status === 'published_original' || a.status === 'published_local_rule' || a.status === 'published_verified_facts';
     const assistant = { ...base, message_id: a.message_id, position: 1, role: 'assistant',
       kind: readable ? 'published-readback' : 'safe-status', text: readable ? a.content : SAFE_STATUS[a.status],
       created_at: iso(readable ? a.publication.published_at : item.received_at), status: a.status,
@@ -290,7 +293,7 @@
     // Neither original packets, actions, HTML nor current execution credentials
     // leave this projection. Trust comes from the injected authenticated reader.
     const receivedMediaOnly = user.text === '' && user.references.length === 0 &&
-      user.attachments.some(item => item.contract === 'navren.chat-media/1') && a.status === 'not_published';
+      user.attachments.some(item => item.contract === 'navren.chat-media/1') && (a.status === 'not_published' || a.status === 'archive_unavailable');
     return freeze(receivedMediaOnly ? [user] : [user, assistant]);
   }
   function restartCode(code) {
