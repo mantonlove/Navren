@@ -164,7 +164,6 @@ def main():
         NAVREN_MARKET_DB=str(paths['market']),
         NAVREN_FUND_CACHE=str(args.state_dir.resolve() / 'fund-cache'),
         NAVREN_ALLOW_CLOUD_ASR='0')
-    os.environ.pop('DEEPSEEK_API_KEY', None)
     runtime_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.environ['NAVREN_MODEL_CALL_LOG'] = str(runtime_dir / 'model-calls.jsonl')
     sys.path.insert(0, str(ROOT))
