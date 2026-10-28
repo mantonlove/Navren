@@ -18,6 +18,8 @@ def article(version=1):
             'title': '新闻分析丨这项协议为何受到关注',
             'published_at': '2026-10-28T07:11:16+00:00',
             'first_publication_status': 'verified_original_page',
+            'read_scope': 'full_text', 'evidence_truncated': False,
+            'url': 'https://example.test/analysis',
             'evidence_text': ('新华社10月28日电。甲公司22日宣布，与乙公司签署长期协议，'
                               '采购规模由协议约定。分析人士解释合作背景。')}
 
@@ -126,6 +128,7 @@ class OldAnnouncementGuardTests(unittest.TestCase):
     def test_exact_quarantine_hold_resumes_after_source_change(self):
         with tempfile.TemporaryDirectory() as folder:
             store = Store(str(Path(folder) / 'market.sqlite3'))
+            approval_path = Path(folder) / 'approved-cutover.json'
             source = article()
             raw_article = json.dumps(source, ensure_ascii=False, sort_keys=True)
             article_digest = sha256(raw_article.encode()).hexdigest()
@@ -135,6 +138,31 @@ class OldAnnouncementGuardTests(unittest.TestCase):
                  'article_body_sha256': article_digest}]}
             raw_event = json.dumps(event, ensure_ascii=False, sort_keys=True)
             event_digest = sha256(raw_event.encode()).hexdigest()
+            audit_path = Path(folder) / 'source-audit.json'
+            audit = {'schema': 'navren_market_editorial_source_audit_v1',
+                     'assessment': 'source_no_current_day_new_fact_verified',
+                     'event_id': 'e_demo', 'event_version': 1,
+                     'event_body_sha256': event_digest,
+                     'full_source_evidence_sha256': 'b' * 64,
+                     'article_bindings': [
+                         {'article_id': 'a_demo', 'version': 1,
+                          'article_body_sha256': article_digest,
+                          'source_url': source['url'],
+                          'published_at': source['published_at'],
+                          'first_publication_status': source['first_publication_status'],
+                          'read_scope': 'full_text', 'evidence_truncated': False,
+                          'evidence_text_sha256': sha256(source['evidence_text'].encode()).hexdigest()}],
+                     'paragraph_review': [{'numbers': [1], 'role': 'old public action'}]}
+            audit_path.write_text(json.dumps(audit))
+            hold = {'event_id': 'e_demo', 'event_version': 1,
+                    'event_body_sha256': event_digest,
+                    'assessment': 'source_no_current_day_new_fact_verified',
+                    'full_source_audit_path': audit_path.name,
+                    'full_source_audit_sha256': sha256(audit_path.read_bytes()).hexdigest(),
+                    'full_source_evidence_sha256': 'b' * 64,
+                    'article_bindings': [{'article_id': 'a_demo', 'version': 1,
+                                          'article_body_sha256': article_digest}]}
+            approval_path.write_text(json.dumps({'editorial_source_holds': [hold]}))
             with store.db() as db:
                 db.executescript('''
                     CREATE TABLE market_articles(id TEXT,version INTEGER,body TEXT,status TEXT);
@@ -150,7 +178,22 @@ class OldAnnouncementGuardTests(unittest.TestCase):
                            ('e_demo', 1, event_digest, '旧公告待复核'))
                 self.assertTrue(DailyMarket(None).selected_substory_unverified(db, event))
             group = {'id': 'e_demo', 'articles': [source]}
-            self.assertEqual(held_old_announcement_groups(store, [group]), {'e_demo'})
+            self.assertEqual(held_old_announcement_groups(store, [group], approval_path), {'e_demo'})
+            audit_path.write_text(json.dumps({**audit, 'paragraph_review': []}))
+            self.assertEqual(held_old_announcement_groups(store, [group], approval_path), set())
+            audit_path.write_text(json.dumps(audit))
+            audit_path.unlink()
+            self.assertEqual(held_old_announcement_groups(store, [group], approval_path), set())
+            audit_path.write_text(json.dumps(audit))
+            approval_path.write_text(json.dumps({'editorial_source_holds': []}))
+            self.assertEqual(held_old_announcement_groups(store, [group], approval_path), set())
+            approval_path.write_text(json.dumps({'editorial_source_holds': [hold]}))
+            with store.db() as db:
+                db.execute('INSERT INTO market_events VALUES(?,?,?,?)',
+                           ('e_demo', 2, raw_event, 'published'))
+            self.assertEqual(held_old_announcement_groups(store, [group], approval_path), set())
+            with store.db() as db:
+                db.execute('DELETE FROM market_events WHERE id=? AND version=?', ('e_demo', 2))
             scope_only = dict(event)
             scope_only['headline'] = '甲公司介绍协议后续影响'
             scope_only['summary'] = '甲公司介绍协议的后续影响。'
@@ -159,17 +202,51 @@ class OldAnnouncementGuardTests(unittest.TestCase):
                 db.execute('UPDATE market_events SET body=? WHERE id=?', (raw_scope, 'e_demo'))
                 db.execute('UPDATE market_editorial_quarantines SET body_sha256=? WHERE event_id=?',
                            (sha256(raw_scope.encode()).hexdigest(), 'e_demo'))
-            self.assertEqual(held_old_announcement_groups(store, [group]), set())
+            scope_hold = dict(hold, event_body_sha256=sha256(raw_scope.encode()).hexdigest())
+            approval_path.write_text(json.dumps({'editorial_source_holds': [scope_hold]}))
+            self.assertEqual(held_old_announcement_groups(store, [group], approval_path), set())
             with store.db() as db:
                 db.execute('UPDATE market_events SET body=? WHERE id=?', (raw_event, 'e_demo'))
                 db.execute('UPDATE market_editorial_quarantines SET body_sha256=? WHERE event_id=?',
                            (event_digest, 'e_demo'))
+            approval_path.write_text(json.dumps({'editorial_source_holds': [hold]}))
             updated = article(version=2)
             updated['evidence_text'] += ' 甲公司28日披露新增条款。'
             with store.db() as db:
                 db.execute('INSERT INTO market_articles VALUES(?,?,?,?)',
                            ('a_demo', 2, json.dumps(updated, ensure_ascii=False, sort_keys=True), 'active'))
-            self.assertEqual(held_old_announcement_groups(store, [{'id': 'e_demo', 'articles': [updated]}]), set())
+            self.assertEqual(held_old_announcement_groups(
+                store, [{'id': 'e_demo', 'articles': [updated]}], approval_path), set())
+
+    def test_same_version_source_with_current_progress_is_not_held_without_source_signoff(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = Store(str(Path(folder) / 'market.sqlite3'))
+            approval_path = Path(folder) / 'approved-cutover.json'
+            approval_path.write_text(json.dumps({'editorial_source_holds': []}))
+            source = article()
+            source['evidence_text'] += ' 甲公司28日披露新增条款。'
+            raw_article = json.dumps(source, ensure_ascii=False, sort_keys=True)
+            event = selected()  # The draft chose only the old announcement.
+            event['generation'] = {'article_bindings': [
+                {'article_id': 'a_demo', 'version': 1,
+                 'article_body_sha256': sha256(raw_article.encode()).hexdigest()}]}
+            raw_event = json.dumps(event, ensure_ascii=False, sort_keys=True)
+            with store.db() as db:
+                db.executescript('''
+                    CREATE TABLE market_articles(id TEXT,version INTEGER,body TEXT,status TEXT);
+                    CREATE TABLE market_events(id TEXT,version INTEGER,body TEXT,status TEXT);
+                    CREATE TABLE market_editorial_quarantines(
+                        event_id TEXT,event_version INTEGER,body_sha256 TEXT,reason TEXT);
+                ''')
+                db.execute('INSERT INTO market_articles VALUES(?,?,?,?)',
+                           ('a_demo', 1, raw_article, 'active'))
+                db.execute('INSERT INTO market_events VALUES(?,?,?,?)',
+                           ('e_demo', 1, raw_event, 'editorial_review_required'))
+                db.execute('INSERT INTO market_editorial_quarantines VALUES(?,?,?,?)',
+                           ('e_demo', 1, sha256(raw_event.encode()).hexdigest(), '草稿旧角度'))
+            self.assertTrue(old_announcement_headline_issues(event, [source]))
+            self.assertEqual(held_old_announcement_groups(
+                store, [{'id': 'e_demo', 'articles': [source]}], approval_path), set())
 
 
 if __name__ == '__main__':

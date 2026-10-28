@@ -6,7 +6,7 @@
     "src/market_content.py": "dac14d20f788ec1d44ffa61ddabceca541727647eacb146787ee8c934c54ec8b",
     "src/market_editor.py": "b60a965acf037389bfd940791cccc8a0f36209645c32ca1bd32158ed19cd0543",
     "src/market_daily.py": "6950d8bcf1eec84e49410942b8b2d0ac4b52f01e591bea1628830895f26e8ee1",
-    "src/market_pipeline.py": "b1dd0fd532b51f6cf9bf2d16f1e71a34e9a969d5e52c408614d0ffd7f72f0a95",
+    "src/market_pipeline.py": "4732033394de1c8767a60f68e4431e929077609a779a2f8912c6c2bf7385caf3",
     "src/market_schedule.py": "1a7e54300208d3ca60202f1dd76cddf5865f83cef76c168ac030c58231eddfc5",
     "src/market_source_attribution.py": "6ae41479f28ee05f9093d08e43e31d6f01e1ebd59af02dce1aaf58e5542383e5",
     "src/market_semantic_checks.py": "8e9abb6251204dc5d8af4d21bf3785682cea33c8c6a919e13daa16cfb36ca430",

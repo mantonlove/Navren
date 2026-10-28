@@ -5,14 +5,24 @@
   "files": {
     "market_semantic_checks.py": "8e9abb6251204dc5d8af4d21bf3785682cea33c8c6a919e13daa16cfb36ca430",
     "market_daily.py": "6950d8bcf1eec84e49410942b8b2d0ac4b52f01e591bea1628830895f26e8ee1",
-    "market_pipeline.py": "b1dd0fd532b51f6cf9bf2d16f1e71a34e9a969d5e52c408614d0ffd7f72f0a95",
-    "deployment/market-selected-first-guard-20261028/collector-manifest.json": "58f12b904c630330b6a16e94a105a0cfa8439729577c33ec9beb3e941b70c09d",
-    "deployment/market-selected-first-guard-20261028/approved-cutover.json": "562f2b7573c1f3f20e00acc3220f685ced67ae248f1d044000e04228bcca0c25"
+    "market_pipeline.py": "4732033394de1c8767a60f68e4431e929077609a779a2f8912c6c2bf7385caf3",
+    "deployment/market-selected-first-guard-20261028/collector-manifest.json": "f8b6f3e3dfaf423c186a59106d4380e5ac63ff8a70c1bd7120b6299d6a492bae",
+    "deployment/market-selected-first-guard-20261028/approved-cutover.json": "f9ae82aae3b5ff39ac50dcd2b1b45f75a5d1c7e55590a0c0f0bcf932e9a7f0ec",
+    "deployment/market-selected-first-guard-20261028/editorial-source-audits/lng-analysis-20261028.json": "1659d3fb2a6abcf9a5e80b1c68a2a07e0136fc892b88699465938d7a2f546344"
   },
   "purpose": "Reject a selected old public announcement inside a newly published analysis page; preserve valid same-day progress and market-close reports. Reuse exact-source quarantine to avoid paid regeneration without changing the timer, historical snapshots, source text, or business data.",
   "server_targets": {
     "collector": "/opt/navren/market-collector/releases/market-20261022-1/src",
     "web": "/opt/navren/releases/navren-20261022-market-cutover-1/app"
   },
-  "current_content_moderation": "LNG event e_609c7df81c59f073faeb21ce v1 was already quarantined by native exact-body CAS; this change does not re-run collection or change source/article rows."
+  "current_content_moderation": "LNG event e_609c7df81c59f073faeb21ce v1 was already quarantined by native exact-body CAS; this change does not re-run collection or change source/article rows.",
+  "editorial_source_hold": {
+    "approval_path": "deployment/market-selected-first-guard-20261028/approved-cutover.json",
+    "assessment": "source_no_current_day_new_fact_verified",
+    "count": 1,
+    "full_source_audit_sha256": "1659d3fb2a6abcf9a5e80b1c68a2a07e0136fc892b88699465938d7a2f546344",
+    "effect": "skip model regeneration only for exact unchanged quarantined source group; current published head or changed source clears hold",
+    "full_source_evidence_sha256": "ee1acb5f048bbdb6beb49e0963d56d4581dd839573bd2066d33eab1d95a951ea",
+    "audit_path": "deployment/market-selected-first-guard-20261028/editorial-source-audits/lng-analysis-20261028.json"
+  }
 }

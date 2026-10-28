@@ -1,5 +1,5 @@
 {
-  "manifest_sha256": "58f12b904c630330b6a16e94a105a0cfa8439729577c33ec9beb3e941b70c09d",
+  "manifest_sha256": "f8b6f3e3dfaf423c186a59106d4380e5ac63ff8a70c1bd7120b6299d6a492bae",
   "db_path": "/var/lib/navren-market/public/market.sqlite3",
   "local_collector_disabled": true,
   "allow_paid_collection": true,
@@ -10,7 +10,7 @@
     "src/market_content.py": "dac14d20f788ec1d44ffa61ddabceca541727647eacb146787ee8c934c54ec8b",
     "src/market_editor.py": "b60a965acf037389bfd940791cccc8a0f36209645c32ca1bd32158ed19cd0543",
     "src/market_daily.py": "6950d8bcf1eec84e49410942b8b2d0ac4b52f01e591bea1628830895f26e8ee1",
-    "src/market_pipeline.py": "b1dd0fd532b51f6cf9bf2d16f1e71a34e9a969d5e52c408614d0ffd7f72f0a95",
+    "src/market_pipeline.py": "4732033394de1c8767a60f68e4431e929077609a779a2f8912c6c2bf7385caf3",
     "src/market_schedule.py": "1a7e54300208d3ca60202f1dd76cddf5865f83cef76c168ac030c58231eddfc5",
     "src/market_source_attribution.py": "6ae41479f28ee05f9093d08e43e31d6f01e1ebd59af02dce1aaf58e5542383e5",
     "src/market_semantic_checks.py": "8e9abb6251204dc5d8af4d21bf3785682cea33c8c6a919e13daa16cfb36ca430",
@@ -26,5 +26,24 @@
     "branch": "main",
     "commit": null,
     "manifest_path": "deployment/market-selected-first-guard-20261028/deployment-manifest.json"
-  }
+  },
+  "editorial_source_holds": [
+    {
+      "event_id": "e_609c7df81c59f073faeb21ce",
+      "event_version": 1,
+      "event_body_sha256": "513a32950d94a0da0f412a5defea32b78827bb84cc2878f7e82ddbd08514f72e",
+      "assessment": "source_no_current_day_new_fact_verified",
+      "full_source_audit_path": "editorial-source-audits/lng-analysis-20261028.json",
+      "full_source_audit_sha256": "1659d3fb2a6abcf9a5e80b1c68a2a07e0136fc892b88699465938d7a2f546344",
+      "full_source_evidence_sha256": "ee1acb5f048bbdb6beb49e0963d56d4581dd839573bd2066d33eab1d95a951ea",
+      "article_bindings": [
+        {
+          "article_id": "a_6b6cac001b5d51846c47c249",
+          "version": 1,
+          "article_body_sha256": "43dd2d0dac281d4744ab1c9dd0a6563385df230035d8c8e8087c765ccc09c870"
+        }
+      ],
+      "finding": "2026-10-28 original analysis is real; the selected 2026-10-22 agreement was already announced. Full source review found no concrete 2026-10-28 new term, progress or dated interview for that selected story. Hold only the unchanged exact source group; a changed article or added source resumes normal review."
+    }
+  ]
 }
