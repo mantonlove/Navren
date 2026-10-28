@@ -34,6 +34,38 @@ CATEGORIES = [
 CATEGORY_IDS = {x['id'] for x in CATEGORIES}
 WITHDRAWN = {'withdrawn','retracted','removed','source_withdrawn','404','410'}
 
+# Existing 2026-10-28 Yicai roundup proves the roundup page time, not the first
+# publication of its embedded Goldman study. Scope the hold to that source
+# page and the exact selected finding; new event or article versions cannot
+# reselect the same material without a separately reviewed policy change.
+_UNVERIFIED_SUBSTORY_ARTICLE = 'a_8469149abcc5d21088b43522'
+_UNVERIFIED_SUBSTORY_URL = 'https://www.yicai.com/news/103412209.html'
+_UNVERIFIED_SUBSTORY_QUOTE_SHA256 = '220946d7a3a01aa22e2614d1e5eb07177e31443f8952d48d80650d041f4c1693'
+
+def selected_substory_unverified(event, source_text=None):
+    if not isinstance(event,dict):return False
+    versions=event.get('article_versions')
+    if not isinstance(versions,dict):return False
+    source_ids={_UNVERIFIED_SUBSTORY_ARTICLE} if _UNVERIFIED_SUBSTORY_ARTICLE in versions else set()
+    for article in event.get('articles') or []:
+        if isinstance(article,dict) and article.get('url')==_UNVERIFIED_SUBSTORY_URL and isinstance(article.get('id'),str):
+            source_ids.add(article['id'])
+    if not source_ids:return False
+    segment=''
+    if isinstance(source_text,str):
+        start=source_text.find('►►高盛表示')
+        if start>=0:
+            end=source_text.find('►►',start+3)
+            segment=source_text[start:end if end>=0 else len(source_text)]
+    facts=event.get('facts')
+    return isinstance(facts,list) and any(
+        isinstance(fact,dict) and fact.get('article_id') in source_ids
+        and isinstance(fact.get('quote'),str)
+        and (bool(segment) and fact['quote'] in segment
+             or hashlib.sha256(fact['quote'].encode('utf-8')).hexdigest()==_UNVERIFIED_SUBSTORY_QUOTE_SHA256
+             or '高盛' in fact['quote'] and any(word in fact['quote'] for word in ('半导体','油价','风险偏好')))
+        for fact in facts)
+
 class MarketDailyError(ValueError):
     def __init__(self, code, status=400):
         self.code=code; self.status=status; super().__init__(code)
@@ -132,16 +164,18 @@ def event_aliases(event):
     return aliases
 
 
-def distinct_event_count(events):
+def distinct_event_count(events, aliases_for_event=event_aliases):
     """Count source-bound identity groups without changing stored snapshots."""
     groups=[]
     try:
         for event in events:
-            aliases=event_aliases(event)
+            aliases=aliases_for_event(event)
+            if aliases is None:return None
+            aliases=set(aliases)
             linked=[i for i,group in enumerate(groups) if aliases & group]
             for i in reversed(linked):aliases |= groups.pop(i)
             groups.append(aliases)
-    except (KeyError,TypeError,ValueError,AttributeError):
+    except (KeyError,TypeError,ValueError,AttributeError,StopIteration):
         return None
     return len(groups)
 
@@ -232,6 +266,39 @@ class DailyMarket:
         rows=[self.article_row(db,i,versions[i]) for i in ids]
         if any(r is None for r in rows):return None
         return [self.row_body(r) for r in rows]
+
+    def source_bound_aliases(self, db, event):
+        """Derive identity from the published event and its exact source versions."""
+        try:
+            row=self.event_row(db,event['id'],event['version'])
+            if not self.trusted_event(db,row,event):return None
+            exact=self.row_body(row)
+            if (event.get('article_ids')!=exact.get('article_ids') or
+                    event.get('article_versions')!=exact.get('article_versions')):return None
+            current=self.event_row(db,event['id'])
+            if current is None or current['version']!=row['version'] or current['status']!='published':return None
+            articles=self.bound_articles(db,exact)
+            if not articles or any(a['status']!='active' or not evidence_readable(a) or
+                    self.article_row(db,a['id'])['version']!=a['version'] for a in articles):return None
+            public_aliases=event_aliases({**exact,'articles':[self.store.public_article(a) for a in articles]})
+            sourced_aliases=event_aliases({**exact,'articles':articles})
+            return public_aliases | {alias for alias in sourced_aliases
+                                     if alias.startswith('market_close:us_major_indices:')}
+        except (KeyError,TypeError,ValueError,AttributeError,StopIteration):
+            return None
+
+    def selected_substory_unverified(self, db, event):
+        if selected_substory_unverified(event):return True
+        versions=event.get('article_versions',{})
+        if not isinstance(versions,dict):return False
+        for article in event.get('articles') or []:
+            if not isinstance(article,dict) or (article.get('id')!=_UNVERIFIED_SUBSTORY_ARTICLE
+                                               and article.get('url')!=_UNVERIFIED_SUBSTORY_URL):continue
+            article_id=article.get('id')
+            if not isinstance(article_id,str) or article_id not in versions:continue
+            row=self.article_row(db,article_id,versions[article_id])
+            if row and selected_substory_unverified(event,self.row_body(row).get('evidence_text')):return True
+        return False
 
     def trusted_event(self,db,row,snapshot=None):
         self.read_snapshot(db)
@@ -345,6 +412,7 @@ class DailyMarket:
             try:
                 event=self.approved_snapshot(db,row,display)
                 if event is None:continue
+                if self.selected_substory_unverified(db,event):continue
                 primary,main=event_primary_publication(event,event['articles'])
                 if not first_publication_verified(primary):continue
                 age=(now-main).total_seconds()/3600
@@ -390,12 +458,17 @@ class DailyMarket:
                     layer=(0 if e['id'] in fresh else position if position else 7) if fresh else (position-1 if position else 6)
                     e['selection_reason'].update(freshness_layer=layer,refresh_policy='verified_new_publication_then_retained_six')
         out.sort(key=lambda e:(e['selection_reason']['freshness_layer'],-e['selection_reason']['score'],-instant(e['reported_at']).timestamp(),e['id']))
+        # Approved public snapshots omit evidence_text. Resolve source-bound
+        # identities inside this read transaction, without exporting originals.
+        resolved=[(event,self.source_bound_aliases(db,event)) for event in out]
+        resolved=[(event,aliases) for event,aliases in resolved if aliases is not None]
+        out=[event for event,_ in resolved]
         parents=list(range(len(out)));seen={};links={}
         def find(i):
             while parents[i]!=i:parents[i]=parents[parents[i]];i=parents[i]
             return i
-        for i,event in enumerate(out):
-            for alias in sorted(event_aliases(event)):
+        for i,(event,aliases) in enumerate(resolved):
+            for alias in sorted(aliases):
                 if alias in seen:
                     a,b=find(i),find(seen[alias]);parents[max(a,b)]=min(a,b)
                     links.setdefault(i,[]).append(alias)
@@ -428,6 +501,12 @@ class DailyMarket:
     def write_edition(self, db, day, items, now, origin, run_id, coverage, *, replace_observed=False):
         if not db.in_transaction:db.execute('BEGIN IMMEDIATE')
         if len(items)>6 or len({x['id'] for x in items})!=len(items):raise MarketDailyError('invalid_selection')
+        if _uses_live_publication_clock(self) and origin=='observed':
+            # The final native publication gate uses the same exact versions as
+            # candidate grouping. Historical editions remain immutable.
+            independent=distinct_event_count(items,lambda event:self.source_bound_aliases(db,event))
+            if independent is None or independent!=len(items) or any(self.selected_substory_unverified(db,e) for e in items):
+                raise MarketDailyError('daily_selection_identity_unverified')
         if any(not e.get('articles') or any(not text_only_article(a) for a in e['articles']) for e in items):raise MarketDailyError('non_text_daily_selection')
         if replace_observed and any(not source_verified_text_event(e,self.bound_articles(db,e) or []) for e in items):raise MarketDailyError('replacement_requires_verified_text')
         old=db.execute('SELECT * FROM market_daily_editions WHERE edition_date=? ORDER BY revision DESC LIMIT 1',(day,)).fetchone()
@@ -514,6 +593,8 @@ class DailyMarket:
         if latest and latest['status']=='published' and latest['version']!=snapshot['version']:
             pointer={'id':snapshot['id'],'version':latest['version'],'released_at':latest['released_at'],'kind':'event'}
         states=[]
+        substory_unverified=self.selected_substory_unverified(db,snapshot)
+        if substory_unverified:states.append('temporarily_unavailable')
         if not self.trusted_event(db,self.event_row(db,snapshot['id'],snapshot['version']),snapshot):states.append('temporarily_unavailable')
         for id,version in snapshot['article_versions'].items():
             current=self.article_row(db,id)
@@ -528,10 +609,10 @@ class DailyMarket:
         if not states and compound_announcement_issues(snapshot,self.bound_articles(db,snapshot) or []):
             states.append('temporarily_unavailable')
         status=next((s for s in ('withdrawn','revised','temporarily_unavailable') if s in states),'active')
-        return status,pointer
+        return status,pointer,'first_of_selected_substory_unverified' if substory_unverified else None
 
     def expose(self, db, item, edition, detail=False):
-        snapshot=json.loads(item['snapshot']);state,pointer=self.availability(db,snapshot)
+        snapshot=json.loads(item['snapshot']);state,pointer,qualification_reason=self.availability(db,snapshot)
         meta={'edition_date':edition['edition_date'],'revision':edition['revision'],'position':item['position'],
             'origin':edition['origin'],'event_version':item['event_version'],'primary_article_id':item['primary_article_id'],
             'article_versions':json.loads(item['article_versions']),'selected_at':edition['selected_at']}
@@ -559,6 +640,7 @@ class DailyMarket:
             result.update(archive=meta,availability=state,latest_pointer=pointer,status=state,
                 article_ids=ids,article_versions=dict(meta['article_versions']),
                 selection_reason=safe_reason)
+            if qualification_reason:result['availability_reason']=qualification_reason
             for key in ('summary','analysis','uncertainty','display_summary','display_conditions','transmission',
                 'display_summary_en','display_conditions_en'):result[key]=''
             for key in ('facts','conflicts'):result[key]=[]
@@ -587,7 +669,9 @@ class DailyMarket:
         if edition is None:return {**self.metadata(now),**self._checks(db,day),'edition_date':day,'status':'missing_archive','archive_state':'missing','total_count':None,'matched_count':None,'original_count':None,'readable_count':None,'distinct_event_count':None,'events':[],'revision':None,'origin':None,'period_state':None,'category':category}
         rows=db.execute('SELECT * FROM market_daily_items WHERE edition_date=? AND revision=? ORDER BY position',(day,edition['revision'])).fetchall()
         all_events=[self.expose(db,r,edition) for r in rows]
-        distinct_count=distinct_event_count([json.loads(r['snapshot']) for r in rows])
+        distinct_count=distinct_event_count(
+            [json.loads(r['snapshot']) for r in rows],
+            lambda event:self.source_bound_aliases(db,event))
         events=[e for e in all_events if category=='all' or e['category']==category]
         today=self.clock(now).date().isoformat()
         return {**self.metadata(now),**self._checks(db,day),'edition_date':day,'revision':edition['revision'],'origin':edition['origin'],
@@ -604,13 +688,26 @@ class DailyMarket:
         start,today=self.window(now);first=self.validate_date(from_date or start.isoformat(),now);last=self.validate_date(to_date or today.isoformat(),now)
         if first>last:raise MarketDailyError('invalid_date_range')
         category=self.validate_category(category);days=[]
+        def complete(data):
+            return data['total_count']==6 and data['readable_count']==6 and data['distinct_event_count']==6
         with self.store.db() as db:
             self.read_snapshot(db)
             for offset in range((last-first).days+1):
                 data=self._read_day(db,(first+timedelta(days=offset)).isoformat(),category,now=now)
-                days.append({'date':data['edition_date'],**{k:data.get(k) for k in ('archive_state','origin','revision','total_count','matched_count','readable_count','period_state')}})
-        default=next((d['date'] for d in reversed(days) if d['readable_count']),None)
-        return {**self.metadata(now),'dates':days,'category':category,'default_date':default,'status':'ready' if any(d['archive_state']!='missing' for d in days) else 'no_archives'}
+                complete_revision=data['revision'] if complete(data) else None
+                if complete_revision is None and data['revision'] is not None:
+                    previous=db.execute('SELECT revision FROM market_daily_editions WHERE edition_date=? AND revision<? AND item_count=6 ORDER BY revision DESC',
+                        (data['edition_date'],data['revision'])).fetchall()
+                    for row in previous:
+                        old=self._read_day(db,data['edition_date'],category,now=now,revision=row['revision'])
+                        if complete(old):complete_revision=row['revision'];break
+                days.append({'date':data['edition_date'],**{k:data.get(k) for k in ('archive_state','origin','revision','total_count','matched_count','readable_count','distinct_event_count','period_state')},
+                             'complete_revision':complete_revision})
+        chosen=next((d for d in reversed(days) if d['complete_revision'] is not None),None)
+        return {**self.metadata(now),'dates':days,'category':category,
+            'default_date':chosen['date'] if chosen else None,
+            'default_revision':chosen['complete_revision'] if chosen else None,
+            'status':'ready' if any(d['archive_state']!='missing' for d in days) else 'no_archives'}
 
     def event(self, day, id, revision=None, *, now=None, expected_version=None):
         self.validate_date(day,now);revision=self.validate_revision(revision)
@@ -672,4 +769,4 @@ class DailyMarket:
         if not match:raise MarketDailyError('unknown_market_route',404)
         if match[2]:
             p=params(('revision',));return self.event(match[1],match[2],p.get('revision'),now=now)
-        p=params(('category',));return self.day(match[1],p.get('category','all'),now=now)
+        p=params(('category','revision'));return self.day(match[1],p.get('category','all'),now=now,revision=p.get('revision'))
