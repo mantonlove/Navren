@@ -1,0 +1,37 @@
+{
+  "schema": "navren.market-collector/1",
+  "status": "ROOT_AUTHORIZED_ONCE_CUTOVER_NOT_ARMED",
+  "files": {
+    "src/market_sources.py": "6203942ac2753ecab5266568efbfc4fde7df6738a469147378fa2a38954e4b0e",
+    "src/market_content.py": "dac14d20f788ec1d44ffa61ddabceca541727647eacb146787ee8c934c54ec8b",
+    "src/market_editor.py": "b60a965acf037389bfd940791cccc8a0f36209645c32ca1bd32158ed19cd0543",
+    "src/market_daily.py": "673a3d979074266b52f81bff2d28ab38952f10fa1be86738ea6f4116ab67f19b",
+    "src/market_pipeline.py": "d907809a3d74e974ee15dc6e82f6992a1618e7d0f25cf91fdfc541586184bd30",
+    "src/market_schedule.py": "1a7e54300208d3ca60202f1dd76cddf5865f83cef76c168ac030c58231eddfc5",
+    "src/market_source_attribution.py": "6ae41479f28ee05f9093d08e43e31d6f01e1ebd59af02dce1aaf58e5542383e5",
+    "src/market_semantic_checks.py": "9319d87394c252ba5118067502b6806783f9b2b5b9cc4741fec922024ba78fcd",
+    "src/market_model.py": "87ac36ed9d4ad2ad544fac4f4c2e9a8fbe2865ae32ad0267822a6a6a7cb24f0b",
+    "src/public_market_history.py": "0638bfb3f4fd375d27ee528c48d511acd368f4b11831c87c4e2bc6d10475e60b",
+    "src/js/market_ui.js": "2b144188f1e74ec83b7100780057118dfa7130ce195c32ca6f07150e3a0739c2",
+    "src/scripts/refresh_market.py": "a71c6edadb2f130421d5d5815bfb2d74cdcbcbec8c45820099ce5acaf4ff8374",
+    "src/agent_runtime/__init__.py": "890319aed11610b92c5e1d0afc8affdbd2c75ebb1635df0a850d2f1c0ffe866d",
+    "src/agent_runtime/contracts.py": "1e22cdf35513e3cbeccc8a7dc39f09430361383b24377a838d7af46163444899",
+    "src/agent_runtime/model_adapters.py": "038a28f6f74014c72190dd4cd6722c447b718881cc600d41b39fb2335c00a309",
+    "src/agent_runtime/multi_agent.py": "2d0f3c973a1eaf0609a4ac615cb88b353e7a4071e762165e28b09c7281012389",
+    "src/agent_runtime/ports.py": "e4f394030db5a77648f063b14ab498b05171306f4daf599c3d0e8f78da26e55f",
+    "src/assets/market_display.json": "cfababfaeff45d9f6030f5a36bafa1009055f4ce8126f0d56c301bf46a88eaff",
+    "src/market_statistical_identity.py": "5cf550d0fb7dc6692dea6242b8f323cd693c31487c34910e38bca7e27fdfb3ab",
+    "src/market_budget.py": "436058ece4df24750ae2a29313b7afd71d64764c8d9dabeda820fd1748b037ca"
+  },
+  "business_source_handoff_sha256": "06ea1cc75b6605e785bd9988c093b36dea61eb0fe6ec9b133f70814194c39109",
+  "authorized_schedule_followup": {
+    "owner": "规划",
+    "source": "/Volumes/YOUN/04-项目/Navren/outputs/online-market-stale-20261022/schedule-destination-publication-fix/market_schedule.py",
+    "sha256": "19bf07cb817a862612fec2d6502f6e405b274e5ca92dc42a320877240832e2fe",
+    "patch_sha256": "18907fbbed1e50701027326ed1255fa0561d319f3284a0fa79d817ce5c1282b9",
+    "new_tests_result_sha256": "adf7aae2f5f6c0b14276267ded0fc7f0995277968c43438433c2382e340b4e78",
+    "new_tests": 10,
+    "new_tests_passed": true,
+    "authorization": "Root delegation 01a10c20-1e22-7801-8897-786970fb371b; once constrained actual cutover"
+  }
+}
