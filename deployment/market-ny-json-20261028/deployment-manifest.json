@@ -3,10 +3,10 @@
   "repository": "https://github.com/mantonlove/Navren",
   "branch": "main",
   "files": {
-    "market_statistical_identity.py": "4227354bb166000aa52700be807f12519756e9e8495ef818f8b766d963ed35f3",
+    "market_statistical_identity.py": "5cf550d0fb7dc6692dea6242b8f323cd693c31487c34910e38bca7e27fdfb3ab",
     "market_model.py": "87ac36ed9d4ad2ad544fac4f4c2e9a8fbe2865ae32ad0267822a6a6a7cb24f0b",
-    "deployment/market-ny-json-20261028/collector-manifest.json": "34d18c24128609e8de3eb057b57e4c39c3a68eacbda62090de8df57fe645cad1",
-    "deployment/market-ny-json-20261028/approved-cutover.json": "214145fd189c742d5253b1e23771c595375ab7bccf36535bb0e35a4943f5f1ee"
+    "deployment/market-ny-json-20261028/collector-manifest.json": "2760ed13a050c70eedffe531b0a3066307f130895b56454e6ddf7a90c75ef7c8",
+    "deployment/market-ny-json-20261028/approved-cutover.json": "0808607d664789b5012e9300ced3620959381b741c94e6bb7a3c973b4fef5ade"
   },
   "purpose": "Source-backed New York close family de-duplication and bounded public Market JSON failure diagnostics; no collector call or daily publication implied."
 }

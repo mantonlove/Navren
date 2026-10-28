@@ -166,6 +166,42 @@ def _us_major_close_alias(event, primary, proofs):
     if (re.search(excluded, title + headline) or not re.search(focus, title)
             or not re.search(focus, headline)):
         return None
+    names = {
+        'dow': r'道琼斯工业平均指数|道指',
+        'nasdaq': r'纳斯达克综合指数|纳指',
+        'sp500': r'标准普尔500种股票指数|标普500(?:种股票)?指数',
+    }
+    close_point = r'[^。；;！？]{0,80}?(?:收于|收报|报收|报)\d{3,6}(?:\.\d+)?点'
+    # 标题和整篇原文可能是综合报道；事件事实必须自己以整体收盘为主对象。
+    source = primary.get('evidence_text')
+    if not isinstance(source, str) or not source:
+        return None
+    facts = event.get('facts')
+    if not isinstance(facts, list):
+        return None
+    individual = set()
+    for fact in facts:
+        if (not isinstance(fact, dict) or fact.get('article_id') != primary.get('id')
+                or not isinstance(fact.get('quote'), str) or fact['quote'] not in source
+                or not isinstance(fact.get('text'), str)):
+            continue
+        statement = _compact(fact.get('text'))
+        statement = re.sub(r'^据新华社纽约(?:20\d{2}年)?\d{1,2}月\d{1,2}日电[，,]?', '', statement)
+        quote = _compact(fact['quote'])
+        quoted_indices = {key for key, label in names.items()
+                          if re.search(r'(?:' + label + r')' + close_point, quote)}
+        broad_statement = re.match(r'^(?:周[一二三四五六日])?(?:纽约股市|美国股市|美股)三大股指.{0,18}?(?:收盘|收涨|收跌|上涨|下跌)', statement)
+        broad_quote = re.search(r'(?:纽约股市|美国股市|美股)三大股指.{0,18}?(?:收盘|收涨|收跌|上涨|下跌)', quote)
+        if broad_statement and (broad_quote or len(quoted_indices) >= 2):
+            break
+        for key, label in names.items():
+            if (re.match(label, statement)
+                    and re.search(r'(?:收于|收报|报收|报)\d{3,6}(?:\.\d+)?点', statement)
+                    and key in quoted_indices):
+                individual.add(key)
+    else:
+        if individual != {'dow', 'nasdaq', 'sp500'}:
+            return None
     if primary.get('first_publication_status') != 'verified_original_page':
         return None
     try:
@@ -179,11 +215,6 @@ def _us_major_close_alias(event, primary, proofs):
     # 不把无时区、日期占位或开盘前的页面时间当作纽约收盘日。
     if published.hour < 16:
         return None
-    names = {
-        'dow': r'道琼斯工业平均指数|道指',
-        'nasdaq': r'纳斯达克综合指数|纳指',
-        'sp500': r'标准普尔500种股票指数|标普500(?:种股票)?指数',
-    }
     labels = re.compile('|'.join('(?:' + value + ')' for value in names.values()))
     weekdays = '一二三四五六日'
     for original in proofs:
