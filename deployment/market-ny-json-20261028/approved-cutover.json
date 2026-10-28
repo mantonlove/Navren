@@ -1,5 +1,5 @@
 {
-  "manifest_sha256": "34d18c24128609e8de3eb057b57e4c39c3a68eacbda62090de8df57fe645cad1",
+  "manifest_sha256": "2760ed13a050c70eedffe531b0a3066307f130895b56454e6ddf7a90c75ef7c8",
   "db_path": "/var/lib/navren-market/public/market.sqlite3",
   "local_collector_disabled": true,
   "allow_paid_collection": true,
@@ -16,7 +16,7 @@
     "src/market_semantic_checks.py": "9319d87394c252ba5118067502b6806783f9b2b5b9cc4741fec922024ba78fcd",
     "src/market_model.py": "87ac36ed9d4ad2ad544fac4f4c2e9a8fbe2865ae32ad0267822a6a6a7cb24f0b",
     "src/public_market_history.py": "0638bfb3f4fd375d27ee528c48d511acd368f4b11831c87c4e2bc6d10475e60b",
-    "src/market_statistical_identity.py": "4227354bb166000aa52700be807f12519756e9e8495ef818f8b766d963ed35f3",
+    "src/market_statistical_identity.py": "5cf550d0fb7dc6692dea6242b8f323cd693c31487c34910e38bca7e27fdfb3ab",
     "src/market_budget.py": "436058ece4df24750ae2a29313b7afd71d64764c8d9dabeda820fd1748b037ca"
   },
   "activation_kind": "late_automatic_recovery_original_2026-10-22T18:30:00+08:00_not_on_time",

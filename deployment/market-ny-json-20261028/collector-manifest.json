@@ -20,7 +20,7 @@
     "src/agent_runtime/multi_agent.py": "2d0f3c973a1eaf0609a4ac615cb88b353e7a4071e762165e28b09c7281012389",
     "src/agent_runtime/ports.py": "e4f394030db5a77648f063b14ab498b05171306f4daf599c3d0e8f78da26e55f",
     "src/assets/market_display.json": "cfababfaeff45d9f6030f5a36bafa1009055f4ce8126f0d56c301bf46a88eaff",
-    "src/market_statistical_identity.py": "4227354bb166000aa52700be807f12519756e9e8495ef818f8b766d963ed35f3",
+    "src/market_statistical_identity.py": "5cf550d0fb7dc6692dea6242b8f323cd693c31487c34910e38bca7e27fdfb3ab",
     "src/market_budget.py": "436058ece4df24750ae2a29313b7afd71d64764c8d9dabeda820fd1748b037ca"
   },
   "business_source_handoff_sha256": "06ea1cc75b6605e785bd9988c093b36dea61eb0fe6ec9b133f70814194c39109",

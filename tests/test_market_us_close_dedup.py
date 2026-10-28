@@ -44,6 +44,21 @@ class USMarketCloseAliasTests(unittest.TestCase):
             'yicai-ny', 'AI交易发力美股两连阳，金银闪耀原油跳水',
             'AI交易带动美股两连阳，标普500重回7700点上方', YICAI,
             '2026-10-27T23:04:29+00:00', '第一财经')
+        self.xinhua['facts'] = [
+            {'article_id': 'xinhua-ny', 'text': '据新华社纽约10月27日电，纽约股市三大股指在27日上涨。',
+             'quote': '新华社纽约10月27日电 纽约股市三大股指27日上涨。'},
+            {'article_id': 'xinhua-ny', 'text': '道琼斯工业平均指数收于52377.57点。',
+             'quote': '道琼斯工业平均指数上涨15.99点，收于52377.57点'},
+            {'article_id': 'xinhua-ny', 'text': '标准普尔500种股票指数收于7722.60点。',
+             'quote': '标准普尔500种股票指数上涨45.83点，收于7722.60点'},
+            {'article_id': 'xinhua-ny', 'text': '纳斯达克综合指数收于26477.81点。',
+             'quote': '纳斯达克综合指数上涨308.43点，收于26477.81点'},
+        ]
+        self.yicai['facts'] = [
+            {'article_id': 'yicai-ny',
+             'text': '周二美股三大股指收涨：道指收于52377.57点、纳指收于26477.81点、标普500收于7722.60点。',
+             'quote': '截至收盘，道琼斯工业平均指数上涨15.99点，报52377.57点，纳斯达克综合指数上涨1.18%，报26477.81点，标普500指数涨0.6%，报7722.60点。'},
+        ]
 
     def test_original_day_and_three_closing_endpoints_merge_cross_source(self):
         self.assertEqual(event_aliases(self.xinhua) & event_aliases(self.yicai), {ALIAS})
@@ -67,6 +82,7 @@ class USMarketCloseAliasTests(unittest.TestCase):
             with self.subTest(title=title):
                 other = market_event(str(i), title, headline, YICAI,
                                      '2026-10-27T23:04:29+00:00', '另一来源')
+                other['facts'] = [{**fact, 'article_id': str(i)} for fact in self.yicai['facts']]
                 self.assertFalse(event_aliases(self.xinhua) & event_aliases(other))
         study = copy.deepcopy(self.yicai)
         study['headline'] = '高盛研究称半导体板块解释资产价格分化'
@@ -99,7 +115,25 @@ class USMarketCloseAliasTests(unittest.TestCase):
         self.assertNotIn(ALIAS, event_aliases(other))
         other = copy.deepcopy(self.yicai)
         other['articles'][0]['evidence_text'] = YICAI.replace('标普500指数涨0.6%，报7722.60点。', '')
+        other['facts'][0]['quote'] = other['facts'][0]['quote'].replace('，标普500指数涨0.6%，报7722.60点', '')
         self.assertNotIn(ALIAS, event_aliases(other))
+
+    def test_financing_only_fact_cannot_borrow_article_market_close(self):
+        other = copy.deepcopy(self.yicai)
+        other['headline'] = '美国银行等宣布融资，推动美股收涨'
+        other['articles'][0]['evidence_text'] += '美国银行等宣布提供630亿美元融资。'
+        other['facts'] = [{'article_id': 'yicai-ny',
+                           'text': '美国银行等宣布提供630亿美元融资，推动美股收涨。',
+                           'quote': '美国银行等宣布提供630亿美元融资。'}]
+        self.assertNotIn(ALIAS, event_aliases(other))
+        other['headline'] = self.yicai['headline']
+        other['facts'][0]['text'] = '周二美股三大股指收涨。'
+        self.assertNotIn(ALIAS, event_aliases(other))
+
+    def test_three_separate_primary_index_facts_also_bind_close(self):
+        other = copy.deepcopy(self.xinhua)
+        other['facts'] = other['facts'][1:]
+        self.assertIn(ALIAS, event_aliases(other))
 
 
 if __name__ == '__main__':
