@@ -154,6 +154,77 @@ def _market_close_alias(primary, proofs, day):
     return 'market_close:cn_ashare:' + next(iter(identities))
 
 
+def _us_major_close_alias(event, primary, proofs):
+    """同一纽约交易日的三大股指收盘；交易日与终点均取自原文。"""
+    from datetime import date, datetime
+    from zoneinfo import ZoneInfo
+
+    title = _compact(primary.get('title'))
+    headline = _compact(event.get('headline'))
+    excluded = r'盘前|早盘|午盘|盘中|预测|预计|预期|展望|回顾|复盘'
+    focus = r'纽约股市三大股指|(?:美国股市|美股)[^。；！？]{0,12}?(?:三大股指|收盘|收涨|收跌|连阳|连阴|连跌)'
+    if (re.search(excluded, title + headline) or not re.search(focus, title)
+            or not re.search(focus, headline)):
+        return None
+    if primary.get('first_publication_status') != 'verified_original_page':
+        return None
+    try:
+        published = datetime.fromisoformat(primary['original_published_at'])
+        if (published.tzinfo is None or
+                (published.hour, published.minute, published.second, published.microsecond) == (0, 0, 0, 0)):
+            return None
+        published = published.astimezone(ZoneInfo('America/New_York'))
+    except (KeyError, TypeError, ValueError):
+        return None
+    # 不把无时区、日期占位或开盘前的页面时间当作纽约收盘日。
+    if published.hour < 16:
+        return None
+    names = {
+        'dow': r'道琼斯工业平均指数|道指',
+        'nasdaq': r'纳斯达克综合指数|纳指',
+        'sp500': r'标准普尔500种股票指数|标普500(?:种股票)?指数',
+    }
+    labels = re.compile('|'.join('(?:' + value + ')' for value in names.values()))
+    weekdays = '一二三四五六日'
+    for original in proofs:
+        lead = _compact(original)[:800]
+        close = re.search(r'截至(?:当天)?收盘|当天收盘|当日收盘|收盘时', lead)
+        if not close or close.start() > 400:
+            continue
+        opening = lead[:close.start()]
+        if not re.search(r'纽约股市|美国股市|美股', opening):
+            continue
+        explicit = set()
+        for match in re.finditer(r'(?:(20\d{2})年)?(\d{1,2})月(\d{1,2})日', opening):
+            try:
+                explicit.add(date(int(match[1] or published.year), int(match[2]), int(match[3])))
+            except ValueError:
+                return None
+        mentioned_weekdays = {weekdays.index(match[1]) for match in re.finditer(
+            r'(?:纽约股市|美国股市|美股)[^。；！？]{0,20}?周([一二三四五六日])(?:上涨|下跌|收涨|收跌|收盘)', opening)}
+        if (len(explicit) > 1 or len(mentioned_weekdays) > 1
+                or explicit and explicit != {published.date()}
+                or mentioned_weekdays and mentioned_weekdays != {published.weekday()}
+                or not explicit and not mentioned_weekdays):
+            continue
+        closing = lead[close.end():close.end()+350]
+        found = list(labels.finditer(closing))
+        values = {}
+        for index, label in enumerate(found):
+            kind = next((key for key, pattern in names.items()
+                         if re.fullmatch(pattern, label[0])), None)
+            if kind is None:
+                continue
+            end = found[index+1].start() if index+1 < len(found) else len(closing)
+            clause = re.split(r'[。；;！？]', closing[label.end():end], maxsplit=1)[0]
+            value = re.search(r'(?:收于|收报|报收|报)(\d{3,6}(?:\.\d+)?)点', clause)
+            if value:
+                values.setdefault(kind, set()).add(Decimal(value[1]))
+        if set(values) == set(names) and all(len(found_values) == 1 for found_values in values.values()):
+            return 'market_close:us_major_indices:' + published.date().isoformat()
+    return None
+
+
 def _industrial_profit_release_alias(primary, proofs, day):
     """同一全国规上工业利润统计期间的原发布和解读只占一个事件。"""
     from urllib.parse import urlsplit
@@ -218,4 +289,5 @@ def source_release_aliases(event, primary):
         return set()
     return {alias for alias in (_policy_announcement_alias(primary, proofs, day),
                                _market_close_alias(primary, proofs, day),
+                               _us_major_close_alias(event, primary, proofs),
                                _industrial_profit_release_alias(primary, proofs, day)) if alias}

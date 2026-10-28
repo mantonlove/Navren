@@ -3,12 +3,14 @@ from contextvars import ContextVar
 from datetime import datetime,timezone
 from functools import wraps
 from pathlib import Path
-import json,os
+import fcntl,hashlib,json,os,re,stat
 from agent_runtime.model_adapters import OpenAICompatibleJsonClient,ModelAdapterError
 from market_budget import MarketBudgetMixin,MarketBudgetGuard,MarketBudgetError
 
 _observation=ContextVar('navren_market_model_usage',default=None)
 _run_blocks=ContextVar('navren_market_run_provider_blocks',default=None)
+_BAD_CONTENT_FILE_LIMIT=8*1024*1024
+_BAD_CONTENT_FULL_LIMIT=8*1024
 
 def market_model_session(function):
     """一次刷新内的402止损；不跨运行缓存，也不触碰其他业务客户端。"""
@@ -55,6 +57,68 @@ def _market_response_contract_diagnostic(raw):
         return 'contract_detail_unavailable'
 
 
+def _market_bad_json_content(raw):
+    """取模型的公开 Market content，不取响应其他字段或思考内容。"""
+    try:
+        envelope=json.loads(raw.decode('utf-8'))
+        content=envelope['choices'][0]['message']['content']
+        if not isinstance(content,str) or not content.strip() or len(content)>24000:return None
+        try:json.loads(content)
+        except json.JSONDecodeError as error:
+            encoded=content.encode('utf-8')
+            detail={'content_sha256':hashlib.sha256(encoded).hexdigest(),
+                    'content_utf8_bytes':len(encoded),'content_chars':len(content),
+                    'json_error_pos':error.pos,'json_error_line':error.lineno,
+                    'json_error_column':error.colno}
+            # 少数兼容层会把推理标签混进 content；这种内容只留不可逆摘要。
+            if re.search(r'<\s*/?\s*(?:think|thinking|analysis)\b|reasoning_content',content,re.I):
+                detail['content_suppressed']='possible_reasoning'
+                return detail
+            if len(encoded)<=_BAD_CONTENT_FULL_LIMIT:
+                detail['content']=content
+            else:
+                begin=max(0,error.pos-320);end=min(len(content),error.pos+320)
+                detail.update(content_truncated=True,
+                              content_head=content[:160],
+                              content_error_excerpt=content[begin:end],
+                              content_error_excerpt_start=begin,
+                              content_tail=content[-160:])
+            return detail
+    except (ValueError,UnicodeError,KeyError,IndexError,TypeError,AttributeError):
+        pass
+    return None
+
+
+def _write_market_bad_json(note,detail):
+    """只写失败的公共生成片段；单文件有界且权限固定为0600。"""
+    path=Path(os.environ.get('NAVREN_MARKET_MODEL_LOG',
+        str(Path.home()/'Library/Logs/Navren/market-model-calls.jsonl'))).with_name(
+        'market-model-invalid-content.jsonl')
+    if not path.parent.is_dir():return
+    record={key:note.get(key) for key in ('request_id','stage','provider','model_id',
+                                        'started_at','http_status','error_code')}
+    record.update(detail)
+    line=(json.dumps(record,ensure_ascii=False,separators=(',',':'))+'\n').encode('utf-8')
+    flags=(os.O_WRONLY|os.O_CREAT|os.O_APPEND|os.O_NONBLOCK
+           |getattr(os,'O_NOFOLLOW',0))
+    fd=os.open(path,flags,0o600)
+    try:
+        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        info=os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid!=os.geteuid()
+                or info.st_nlink!=1):return
+        os.fchmod(fd,0o600)
+        if info.st_size+len(line)>_BAD_CONTENT_FILE_LIMIT:return
+        view=memoryview(line)
+        while view:
+            written=os.write(fd,view)
+            if written<=0:raise OSError('market_diagnostic_write_incomplete')
+            view=view[written:]
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 class _ObservedResponse:
     def __init__(self,response):self.response=response
     def __getattr__(self,name):return getattr(self.response,name)
@@ -65,6 +129,10 @@ class _ObservedResponse:
         note=_observation.get()
         if note is not None:
             note['_response_contract_detail']=_market_response_contract_diagnostic(raw)
+            if (note.get('stage')=='market.events' and note.get('provider')=='deepseek'
+                    and note.get('model_id')=='deepseek-flash'
+                    and note['_response_contract_detail']=='content_json_invalid'):
+                note['_bad_json_content']=_market_bad_json_content(raw)
             try:
                 envelope=json.loads(raw.decode('utf-8'));usage=envelope.get('usage')
                 if isinstance(usage,dict):
@@ -114,8 +182,14 @@ class MarketJsonClient(OpenAICompatibleJsonClient):
             raise
         finally:
             detail=note.pop('_response_contract_detail',None)
+            bad_content=note.pop('_bad_json_content',None)
             if note.get('error_code')=='invalid_model_contract':
                 note['contract_diagnostic']=detail or 'contract_detail_unavailable'
+                if (detail=='content_json_invalid' and bad_content is not None
+                        and note.get('http_status')==200
+                        and re.fullmatch(r'[0-9a-f]{32}',str(request_id))):
+                    try:_write_market_bad_json(note,bad_content)
+                    except Exception:pass  # 诊断故障不能覆盖原模型拒绝
             _observation.reset(token);note['ended_at']=datetime.now(timezone.utc).isoformat();note['usage_unknown']=note['usage'] is None
             path=Path(os.environ.get('NAVREN_MARKET_MODEL_LOG',str(Path.home()/'Library/Logs/Navren/market-model-calls.jsonl')))
             path.parent.mkdir(parents=True,exist_ok=True)
