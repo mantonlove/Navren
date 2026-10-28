@@ -11,6 +11,7 @@ from market_model import market_model_session
 from market_schedule import plan
 from market_daily import DailyMarket
 from market_source_attribution import first_publication_verified
+from market_semantic_checks import old_announcement_headline_issues
 
 EDITOR_VERSION=EVENT_EDITOR_POLICY
 DAILY_HOTSPOT_COUNT=6
@@ -20,6 +21,52 @@ WEEKLY_RESERVE_SECONDS=320
 # 仅用于主动选择的受控缓存复用，不改变正常产品的复抓/发布时效合同。
 CONTROLLED_REUSE_SECONDS=10800
 CONTROLLED_REUSE_HEADROOM=95
+
+def held_old_announcement_groups(store,groups):
+    """Skip paid regeneration only for a quarantined stale selection on identical source bytes.
+
+    Draft-scope quarantines can regenerate normally. A revised article, added
+    source, or changed exact body binding removes this hold without a manual
+    reset. No publication or source row is changed here.
+    """
+    if not groups:return set()
+    with store.db() as db:
+        quarantined=db.execute('SELECT q.event_id,q.body_sha256,e.status,e.body '
+            'FROM market_editorial_quarantines q JOIN market_events e '
+            'ON e.id=q.event_id AND e.version=q.event_version').fetchall()
+        old_signatures=set()
+        for row in quarantined:
+            if (row['status']!='editorial_review_required' or
+                    hashlib.sha256(row['body'].encode()).hexdigest()!=row['body_sha256']):continue
+            try:
+                event=json.loads(row['body'])
+                bindings=event['generation']['article_bindings']
+                if not isinstance(bindings,list) or not bindings:continue
+                articles=[];signature=[]
+                for binding in bindings:
+                    aid=binding['article_id'];version=binding['version'];digest=binding['article_body_sha256']
+                    article=db.execute('SELECT body FROM market_articles WHERE id=? AND version=?',(aid,version)).fetchone()
+                    if article is None or hashlib.sha256(article['body'].encode()).hexdigest()!=digest:break
+                    articles.append(json.loads(article['body']))
+                    signature.append((aid,version,digest))
+                else:
+                    if (len({a for a,_,_ in signature})==len(signature)
+                            and old_announcement_headline_issues(event,articles)):
+                        old_signatures.add((event['id'],tuple(sorted(signature))))
+            except (KeyError,TypeError,ValueError):continue
+        if not old_signatures:return set()
+        held=set()
+        for group in groups:
+            if not any(group['id']==event_id for event_id,_ in old_signatures):continue
+            signature=[]
+            for article in group['articles']:
+                row=db.execute('SELECT body,status FROM market_articles WHERE id=? AND version=?',
+                    (article['id'],article['version'])).fetchone()
+                if row is None or row['status']!='active':break
+                signature.append((article['id'],article['version'],hashlib.sha256(row['body'].encode()).hexdigest()))
+            else:
+                if (group['id'],tuple(sorted(signature))) in old_signatures:held.add(group['id'])
+        return held
 
 class ControlledRecoveryError(ValueError):
     def __init__(self,code):self.code='controlled_recovery_'+code;super().__init__(self.code)
@@ -289,7 +336,11 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
             verified_text_bindings={tuple(sorted(e['article_versions'].items())) for e in existing.values()
                 if e['status']=='published' and e.get('content_mode')=='source_verified_text'
                 and source_verified_text_event(e,[current_articles[i] for i in e['article_ids'] if i in current_articles]) and store._event_is_reusable(e)}
-            pending=[g for g in selected if not (
+            old_announcement_holds=held_old_announcement_groups(store,selected)
+            for event_id in sorted(old_announcement_holds):
+                report['rejected'].append({'stage':'candidate_reuse','ids':[event_id],
+                    'reason':'quarantined_old_announcement_source_unchanged'})
+            pending=[g for g in selected if g['id'] not in old_announcement_holds and not (
                 (g['id'] in existing and existing[g['id']].get('input_hash')==input_hash(g) and store._event_is_reusable(existing[g['id']],input_hash(g)))
                 or tuple(sorted((a['id'],a['version']) for a in g['articles'])) in verified_text_bindings)]
             def publish_events(pending,reserve=0,until_daily_target=False):

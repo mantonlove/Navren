@@ -10,7 +10,7 @@ from market_sources import readable_article,cluster_key,evidence_readable,articl
 
 from market_source_attribution import first_publication_verified
 from market_statistical_identity import innovation_release_alias, source_release_aliases
-from market_semantic_checks import compound_announcement_issues
+from market_semantic_checks import compound_announcement_issues, old_announcement_headline_issues
 
 RULE_VERSION = 'daily-selection-v14-single-announcement-card'
 _publication_clock_scope = ContextVar('navren_daily_publication_clock_scope',default=None)
@@ -291,6 +291,10 @@ class DailyMarket:
         if selected_substory_unverified(event):return True
         versions=event.get('article_versions',{})
         if not isinstance(versions,dict):return False
+        # A source page can be first published today while the card selects a
+        # dated older announcement inside it. Apply the same narrow guard to
+        # current selection and immutable archive readback.
+        if versions and old_announcement_headline_issues(event,self.bound_articles(db,event) or []):return True
         for article in event.get('articles') or []:
             if not isinstance(article,dict) or (article.get('id')!=_UNVERIFIED_SUBSTORY_ARTICLE
                                                and article.get('url')!=_UNVERIFIED_SUBSTORY_URL):continue

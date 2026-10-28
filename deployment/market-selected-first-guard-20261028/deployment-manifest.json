@@ -1,0 +1,18 @@
+{
+  "schema": "navren.github-deployment-manifest/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "main",
+  "files": {
+    "market_semantic_checks.py": "79521411d9b3eef1868ed731f8eef3bcd1718c37acd9123975400cff19a2e025",
+    "market_daily.py": "6950d8bcf1eec84e49410942b8b2d0ac4b52f01e591bea1628830895f26e8ee1",
+    "market_pipeline.py": "b1dd0fd532b51f6cf9bf2d16f1e71a34e9a969d5e52c408614d0ffd7f72f0a95",
+    "deployment/market-selected-first-guard-20261028/collector-manifest.json": "aabfa2435a821d8a4f435b9a01847d773b2586041c10c59657df37feb8a42e25",
+    "deployment/market-selected-first-guard-20261028/approved-cutover.json": "164171d0e1661655655197b7cb8fdae873df382578ef2ec76072d44160629bbf"
+  },
+  "purpose": "Reject a selected old public announcement inside a newly published analysis page; preserve valid same-day progress and market-close reports. Reuse exact-source quarantine to avoid paid regeneration without changing the timer, historical snapshots, source text, or business data.",
+  "server_targets": {
+    "collector": "/opt/navren/market-collector/releases/market-20261022-1/src",
+    "web": "/opt/navren/releases/navren-20261022-market-cutover-1/app"
+  },
+  "current_content_moderation": "LNG event e_609c7df81c59f073faeb21ce v1 was already quarantined by native exact-body CAS; this change does not re-run collection or change source/article rows."
+}

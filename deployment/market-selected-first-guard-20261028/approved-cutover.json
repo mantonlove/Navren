@@ -1,0 +1,30 @@
+{
+  "manifest_sha256": "aabfa2435a821d8a4f435b9a01847d773b2586041c10c59657df37feb8a42e25",
+  "db_path": "/var/lib/navren-market/public/market.sqlite3",
+  "local_collector_disabled": true,
+  "allow_paid_collection": true,
+  "local_handoff_sha256": "f65228cb4e2f92a6551f93d1307fce7c7211d77cc7e4bafc748551eb5f7142ea",
+  "not_before": "2026-10-22T11:57:25.400795+00:00",
+  "web_market_contract_sha256": {
+    "src/market_sources.py": "6203942ac2753ecab5266568efbfc4fde7df6738a469147378fa2a38954e4b0e",
+    "src/market_content.py": "dac14d20f788ec1d44ffa61ddabceca541727647eacb146787ee8c934c54ec8b",
+    "src/market_editor.py": "b60a965acf037389bfd940791cccc8a0f36209645c32ca1bd32158ed19cd0543",
+    "src/market_daily.py": "6950d8bcf1eec84e49410942b8b2d0ac4b52f01e591bea1628830895f26e8ee1",
+    "src/market_pipeline.py": "b1dd0fd532b51f6cf9bf2d16f1e71a34e9a969d5e52c408614d0ffd7f72f0a95",
+    "src/market_schedule.py": "1a7e54300208d3ca60202f1dd76cddf5865f83cef76c168ac030c58231eddfc5",
+    "src/market_source_attribution.py": "6ae41479f28ee05f9093d08e43e31d6f01e1ebd59af02dce1aaf58e5542383e5",
+    "src/market_semantic_checks.py": "79521411d9b3eef1868ed731f8eef3bcd1718c37acd9123975400cff19a2e025",
+    "src/market_model.py": "87ac36ed9d4ad2ad544fac4f4c2e9a8fbe2865ae32ad0267822a6a6a7cb24f0b",
+    "src/public_market_history.py": "0638bfb3f4fd375d27ee528c48d511acd368f4b11831c87c4e2bc6d10475e60b",
+    "src/market_statistical_identity.py": "5cf550d0fb7dc6692dea6242b8f323cd693c31487c34910e38bca7e27fdfb3ab",
+    "src/market_budget.py": "436058ece4df24750ae2a29313b7afd71d64764c8d9dabeda820fd1748b037ca"
+  },
+  "activation_kind": "late_automatic_recovery_original_2026-10-22T18:30:00+08:00_not_on_time",
+  "authorization_source": "Root existing once constrained cutover and normal business remaining attempts; not paid diagnostic or registered97 budget",
+  "github_deployment": {
+    "repository": "https://github.com/mantonlove/Navren",
+    "branch": "main",
+    "commit": null,
+    "manifest_path": "deployment/market-selected-first-guard-20261028/deployment-manifest.json"
+  }
+}

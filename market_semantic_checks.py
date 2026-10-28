@@ -5,6 +5,8 @@ the existing full independent review. It neither rewrites drafts nor approves
 them, and never changes stored publications or original articles.
 """
 from decimal import Decimal
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 import re
 
 ALIASES = {'美元':'USD','欧元':'EUR','英镑':'GBP','日元':'JPY',
@@ -145,6 +147,89 @@ def equity_price_only_issues(row, articles):
 _ANNOUNCEMENT_ROUNDUP = re.compile(r'(?:早间|午间|晚间|盘后)公告|公告(?:汇总|一览|合集)|这些公告')
 _ISSUER_HEADER = re.compile(r'(?:^|[\s。；;】])(?P<issuer>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9*·-]{1,23})[：:]')
 
+# A page first published today can analyse an announcement already public days
+# earlier. This narrow rule checks the *selected action*, not the date of a
+# market close, a future delivery date, or the source page's own dateline.
+_SECONDARY_REPORT = re.compile(r'新闻分析|(?:深度|专题)分析|综述|回顾|盘点|汇编|合集|一览')
+_PUBLIC_ACTION = re.compile(r'宣布|签署|公布|披露|发布|决定|批准|获批|达成|启动|上线')
+_DATED_PUBLIC_ACTION = re.compile(
+    r'(?P<date>(?:(?P<year>20\d{2})年)?(?:(?P<month>\d{1,2})月)?(?P<day>\d{1,2})日)'
+    r'(?P<gap>[^。；;！？!?]{0,42}?)(?:宣布|签署|公布|披露|发布|决定|批准|获批|达成|启动|上线)')
+
+
+def _action_day(match, published):
+    """Infer only an unambiguous same-month day; unknown cross-month stays unknown."""
+    year = int(match['year']) if match['year'] else published.year
+    month = int(match['month']) if match['month'] else published.month
+    if not match['year'] and match['month'] and month > published.month:
+        return None
+    if not match['month'] and int(match['day']) > published.day:
+        return None
+    try:
+        return date(year, month, int(match['day']))
+    except ValueError:
+        return None
+
+
+def old_announcement_headline_issues(row, articles):
+    """Reject a secondary report that selects an explicitly old public action.
+
+    Ambiguous dates/actions fail open to the independent reviewer. This is not
+    a general first-publication classifier and never treats a prior trading
+    day or historical background alone as an old announcement.
+    """
+    headline = row.get('headline', '')
+    summary = row.get('summary', '')
+    facts = row.get('facts', [])
+    if (not isinstance(headline, str) or not isinstance(summary, str)
+            or not isinstance(facts, list)):
+        return []
+    # The first selected fact and the first summary sentence must frame the
+    # old action as the card's subject. A dated background fact later in a
+    # current-day story is insufficient to block that story.
+    first_summary = re.split(r'[。；;！？!?]', summary, maxsplit=1)[0]
+    focus = set(_PUBLIC_ACTION.findall(headline)) & set(_PUBLIC_ACTION.findall(first_summary))
+    if not focus:
+        return []
+    refs = {a.get('id'): a for a in articles if isinstance(a, dict)}
+    for fact in facts[:1]:
+        if not isinstance(fact, dict):
+            continue
+        article = refs.get(fact.get('article_id'))
+        quote = fact.get('quote')
+        title = article.get('title') if article else None
+        source = article.get('evidence_text') if article else None
+        if (not article or not isinstance(quote, str) or not isinstance(title, str)
+                or not isinstance(source, str) or not _SECONDARY_REPORT.search(title)
+                or article.get('first_publication_status') != 'verified_original_page'
+                or quote not in source):
+            continue
+        try:
+            stamp = datetime.fromisoformat(article['published_at'])
+            if stamp.tzinfo is None:
+                continue
+            published = stamp.astimezone(ZoneInfo('Asia/Shanghai')).date()
+        except (KeyError, TypeError, ValueError):
+            continue
+        for match in _DATED_PUBLIC_ACTION.finditer(quote):
+            if match['gap'].lstrip().startswith(('电', '讯')):
+                continue  # A wire dateline is not the selected action's date.
+            old = _action_day(match, published)
+            if old is None or (published - old).days < 2 or match['date'] not in first_summary:
+                continue
+            if not (focus & set(_PUBLIC_ACTION.findall(quote))):
+                continue
+            # An explicitly dated new action in selected evidence can justify
+            # another angle; absent such evidence the headline remains old.
+            if any(isinstance(other, dict) and isinstance(other.get('quote'), str)
+                   and any(not new['gap'].lstrip().startswith(('电', '讯'))
+                           and _action_day(new, published) == published for new in
+                           _DATED_PUBLIC_ACTION.finditer(other['quote'])) for other in facts):
+                continue
+            return [{'code': 'selected_old_announcement_without_new_fact',
+                     'article_id': article['id']}]
+    return []
+
 
 def _announcement_sections(article):
     """Only explicitly labelled corporate roundups with repeated issuer heads.
@@ -212,7 +297,8 @@ def compound_announcement_issues(row, articles):
 def semantic_issues(row, articles):
     """Facts are checked against their own source, never another event's body."""
     refs = {a['id']:a for a in articles}
-    issues = (evidence_scope_issues(row, articles)+equity_price_only_issues(row, articles)
+    issues = (old_announcement_headline_issues(row, articles)
+              +evidence_scope_issues(row, articles)+equity_price_only_issues(row, articles)
               +compound_announcement_issues(row, articles))
     for index, fact in enumerate(row.get('facts',[])):
         article = refs.get(fact.get('article_id'))
