@@ -9,9 +9,9 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-from .model_adapters import (DEEPSEEK_MODEL, DEEPSEEK_URL, ModelAdapterError,
+from .model_adapters import (AIPING_PRIMARY_MODEL, AIPING_URL, DEEPSEEK_MODEL, DEEPSEEK_URL, ModelAdapterError,
                              _key_from_sources, _log_call, _unique_object,
-                             _validate_official_transport, _official_urlopen)
+                             ModelRequestNotSentError, safe_local_rejection_diagnostic)
 from .request_budget import RequestBudgetError, estimate_request
 
 
@@ -27,12 +27,7 @@ class DeepSeekToolClient:
                  endpoint=DEEPSEEK_URL, env_name='DEEPSEEK_API_KEY',
                  keychain_service='CC/DEEPSEEK_API_KEY', provider='deepseek',
                  model_id=None):
-        if provider != 'deepseek' or (model_id or self.model_id) != DEEPSEEK_MODEL:
-            raise ModelAdapterError('official_native_deepseek_required',
-                                    model_id=model_id or self.model_id, attempts=0)
-        _validate_official_transport(provider=provider, model_id=model_id or self.model_id,
-            url=endpoint, env_name=env_name, keychain_service=keychain_service)
-        self.urlopen = urlopen or _official_urlopen
+        self.urlopen = urlopen or urllib.request.urlopen
         self.key_loader = key_loader or (lambda: _key_from_sources(
             env_name, keychain_service))
         self.env_name, self.keychain_service = env_name, keychain_service
@@ -41,16 +36,8 @@ class DeepSeekToolClient:
         if model_id is not None:
             self.model_id = model_id
 
-    def _validate_transport(self):
-        if self.provider != 'deepseek' or self.model_id != DEEPSEEK_MODEL:
-            raise ModelAdapterError('official_native_deepseek_required',
-                                    model_id=self.model_id, attempts=0)
-        _validate_official_transport(provider=self.provider, model_id=self.model_id,
-            url=self.endpoint, env_name=self.env_name, keychain_service=self.keychain_service)
-
     def request_payload(self, messages, tools):
         """The exact protocol body; credentials belong only to HTTP headers."""
-        self._validate_transport()
         names = {tool.get('function', {}).get('name') for tool in tools}
         final_only = bool(names) and names <= {'answer_facts', 'answer_reviewed'}
         # Closing needs a specific terminal function. Merely requiring some
@@ -81,8 +68,8 @@ class DeepSeekToolClient:
         status, outcome, code, usage = None, 'failed', 'provider_error', {}
         request_sent = False
         response_protocol = {}
+        local_rejection_diagnostic = None
         try:
-            self._validate_transport()
             if (type(remaining_seconds) not in (int, float)
                     or type(self.timeout) not in (int, float)
                     or not math.isfinite(remaining_seconds) or not math.isfinite(self.timeout)
@@ -97,12 +84,6 @@ class DeepSeekToolClient:
                         model_id=self.model_id, attempts=int(request_sent))
                 return left
             wire = self.serialized_request(messages, tools)
-            actual_payload = json.loads(wire, object_pairs_hook=_unique_object)
-            if (actual_payload.get('model') != self.model_id
-                    or actual_payload.get('thinking') != {'type': 'disabled'}
-                    or 'enable_thinking' in actual_payload or 'provider' in actual_payload):
-                code = 'official_model_payload_mismatch'
-                raise ModelAdapterError(code, model_id=self.model_id, attempts=0)
             try:
                 admission = estimate_request(wire)
             except (RequestBudgetError, OSError):
@@ -123,27 +104,36 @@ class DeepSeekToolClient:
                 code = 'request_budget_exceeded'
                 raise ModelAdapterError(code, model_id=self.model_id, attempts=0)
             remaining()
-            self._validate_transport()
             key = self.key_loader()
             if not key:
                 code = 'missing_api_key'
                 raise ModelAdapterError(code, model_id=self.model_id, attempts=0)
-            self._validate_transport()
             req = urllib.request.Request(self.endpoint, method='POST',
                 data=wire,
                 headers={'Content-Type': 'application/json', 'Authorization': 'Bearer '+key})
             # Preparation and key loading consume the caller's existing
             # allowance. urllib still applies a socket I/O timeout; this is
             # not a claim that DNS/connect/body phases share a hard deadline.
+            req._navren_request_deadline_monotonic = deadline
             request_timeout = remaining()
-            self._validate_transport()
-            _validate_official_transport(provider=self.provider, model_id=self.model_id,
-                url=req.full_url, env_name=self.env_name, keychain_service=self.keychain_service)
             request_sent = True
-            with self.urlopen(req, timeout=request_timeout) as resp:
+            try:
+                response=self.urlopen(req,timeout=request_timeout)
+            except ModelRequestNotSentError as error:
+                request_sent=False
+                error.model_id=self.model_id
+                raise
+            with response as resp:
                 status = getattr(resp, 'status', 200)
                 remaining()
                 envelope = json.loads(resp.read(512_000), object_pairs_hook=_unique_object)
+            if self.provider == 'ai_ping':
+                supplied_provider = envelope.get('provider')
+                recognized = (type(supplied_provider) is str
+                    and supplied_provider in {'硅基流动', 'SiliconFlow', 'siliconflow'})
+                response_protocol['downstream_provider_status'] = ('recognized' if recognized
+                    else 'absent' if 'provider' not in envelope else 'unrecognized')
+                response_protocol['downstream_provider'] = '硅基流动' if recognized else None
             supplied_usage = envelope.get('usage', {})
             if isinstance(supplied_usage, dict):
                 usage = {k: v for k, v in supplied_usage.items()
@@ -201,11 +191,13 @@ class DeepSeekToolClient:
             # 只保留协议字段。reasoning_content 必须按供应商协议原样续传，绝不入审计。
             result = {k: v for k, v in msg.items()
                       if k in ('role', 'content', 'tool_calls', 'reasoning_content')}
-            if not calls and (not isinstance(msg.get('content'), str) or not msg['content'].strip()):
+            if not calls and not isinstance(msg.get('content'), str):
                 raise ValueError('empty_model_response')
             outcome, code = 'completed', ''
             return result, usage
         except ModelAdapterError as error:
+            local_rejection_diagnostic=safe_local_rejection_diagnostic(error,stage='primary',wire=locals().get('wire'))
+            if local_rejection_diagnostic is not None:error.local_rejection_diagnostic=local_rejection_diagnostic
             code=error.code
             error.request_sent = request_sent
             if request_sent and error.attempts == 0:error.attempts = 1
@@ -226,7 +218,8 @@ class DeepSeekToolClient:
                        'model_id': self.model_id, 'stage': 'conversation.tools',
                        'outcome': outcome, 'duration_ms': round((time.monotonic()-started)*1000),
                        'http_status': status, 'error_code': code, 'usage': usage,
-                       'response_protocol':response_protocol}, self.log_path)
+                       'response_protocol':response_protocol,
+                       **({'local_rejection_diagnostic':local_rejection_diagnostic} if local_rejection_diagnostic is not None else {})}, self.log_path)
         error = ModelAdapterError(code, model_id=self.model_id, attempts=1, http_status=status)
         # A rejected/truncated answer still consumed the supplier's reported
         # usage. Expose only counters, never the rejected response body.
@@ -236,26 +229,48 @@ class DeepSeekToolClient:
 
 
 class AIPingToolClient(DeepSeekToolClient):
-    """兼容旧公共类名；仅使用官方 DeepSeek 原生工具协议。"""
+    """OpenAI-compatible function calling through the shared AI Ping key."""
 
-    model_id = DEEPSEEK_MODEL
+    model_id = AIPING_PRIMARY_MODEL
     metric_selection_support = True
 
     def request_payload(self, messages, tools):
-        payload = super().request_payload(messages, tools)
-        if self.supports_financial_metric_catalog:
+        if self.model_route == 'official':
+            # 复用同一原生合同和无损工具表；不携带 AiPing 专属路由字段。
+            from .primary_tool_transport import pack_primary_payload
+            return pack_primary_payload(super().request_payload(messages, tools))
+        payload = {**super().request_payload(messages,tools),'enable_thinking':False}
+        if self.model_id == AIPING_PRIMARY_MODEL:
+            # One AI Ping switch and one exact channel; no fallback or price
+            # uplift. Actual thinking/channel behavior still needs observation.
+            payload.pop('thinking')
+            payload['provider'] = {'only': ['硅基流动'], 'allow_fallbacks': False,
+                                   'effective_multiplier_range': [1, 1]}
+        if (isinstance(self, AIPingToolClient) and self.provider == 'ai_ping'
+                and self.endpoint == AIPING_URL and self.model_id == AIPING_PRIMARY_MODEL):
             from .primary_tool_transport import pack_primary_payload
             payload = pack_primary_payload(payload)
         return payload
 
     def __init__(self, *, urlopen=None, key_loader=None, timeout=105, log_path=None,
-                 model_id=None):
-        super().__init__(urlopen=urlopen, key_loader=key_loader, timeout=timeout,
-            log_path=log_path, endpoint=DEEPSEEK_URL, env_name='DEEPSEEK_API_KEY',
-            keychain_service='CC/DEEPSEEK_API_KEY', provider='deepseek',
-            model_id=model_id or self.model_id)
-        # 能力只绑定当前已支持的官方模型和传输；未知/变异配置不能取得引用能力。
+                 model_id=None, model_route='ai_ping'):
+        if model_route not in ('ai_ping', 'official'):
+            raise ValueError('invalid_model_route')
+        self.model_route = model_route
+        if model_route == 'official':
+            if model_id is not None and model_id != DEEPSEEK_MODEL:
+                raise ValueError('rag_official_primary_model_required')
+            super().__init__(urlopen=urlopen, key_loader=key_loader, timeout=timeout,
+                log_path=log_path, endpoint=DEEPSEEK_URL, env_name='DEEPSEEK_API_KEY',
+                keychain_service='CC/DEEPSEEK_API_KEY', provider='deepseek',
+                model_id=DEEPSEEK_MODEL)
+        else:
+            super().__init__(urlopen=urlopen, key_loader=key_loader, timeout=timeout,
+                log_path=log_path, endpoint=AIPING_URL, env_name='AIPING_API_KEY',
+                keychain_service='CC/AIPING_GLM_API_KEY', provider='ai_ping',
+                model_id=model_id or self.model_id)
+        # Negotiation describes this standard transport's reference format,
+        # never a new evidence/permission claim. Unknown model overrides retain
+        # the complete literal packet until their consumer is supported.
         self.supports_financial_metric_catalog = (
-            self.provider == 'deepseek' and self.endpoint == DEEPSEEK_URL
-            and self.model_id == DEEPSEEK_MODEL and self.env_name == 'DEEPSEEK_API_KEY'
-            and self.keychain_service == 'CC/DEEPSEEK_API_KEY')
+            self.model_id == (DEEPSEEK_MODEL if model_route == 'official' else AIPING_PRIMARY_MODEL))

@@ -1,4 +1,4 @@
-"""官方 DeepSeek 主顾问与 GLM 独立审核器的严格 JSON 适配层。
+"""AI Ping 主顾问与 GLM 独立审核器的严格 JSON 适配层。
 
 调用日志只保留模型、阶段、耗时、HTTP 状态和错误代码，不保存提示词、答复或密钥。
 """
@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -31,13 +32,12 @@ from .contracts import (
 
 
 DEEPSEEK_MODEL = "deepseek-flash"
-GLM_REVIEW_MODEL = "glm-5.3-flash"
-GLM_ALTERNATE_REVIEW_MODEL = "glm-4.7-flashx"
-ZHIPU_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-GLM_REASONING_OUTPUT_LIMIT = 8192
+GLM_REVIEW_MODEL = "GLM-5.3-Flash"
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 AIPING_URL = "https://aiping.cn/api/v1/chat/completions"
 AIPING_PRIMARY_MODEL = "DeepSeek-V4-Flash"
+GLM_OFFICIAL_MODEL = "glm-4.7-flashx"
+GLM_OFFICIAL_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 
 _LOG_LOCK = threading.Lock()
 
@@ -71,31 +71,53 @@ class ModelAdapterError(RuntimeError):
         self.http_status = http_status
 
 
-def _validate_official_transport(*, provider, model_id, url, env_name, keychain_service):
-    """公开配置必须精确匹配；任何凭据读取或出站之前失败关闭。"""
-    allowed = (
-        provider == "deepseek" and model_id == DEEPSEEK_MODEL
-        and url == DEEPSEEK_URL and env_name == "DEEPSEEK_API_KEY"
-        and keychain_service == "CC/DEEPSEEK_API_KEY"
-    ) or (
-        provider == "zhipu" and model_id in (GLM_REVIEW_MODEL, GLM_ALTERNATE_REVIEW_MODEL)
-        and url == ZHIPU_URL and env_name == "GLM_API_KEY"
-        and keychain_service == "CC/GLM_API_KEY"
-    )
-    if not allowed:
-        error = ModelAdapterError("official_model_transport_required", model_id=model_id, attempts=0)
-        error.request_sent = False
-        raise error
+
+class ModelRequestNotSentError(ModelAdapterError):
+    """A trusted local transport rejected before its actual upstream opener."""
+    def __init__(self):
+        super().__init__('request_rejected_before_send',model_id='not_dispatched',attempts=0)
+        self.request_sent=False
+        self.usage={}
 
 
-class _OfficialNoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None  # 官方模型请求不能重定向到其他地址。
+_LOCAL_REJECTION_CODES=frozenset({
+    'complete_wire_and_original_output_reserve_required',
+    'original_component_request_count_exceeded',
+    'component_actual_task_usage_required',
+    'component_actual_ledger_calls_required',
+    'attempt_not_human_authorized_scope',
+    'exact_official_endpoint_and_model_required',
+    'official_primary_mode_mismatch',
+    'official_GLM_full_review_mode_mismatch',
+    'AiPing_or_unregistered_provider_fields_forbidden',
+    'campaign_request_after_unknown_or_concurrent_call',
+    'campaign_duplicate_payload_key',
+    'campaign_nonfinite_payload',
+    'campaign_actual_payload_auto_route_and_model_required',
+})
 
-
-def _official_urlopen(request, **kwargs):
-    return urllib.request.build_opener(_OfficialNoRedirect()).open(request, **kwargs)
-
+def safe_local_rejection_diagnostic(error, *, stage=None, wire=None):
+    """Only a real not-sent marker and exact allowlisted cause; no exception text."""
+    if (not isinstance(error,ModelRequestNotSentError) or error.attempts!=0
+            or getattr(error,'request_sent',None)is not False):
+        return None
+    cause=error.__cause__
+    code=(cause.args[0] if type(cause)is ValueError and len(cause.args)==1
+          and type(cause.args[0])is str and cause.args[0]in _LOCAL_REJECTION_CODES
+          else 'unclassified_local_before_send')
+    result={'cause_code':code,'layer':'local_before_send','request_sent':False,'attempts':0}
+    if stage in ('primary','conversation.tools'):result['stage']='primary'
+    elif stage in ('reviewer','reviewer.conversation'):result['stage']='reviewer'
+    if type(wire)is bytes:
+        import hashlib
+        result.update(wire_bytes=len(wire),request_sha256=hashlib.sha256(wire).hexdigest())
+    else:
+        previous=getattr(error,'local_rejection_diagnostic',None)
+        if type(previous)is dict:
+            size=previous.get('wire_bytes');pin=previous.get('request_sha256')
+            if type(size)is int and size>=0 and type(pin)is str and len(pin)==64 and all(c in '0123456789abcdef'for c in pin):
+                result.update(wire_bytes=size,request_sha256=pin)
+    return result
 
 def _key_from_sources(env_name: str, keychain_service: str) -> str:
     value = os.environ.get(env_name, "").strip()
@@ -145,8 +167,6 @@ class OpenAICompatibleJsonClient:
         key_loader=None,
         log_path: str | None = None,
     ):
-        _validate_official_transport(provider=provider, model_id=model_id, url=url,
-            env_name=env_name, keychain_service=keychain_service)
         if not 0 <= max_retries <= 2:
             raise ValueError("模型重试次数只能为 0 至 2 次。")
         self.provider = provider
@@ -156,32 +176,14 @@ class OpenAICompatibleJsonClient:
         self.keychain_service = keychain_service
         self.timeout = timeout
         self.max_retries = max_retries
-        self.urlopen = urlopen or _official_urlopen
+        self.urlopen = urlopen or urllib.request.urlopen
         self.key_loader = key_loader or (lambda: _key_from_sources(env_name, keychain_service))
         self.log_path = log_path
 
-    def _validate_transport(self):
-        _validate_official_transport(provider=self.provider, model_id=self.model_id, url=self.url,
-            env_name=self.env_name, keychain_service=self.keychain_service)
-
-    def _request_payload(self, *, system: str, user: str, stage: str) -> dict:
-        """纯请求构造钩子；预估与实际请求复用同一完整协议。"""
-        payload = {
-            "model": self.model_id,
-            "messages": [{"role": "system", "content": system},
-                         {"role": "user", "content": user}],
-            "temperature": 0,
-            "max_tokens": _max_output_tokens(stage),
-            "thinking": {"type": "disabled"},
-            "response_format": {"type": "json_object"},
-        }
-        if self.provider == "zhipu" and self.model_id == GLM_REVIEW_MODEL:
-            payload.update(thinking={"type": "enabled"}, reasoning_effort="low",
-                           max_tokens=GLM_REASONING_OUTPUT_LIMIT)
-        return payload
-
     def complete_json(self, *, system: str, user: str, stage: str, request_id: str) -> dict:
         started = time.monotonic()
+        mandatory_review = stage == 'reviewer.conversation' and self.max_retries == 0
+        request_sent = False
         attempts = 0
         http_status = None
         finish_reason = None
@@ -189,34 +191,52 @@ class OpenAICompatibleJsonClient:
         error_code = "provider_error"
         exception_type = None
         review_usage = None
+        provider_error_code = None
+        local_rejection_diagnostic = None
         try:
-            self._validate_transport()
+            if mandatory_review:
+                if (type(self.timeout) not in (int, float)
+                        or not math.isfinite(self.timeout) or self.timeout <= 0):
+                    error = ModelRequestNotSentError()
+                    error.code = 'request_deadline_invalid'
+                    raise error
+                request_deadline = started + self.timeout
             key = self.key_loader()
             if not key:
                 error_code = "missing_api_key"
                 raise ModelAdapterError("missing_api_key", model_id=self.model_id, attempts=0)
-            self._validate_transport()
-            request_payload = self._request_payload(system=system, user=user, stage=stage)
-            reasoning = self.provider == "zhipu" and self.model_id == GLM_REVIEW_MODEL
-            if (request_payload.get("model") != self.model_id
-                    or request_payload.get("thinking") != {"type": "enabled" if reasoning else "disabled"}
-                    or request_payload.get("response_format") != {"type": "json_object"}
-                    or reasoning and (request_payload.get("max_tokens") != GLM_REASONING_OUTPUT_LIMIT
-                                      or request_payload.get("reasoning_effort") != "low")):
-                error_code = "official_model_payload_mismatch"
-                raise ModelAdapterError(error_code, model_id=self.model_id, attempts=0)
+            request_payload = {
+                "model": self.model_id,
+                "messages": [{"role": "system", "content": system},
+                             {"role": "user", "content": user}],
+                "temperature": 0,
+                "max_tokens": _max_output_tokens(stage),
+            }
+            if self.provider == "deepseek":
+                # Planning and synthesis are limited to supplied, precomputed evidence;
+                # disable hidden reasoning so the bounded JSON answer is not truncated.
+                request_payload["thinking"] = {"type": "disabled"}
+                request_payload["response_format"] = {"type": "json_object"}
+            elif self.provider == "ai_ping":
+                request_payload["reasoning_effort"] = "low"
+                request_payload["response_format"] = {"type": "json_object"}
+            elif self.provider == "zhipu":
+                # GLM-4.7-Flash 支持关闭思考；在原输出限额内保留严格 JSON 完整审核。
+                request_payload["thinking"] = {"type": "disabled"}
+                request_payload["response_format"] = {"type": "json_object"}
             payload = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
             request = urllib.request.Request(
                 self.url, data=payload,
                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
                 method="POST",
             )
+            if mandatory_review:
+                request._navren_request_deadline_monotonic = request_deadline
             for attempt in range(self.max_retries + 1):
+                attempts = attempt + 1
                 try:
-                    self._validate_transport()
-                    _validate_official_transport(provider=self.provider, model_id=request_payload["model"],
-                        url=request.full_url, env_name=self.env_name, keychain_service=self.keychain_service)
-                    attempts = attempt + 1
+                    if mandatory_review:
+                        request_sent = True
                     with self.urlopen(request, timeout=self.timeout) as response:
                         http_status = getattr(response, "status", 200)
                         raw = response.read(256_000)
@@ -253,13 +273,36 @@ class OpenAICompatibleJsonClient:
                     return parsed
                 except urllib.error.HTTPError as error:
                     http_status = error.code
+                    if self.provider == "zhipu":
+                        # Only a bounded ASCII numeric code is retained. At the
+                        # read limit the body may be incomplete: keep it unknown.
+                        try:
+                            error_body = error.read(8192)
+                            if isinstance(error_body, bytes) and len(error_body) < 8192:
+                                error_envelope = json.loads(error_body.decode("utf-8"),
+                                    object_pairs_hook=_unique_object)
+                                provider_error = (error_envelope.get("error")
+                                    if isinstance(error_envelope, dict) else None)
+                                raw_code = (provider_error.get("code")
+                                    if isinstance(provider_error, dict) else None)
+                                code_text = (str(raw_code) if type(raw_code) is int
+                                    else raw_code if isinstance(raw_code, str) else None)
+                                if isinstance(code_text, str) and re.fullmatch(r"[0-9]{1,8}", code_text):
+                                    provider_error_code = code_text
+                        except Exception:
+                            # No body, message, headers, hashes or usage inferred
+                            # from an error response are persisted or accepted.
+                            pass
                     retryable = error.code in (408, 409, 425, 429) or error.code >= 500
                     if retryable and attempt < self.max_retries:
                         time.sleep(min(0.25 * (attempt + 1), 0.5))
                         continue
                     error_code = "provider_http_error"
-                    raise ModelAdapterError(error_code, model_id=self.model_id,
-                                            attempts=attempts, http_status=http_status) from None
+                    failure = ModelAdapterError(error_code, model_id=self.model_id,
+                                                attempts=attempts, http_status=http_status)
+                    if provider_error_code is not None:
+                        failure.provider_error_code = provider_error_code
+                    raise failure from None
                 except (urllib.error.URLError, TimeoutError, OSError) as error:
                     if attempt < self.max_retries:
                         time.sleep(min(0.25 * (attempt + 1), 0.5))
@@ -277,7 +320,20 @@ class OpenAICompatibleJsonClient:
             raise ModelAdapterError(error_code, model_id=self.model_id, attempts=attempts,
                                     http_status=http_status)
         except ModelAdapterError as error:
-            error_code = error.code
+            if mandatory_review and isinstance(error, ModelRequestNotSentError):
+                request_sent = False
+                attempts = 0
+                error_code = error.code
+                review_usage = {}
+                error.model_id = self.model_id
+                error.request_sent = False
+                error.attempts = 0
+                error.usage = {}
+            local_rejection_diagnostic=safe_local_rejection_diagnostic(error,stage=stage,wire=locals().get('payload'))
+            if local_rejection_diagnostic is not None:
+                error.local_rejection_diagnostic=local_rejection_diagnostic
+                error_code=error.code
+                attempts=0
             raise
         except Exception as error:
             # Keep unexpected library/provider shape failures diagnosable without
@@ -296,11 +352,14 @@ class OpenAICompatibleJsonClient:
                 "outcome": outcome,
                 "duration_ms": max(0, round((time.monotonic() - started) * 1000)),
                 "attempts": attempts,
+                **({'request_sent': request_sent} if mandatory_review else {}),
                 "http_status": http_status,
                 "finish_reason": finish_reason,
                 "error_code": error_code,
                 "exception_type": exception_type,
                 **({"usage": review_usage} if review_usage is not None else {}),
+                **({"provider_error_code": provider_error_code} if provider_error_code is not None else {}),
+                **({"local_rejection_diagnostic":local_rejection_diagnostic} if local_rejection_diagnostic is not None else {}),
             }, self.log_path)
 
 
@@ -326,13 +385,13 @@ def _max_output_tokens(stage: str) -> int:
 
 
 class AIPingCashflowSupervisor:
-    """兼容旧类名；资金流主模型仅使用官方 DeepSeek。"""
-    model_id = DEEPSEEK_MODEL
+    """资金流主模型经 AI Ping 统一路由，不读取官方 DeepSeek 凭据。"""
+    model_id = AIPING_PRIMARY_MODEL
 
     def __init__(self, client: OpenAICompatibleJsonClient | None = None):
         self.client = client or OpenAICompatibleJsonClient(
-            provider="deepseek", model_id=DEEPSEEK_MODEL, url=DEEPSEEK_URL,
-            env_name="DEEPSEEK_API_KEY", keychain_service="CC/DEEPSEEK_API_KEY",
+            provider="ai_ping", model_id=AIPING_PRIMARY_MODEL, url=AIPING_URL,
+            env_name="AIPING_API_KEY", keychain_service="CC/AIPING_GLM_API_KEY",
         )
 
     def route(self, request, agent_catalog) -> RoutePlan:
@@ -436,24 +495,19 @@ class AIPingCashflowSupervisor:
         return _parse_advice_draft(response)
 
 
-# Compatibility alias for old imports. Both names now use official DeepSeek.
+# Compatibility alias for old imports. The class now uses AI Ping defaults.
 DeepSeekCashflowSupervisor = AIPingCashflowSupervisor
 
 
 class AIPingCashflowReviewer:
-    """兼容旧类名；独立审核仅使用官方 GLM。"""
     model_id = GLM_REVIEW_MODEL
-    output_token_limit = GLM_REASONING_OUTPUT_LIMIT
 
     def __init__(self, client: OpenAICompatibleJsonClient | None = None):
         self.client = client or OpenAICompatibleJsonClient(
-            provider="zhipu", model_id=GLM_REVIEW_MODEL, url=ZHIPU_URL,
-            env_name="GLM_API_KEY", keychain_service="CC/GLM_API_KEY",
+            provider="ai_ping", model_id=GLM_REVIEW_MODEL, url=AIPING_URL,
+            env_name="AIPING_API_KEY", keychain_service="CC/AIPING_GLM_API_KEY",
             timeout=40, max_retries=0,
         )
-        self.model_id = self.client.model_id
-        self.output_token_limit = self.client._request_payload(
-            system='', user='', stage='reviewer.review')['max_tokens']
 
     def review(self, request, outputs, final_draft) -> ReviewDecision:
         allowed_ids = {item.evidence_id for item in request.evidence}

@@ -1,0 +1,16 @@
+{
+  "schema": "navren.deployment-manifest/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "codex/agent-sandbox-six-candidate-20261029",
+  "files": {
+    "agent_runtime/operation_claims.py": "d86e6371c0393b4829aeb83acee56f7366d3ff6d463bdf6384406f86053972fd",
+    "agent_runtime/typed_statistics.py": "d9b902ff9dd572ac36b1addebd1035d1c3173bf76630f37fbc21ef54acc43472",
+    "agent_runtime/data_boundary.py": "e88919560b77527b7a132e19d02868b8457c47688bf9b8b6ced2d6a65881523f",
+    "agent_runtime/native_client.py": "3eee2399de6a46cecb9d30340430998e1cc6fbac6c393029cb162d3d9ef94c90",
+    "agent_runtime/model_adapters.py": "5afddf3faa8324126f1ca3c1bc113896c934cee2cf60ee10f68ddaa971c42110",
+    "agent_runtime/conversation.py": "c89feacf38d0bc1d68978fef4c35695f4c6887d0dc5541829a8ce0b3f1e159e4"
+  },
+  "acceptance_status": "pending_original_S05_full_GLM_chain",
+  "formal_adoption_allowed": false,
+  "scope": "Candidate code synchronization only; real GLM timeout remains open. No server or current source changed."
+}
