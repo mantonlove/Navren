@@ -1,0 +1,15 @@
+{
+  "schema": "navren.agent-R05-static-deployment/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "codex/r05-explicit-funding-account-20261028",
+  "files": {
+    "js/bank_ui.js": "b132be99c8875571a58608046d4a031effb8d316239834d1f3b86ef63b5e7919"
+  },
+  "prior_live_file_sha256": "15931cceb56c240c0f373bddec639041b79598e2f6fa81ec04c17ee712fdd7e6",
+  "scope": "Preserve the already adopted local bank_ui baseline; add explicit same-workspace same-currency purchase funding selection in amountForm and remove mainAccount default from recommendation purchase.",
+  "new_R05_diff_sha256": "263498497ace0804a834a6c97ae8ca617a8c237774d54ab44fa82142c52e7441",
+  "existing_live_baseline_is_not_claimed_as_new_R05_work": true,
+  "financial_rules_changed": false,
+  "backend_or_model_changed": false,
+  "real_R05_accepted": false
+}
