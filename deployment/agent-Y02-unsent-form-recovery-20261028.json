@@ -1,0 +1,10 @@
+{
+  "branch": "codex/agent-nonpersonal-acceptance-20261028",
+  "business_accepted": false,
+  "files": {
+    "js/account.js": "f268d8bb61751226bcc2ffc56ed3e05599c9a785cbb9d259dcaaf74d28c6b186"
+  },
+  "repository": "https://github.com/mantonlove/Navren",
+  "schema": "navren.deployment-manifest/1",
+  "scope": "preserve same identity unsent manual simulation form on ordinary redraw; changed version requires new consent"
+}

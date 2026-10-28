@@ -5,9 +5,9 @@ let accountFormWorkspace=null;
 let manualSimulationPending=null;
 function markAccountFormDirty(event){const form=event.target.closest?.('form');if(form&&document.body.dataset.page==='account'&&!form.closest('#bankReports')&&(form.closest('#accountLegacyViews')||form.closest('#accountSubview')||form.closest('#accountHome'))){form.dataset.navrenDirty='true';if(event.isTrusted)delete form.querySelector('[type=submit]')?.dataset.operationId;}}
 document.addEventListener('input',markAccountFormDirty);document.addEventListener('change',markAccountFormDirty);
-window.addEventListener('navren:privacy-reset',()=>{accountFormWorkspace=null;manualSimulationPending=null;document.querySelectorAll('#accountLegacyViews form,#accountSubview form,#accountHome form').forEach(form=>{form.reset();delete form.dataset.navrenDirty;});});
+window.addEventListener('navren:privacy-reset',()=>{accountFormWorkspace=null;manualSimulationPending=null;discardManualUnsentForm();document.querySelectorAll('#accountLegacyViews form,#accountSubview form,#accountHome form').forEach(form=>{form.reset();delete form.dataset.navrenDirty;});});
 for(const event of ['navren:identity-revoked','navren:account-switched','navren:bank-session-revoked'])
-  window.addEventListener(event,()=>{manualSimulationPending=null;});
+  window.addEventListener(event,()=>{manualSimulationPending=null;discardManualUnsentForm();});
 window.addEventListener('beforeunload',event=>{
   if(manualSimulationPending&&['sending','unknown'].includes(manualSimulationPending.phase)){event.preventDefault();event.returnValue='';}
 });
@@ -34,7 +34,8 @@ window.addEventListener('navren:bank-session-revoked',()=>{
   }
 });
 function renderAccount(s,products) {
-  if(s.workspace_id!==B.identity()?.workspace_id)return;
+  if(s.workspace_id!==B.identity()?.workspace_id){discardManualUnsentForm();return;}
+  const manualDraft=captureManualUnsentForm(s);
   const formRoots=['bankTransfers','bankOrchestration'];const savedForms=accountFormWorkspace===s.workspace_id?formRoots.flatMap(id=>[...document.getElementById(id).querySelectorAll('form')].map((form,index)=>({id,index,dirty:form.dataset.navrenDirty==='true',operation_id:form.querySelector('[type=submit]')?.dataset.operationId,fields:[...form.querySelectorAll('input,select,textarea')].map(input=>({type:input.type,value:input.value,checked:input.checked}))}))).filter(x=>x.dirty||x.operation_id):[];accountFormWorkspace=s.workspace_id;
   const accounts=U.panel('账户与负债');
   accounts.append(U.table(['账户','已结算现金'],s.accounts.map(a=>[a.name,B.money(a.balance_minor)])));
@@ -53,7 +54,15 @@ function renderAccount(s,products) {
     p.append(redeem,U.note('赎回按已解锁批次处理；到账延迟 '+product.redemption_delay_days+' 个业务自然日。'));holdings.append(p);
   }
   if(!holdings.children.length)holdings.append(U.note('暂无持仓。'));
-  renderTransfers(s);renderOrchestration(s);renderCards(s);renderMandates(s);renderOperations(s,products);for(const saved of savedForms){const form=document.getElementById(saved.id).querySelectorAll('form')[saved.index];if(!form)continue;const inputs=[...form.querySelectorAll('input,select,textarea')];saved.fields.forEach((field,index)=>{const input=inputs[index];if(input&&input.type===field.type&&!['password','file','hidden'].includes(input.type)){input.value=field.value;if(input.type==='checkbox')input.checked=field.checked;input.dispatchEvent(new Event('change'));}});if(saved.dirty)form.dataset.navrenDirty='true';else delete form.dataset.navrenDirty;const trigger=form.querySelector('[type=submit]');if(trigger&&saved.operation_id)trigger.dataset.operationId=saved.operation_id;}window.dispatchEvent(new CustomEvent('navren:account-rendered',{detail:{state:s,products}}));
+  renderTransfers(s);renderOrchestration(s);renderCards(s);renderMandates(s,null,null,manualDraft);renderOperations(s,products);for(const saved of savedForms){const form=document.getElementById(saved.id).querySelectorAll('form')[saved.index];if(!form)continue;const inputs=[...form.querySelectorAll('input,select,textarea')];saved.fields.forEach((field,index)=>{const input=inputs[index];if(input&&input.type===field.type&&!['password','file','hidden'].includes(input.type)){input.value=field.value;if(input.type==='checkbox')input.checked=field.checked;input.dispatchEvent(new Event('change'));}});if(saved.dirty)form.dataset.navrenDirty='true';else delete form.dataset.navrenDirty;const trigger=form.querySelector('[type=submit]');if(trigger&&saved.operation_id)trigger.dataset.operationId=saved.operation_id;}window.dispatchEvent(new CustomEvent('navren:account-rendered',{detail:{state:s,products}}));
+}
+
+function discardManualUnsentForm(){document.getElementById('bankMandates')?.querySelector('form[data-navren-manual-unsent="true"]')?.remove();}
+function captureManualUnsentForm(s){
+  const form=document.getElementById('bankMandates')?.querySelector('form[data-navren-manual-unsent="true"]'),draft=form?._navrenManualUnsent,identity=B.identity();
+  if(manualSimulationPending||!draft||!identity||!draft.guard.valid()||draft.owner!==identity.registered_user_id||draft.account!==identity.account_id||draft.workspace!==identity.workspace_id||draft.workspace!==s.workspace_id||draft.privacy!==identity.privacy_revision)return null;
+  const fields=draft.fields,versionChanged=draft.version!==s.version;
+  return {account_id:fields.payer.value,merchant:fields.merchant.value,plan_name:fields.plan.value,amount:fields.amount.value,cycle:fields.cycle.value,next:fields.next.value,consent:!versionChanged&&fields.consent.checked,review:versionChanged||draft.review&&!fields.consent.checked};
 }
 
 function labeledInput(label,type,value) {
@@ -331,7 +340,7 @@ function manualRegistrationRecovery(p){
   }
   return panel;
 }
-function renderMandates(s,prefill=null,restore=null) {
+function renderMandates(s,prefill=null,restore=null,unsent=null) {
   const root=document.getElementById('bankMandates'), p=U.panel('银行代扣授权');
   p.append(U.note('银行代扣授权与商户订阅合同分开管理。取消商户订阅记录不会自动关闭银行授权；关闭银行授权也不会取消商户合同。'));
   const register=U.button('登记本机模拟订阅',()=>{
@@ -346,6 +355,8 @@ function renderMandates(s,prefill=null,restore=null) {
     const consentLabel=U.node('label',undefined,'bank-check'),consent=U.node('input');consent.type='checkbox';consent.required=true;
     consentLabel.append(consent,U.node('span','我确认这是本人填写的本机模拟记录，不代表真实商户合同或银行授权。'));
     if(prefill){payer.select.value=prefill.account_id;merchant.input.value=prefill.merchant;plan.input.value=prefill.plan_name;amount.input.value=String(prefill.amount_minor/100);cycle.value=prefill.cycle;next.input.value=prefill.next_renewal_on;}
+    if(unsent){payer.select.value=unsent.account_id;merchant.input.value=unsent.merchant;plan.input.value=unsent.plan_name;amount.input.value=unsent.amount;cycle.value=unsent.cycle;next.input.value=unsent.next;consent.checked=unsent.consent;if(unsent.review)error.textContent='账户版本已变化，请重新核对登记内容并再次确认。';}
+    if(!restore){const identity=B.identity();form.dataset.navrenManualUnsent='true';form._navrenManualUnsent={guard,owner:identity?.registered_user_id,account:identity?.account_id,workspace,privacy:identity?.privacy_revision,version:s.version,review:!!unsent?.review,fields:{payer:payer.select,merchant:merchant.input,plan:plan.input,amount:amount.input,cycle,next:next.input,consent}};}
     const submit=U.button('登记模拟记录',null,true);submit.type='submit';
     form.append(payer.wrap,merchant.wrap,plan.wrap,amount.wrap,cycleLabel,next.wrap,consentLabel,submit,error);p.append(form);register.disabled=true;
     const key=restore?.reference?.key||B.key();
@@ -399,7 +410,7 @@ function renderMandates(s,prefill=null,restore=null) {
   }
   p.append(U.button('核查周期扣费线索',()=>NavrenViews.open('statements',{source_scope:'simulation',filters:{report_tab:'analysis'}})));
   root.replaceChildren(p);
-  if(prefill&&!manualSimulationPending||restore&&manualSimulationPending===restore&&restore.phase==='restore_form')register.onclick();
+  if((prefill||unsent)&&!manualSimulationPending||restore&&manualSimulationPending===restore&&restore.phase==='restore_form')register.onclick();
 }
 function renderOperations(s,products) {
   const root=document.getElementById('bankOrders'), p=U.panel('订单与操作记录');
