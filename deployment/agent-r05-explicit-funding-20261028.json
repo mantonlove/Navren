@@ -1,15 +1,17 @@
 {
-  "schema": "navren.agent-R05-static-deployment/1",
+  "schema": "navren.agent-R01-R05-static-deployment/1",
   "repository": "https://github.com/mantonlove/Navren",
   "branch": "codex/r05-explicit-funding-account-20261028",
   "files": {
-    "js/bank_ui.js": "b132be99c8875571a58608046d4a031effb8d316239834d1f3b86ef63b5e7919"
+    "js/bank_ui.js": "d89590167572cab349510e52f8e280797c25ad8a4672456e3b2c02c82831ad1e"
   },
   "prior_live_file_sha256": "15931cceb56c240c0f373bddec639041b79598e2f6fa81ec04c17ee712fdd7e6",
-  "scope": "Preserve the already adopted local bank_ui baseline; add explicit same-workspace same-currency purchase funding selection in amountForm and remove mainAccount default from recommendation purchase.",
-  "new_R05_diff_sha256": "263498497ace0804a834a6c97ae8ca617a8c237774d54ab44fa82142c52e7441",
-  "existing_live_baseline_is_not_claimed_as_new_R05_work": true,
-  "financial_rules_changed": false,
-  "backend_or_model_changed": false,
-  "real_R05_accepted": false
+  "scope": "Preserve existing UI baseline and R05 funding choice; add human atomic cancellation-return for expired ordinary transfer forms, adjacent SMS status, and form preservation.",
+  "new_expiry_boundaries_reused": 10,
+  "new_dirty_preservation_delta": 1,
+  "previous_R05_checks_reused": 8,
+  "backend_and_financial_rules_unchanged": true,
+  "MFA_and_5min_expiry_unchanged": true,
+  "SMS_or_final_confirmation_automated": false,
+  "real_R01_or_R05_accepted": false
 }

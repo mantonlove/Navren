@@ -484,19 +484,23 @@ window.BankUI = (() => {
     return {message:reasonMessage||({SMS_CODE_INVALID:'请输入六位短信验证码。',SMS_VERIFICATION_FAILED:'验证码未通过验证，请检查或重新获取。',SMS_CHALLENGE_INVALID:'本次短信验证码已失效，请等待冷却结束后重新发送。',FINANCIAL_WRITE_LOCKED:'金融安全锁已生效，此操作暂不能执行。'})[code]||error?.message||'操作未完成，请查询原操作状态。',
       retryChallenge:code==='SMS_VERIFICATION_FAILED'&&typedMeta&&meta.reason_code==='SMS_CODE_REJECTED'&&meta.same_challenge_retry===true};
   }
-  function operationVerification(form,view,{isCurrent=()=>form.isConnected,isBusy=()=>false,onError=()=>{},onChange=()=>{}}={}) {
+  function operationVerification(form,view,{isCurrent=()=>form.isConnected,isBusy=()=>false,onError=()=>{},onChange=()=>{},onExpiredReturn=null,canExpiredReturn=()=>true}={}) {
     const id=view.operation?.id,permission=view.operation?.permission,summary=view.operation?.confirmation_digest;
     let currentView=view,challenge=null,timer=null,sending=false,disposed=false,resendAt=0,sendState='idle';
     const red=permission==='red'||view.verification_required===true;
     const info=note(''),row=node('div',undefined,'bank-actions');
+    info.setAttribute('role','status');info.setAttribute('aria-live','polite');
     let pin=null,region=null;
     const valid=()=>!disposed&&isCurrent();
     const now=()=>Date.now()/1000;
     const operationLive=()=>currentView.operation?.id===id&&currentView.operation?.confirmation_digest===summary&&
       currentView.operation?.version===view.operation?.version&&currentView.operation?.permission===permission&&
       currentView.operation?.state==='pending_confirmation'&&Number.isFinite(currentView.operation?.expires_at)&&now()<currentView.operation.expires_at;
+    const expired=()=>currentView.operation?.id===id&&currentView.operation?.confirmation_digest===summary&&
+      currentView.operation?.version===view.operation?.version&&currentView.operation?.permission===permission&&
+      currentView.operation?.state==='pending_confirmation'&&Number.isFinite(currentView.operation?.expires_at)&&now()>=currentView.operation.expires_at;
     const security=()=>{
-      if(!operationLive())return {blocked:true,reason:'操作已过期或状态已变化，请重新准备。'};
+      if(!operationLive())return {blocked:true,reason:expired()?'确认卡已过期，请取消旧卡后重新准备。':'操作状态已变化，请重新核对。'};
       const status=currentView.strong_verification;
       if(status&&(status.operation_id!==id||status.grade!==(red?'red':permission)||typeof status.financial_write_locked!=='boolean'))
         return {blocked:true,reason:'操作验证资料尚未核对，此操作暂不能确认。'};
@@ -519,7 +523,8 @@ window.BankUI = (() => {
       send.disabled=isBusy()||sending||status.blocked||wait>0;
       send.textContent=wait>0?'重新发送短信验证码（'+wait+'秒）':'发送短信验证码';
       if(pin)pin.disabled=isBusy()||status.blocked||sending;
-      info.textContent=status.reason||(sending?'正在发送短信验证码…':liveChallenge()?
+      if(returnButton){returnButton.hidden=!expired();returnButton.disabled=isBusy()||sending||!valid()||!canExpiredReturn();}
+      info.textContent=status.reason?(status.reason+(sending?' 短信请求尚未结束。':isBusy()?' 操作正在处理或状态待核。':'')):(sending?'正在发送短信验证码…':isBusy()?'操作正在处理或状态待核，请稍候。':liveChallenge()?
         (sendState==='rate_limited'?'发送较频繁，上一条验证码仍有效，可继续填写并确认。':'短信已发送，有效至 '+new Date(challenge.expires_at*1000).toLocaleTimeString('zh-CN')+'。'):
         sendState==='rate_limited'?'发送较频繁，请等待重发冷却结束后重试。':
         sendState==='failed'?'短信发送未确认，请等待重发冷却结束后重试。':!red?'':'请发送短信验证码后确认。');
@@ -548,17 +553,21 @@ window.BankUI = (() => {
       }
       finally{sending=false;if(valid())refresh();}
     });
+    const returnButton=typeof onExpiredReturn==='function'?button('取消旧确认卡并返回重新填写',()=>{
+      if(!valid()||isBusy()||sending||!expired()||!canExpiredReturn())return;
+      return onExpiredReturn();
+    }):null;
     if(red){
       region=node('section',undefined,'bank-operation-verification');
-      region.append(node('h3','短信验证'));row.append(send);region.append(row);
+      region.append(node('h3','短信验证'));row.append(send,info);if(returnButton)row.append(returnButton);region.append(row);
       pin=field(region,'短信验证码','password');pin.inputMode='numeric';pin.pattern='[0-9]{6}';pin.maxLength=6;pin.required=true;
       pin.autocomplete='one-time-code';pin.setAttribute('aria-label','短信验证码');pin.addEventListener('input',()=>onChange());
-      region.append(info);form.prepend(region);
+      form.prepend(region);
     }else if(security().blocked)form.append(info);
     // refresh 的回调由调用方在完整表单建立后首次触发。
     send.disabled=security().blocked;if(pin)pin.disabled=security().blocked;info.textContent=security().reason||(red?'请发送短信验证码后确认。':'');
     return {
-      red,reason:()=>security().reason||'',blocked:()=>security().blocked,
+      red,reason:()=>security().reason||'',blocked:()=>security().blocked,isSending:()=>sending,
       canConfirm:()=>!disposed&&!isBusy()&&!sending&&!security().blocked&&(!red||!!liveChallenge()&&/^[0-9]{6}$/.test(pin.value)),
       payload(){if(!this.canConfirm())throw Error(security().reason||'请重新发送短信并填写六位验证码。');return red?{challenge_id:challenge.challenge_id,verification_code:pin.value}:{};},
       update(next,{preserveChallenge=false}={}){
@@ -706,47 +715,69 @@ window.BankUI = (() => {
       '我已核对对象、金额及资金约束，确认执行上述账户操作。';
     const consent=context.reject===true?null:check(form,consentText);
     const submit=button('确认执行',null,true); submit.type='submit';
-    const cancel=button('取消操作',async()=>{
-      if(busy||!isCurrent())return; busy=true; cancel.disabled=true;pendingWrites.add(op.id);
+    async function cancelOperation(returnToForm=false){
+      const returnForm=returnToForm?trigger?.form:null;
+      if(busy||!isCurrent()||returnToForm&&(stateUnknown||verification?.isSending()||pendingWrites.has(op.id)||
+        !trigger?.isConnected||!returnForm?.isConnected||trigger.dataset.operationId!==op.id||
+        !Number.isFinite(op.expires_at)||Date.now()/1000<op.expires_at))return;
+      busy=true; cancel.disabled=true;pendingWrites.add(op.id);if(returnToForm)verification?.refresh();
       try {
         const cancelled=await B.post('/operations/'+op.id+'/cancel',{});
         if(!isCurrent()){abort();return;}
         if(cancelled?.id!==op.id||cancelled.state!=='cancelled')throw Error('尚未取得同一操作的取消回执。');
+        if(returnToForm){
+          if(trigger.isConnected&&returnForm.isConnected&&trigger.form===returnForm&&returnForm.closest('#bankTransfers')&&trigger.dataset.operationId===op.id){
+            delete trigger.dataset.operationId;delete trigger.dataset.bankOperationState;delete trigger.dataset.bankOperationVersion;
+            returnForm.dataset.navrenDirty='true';
+          d.finish();trigger.focus();return;
+          }
+          form.remove();error.textContent='旧确认卡已取消，原转账表单已变化，请重新打开转账页面。';
+          recovery.replaceChildren();recovery.hidden=true;stateUnknown=false;receipt(cancelled,content,null);return;
+        }
         form.remove(); error.textContent=''; recovery.replaceChildren(); recovery.hidden=true; stateUnknown=false;
         receipt(cancelled,content,trigger);
       }
-      catch(e){if(isCurrent()){error.textContent=e.message+'\n正在核验操作状态…';await queryOperationState();}}
-      finally {pendingWrites.delete(op.id);if(dialog===d)busy=false;if(isCurrent()&&!stateUnknown)cancel.disabled=false;}
-    });
+      catch(e){if(isCurrent()){error.textContent=e.message+'\n正在核验操作状态…';await queryOperationState({expiredReturnFailure:returnToForm,protectedReturnForm:returnToForm?returnForm:null});}}
+      finally {pendingWrites.delete(op.id);if(dialog===d)busy=false;if(isCurrent()&&!stateUnknown)cancel.disabled=false;if(returnToForm&&isCurrent())verification?.refresh();}
+    }
+    const cancel=button('取消操作',()=>cancelOperation());
     const row=node('div',undefined,'bank-actions'); row.append(cancel);if(context.reject!==true)row.append(submit);form.append(row);
     const recovery=node('div',undefined,'bank-actions'); recovery.hidden=true;
     let stateUnknown=false;
     const termsMissing=(op.action==='apply_card'&&op.payload.requested_type==='virtual'&&!virtualCardTerms(view))||(op.action==='transfer'&&!Object.hasOwn(op.payload,'remittance')&&!ordinaryTransferTerms(view));
-    const verification=context.reject===true?null:operationVerification(form,view,{isCurrent,isBusy:()=>busy||stateUnknown,onError:e=>{error.textContent=operationVerificationError(e).message;},onChange:()=>refreshControls()});
+    const originalTransferForm=trigger?.form;
+    const canReturnToTransfer=context.reject!==true&&op.action==='transfer'&&!Object.hasOwn(op.payload,'remittance')&&
+      trigger?.dataset.agentOperation!=='true'&&trigger?.type==='submit'&&!!originalTransferForm?.closest('#bankTransfers')&&trigger.dataset.operationId===op.id;
+    const returnTargetCurrent=()=>!pendingWrites.has(op.id)&&trigger?.isConnected&&originalTransferForm?.isConnected&&
+      trigger.form===originalTransferForm&&!!originalTransferForm.closest('#bankTransfers')&&trigger.dataset.operationId===op.id;
+    const verification=context.reject===true?null:operationVerification(form,view,{isCurrent,isBusy:()=>busy||stateUnknown,onError:e=>{error.textContent=operationVerificationError(e).message;},onChange:()=>refreshControls(),
+      onExpiredReturn:canReturnToTransfer?()=>cancelOperation(true):null,canExpiredReturn:returnTargetCurrent});
     const finishConfirmation=d.finish;d.finish=()=>{verification?.dispose();finishConfirmation();};
     function refreshControls(){submit.disabled=busy||stateUnknown||termsMissing||!!verification&&!verification.canConfirm()||!!consent&&!consent.checked;cancel.disabled=busy||stateUnknown;}
     consent?.addEventListener('change',refreshControls);
     verification?.refresh();
     refreshControls();
-    async function queryOperationState({confirmationError='',preserveChallenge=false}={}) {
+    async function queryOperationState({confirmationError='',preserveChallenge=false,expiredReturnFailure=false,protectedReturnForm=null}={}) {
       if(!isCurrent())return;
       try {
         const current=await B.get('/operations/'+op.id), state=current.operation.state;
         if(!isCurrent()){abort();return;}
         if(current.operation.id!==op.id)throw Error('操作回执对象不一致。');
+        const receiptTrigger=protectedReturnForm&&!(trigger?.isConnected&&protectedReturnForm.isConnected&&
+          trigger.form===protectedReturnForm&&protectedReturnForm.closest('#bankTransfers')&&trigger.dataset.operationId===op.id)?null:trigger;
         if(context.reject===true&&String(current.operation.version)!==String(op.version))throw Error('操作版本已变化，不能继续取消旧草案。');
         d.dataset.operationState=state;
         recovery.replaceChildren(); recovery.hidden=true;
         stateUnknown=false;
         if(['succeeded','pending_settlement','settled'].includes(state)) {
-          form.remove(); receipt(current.operation,content,trigger); error.textContent='已重新查询并核实执行回执。'; emitChange();
+          form.remove(); receipt(current.operation,content,receiptTrigger); error.textContent='已重新查询并核实执行回执。'; emitChange();
         } else if(state==='pending_confirmation') {
           const retained=verification?.update(current,{preserveChallenge})===true;
-          error.textContent=confirmationError?confirmationError+'\n已核实该操作尚未执行，请重新核对后手动确认。':context.reject===true?'已查到这项草案仍待确认，尚未取消。可再次拒绝同一操作。':'已查到该操作仍待确认，当前没有成功回执。可继续确认同一操作，或取消。';
+          error.textContent=expiredReturnFailure?'未取得旧卡的取消回执；操作仍待确认，请重新核对，暂不要重新生成。':confirmationError?confirmationError+'\n已核实该操作尚未执行，请重新核对后手动确认。':context.reject===true?'已查到这项草案仍待确认，尚未取消。可再次拒绝同一操作。':'已查到该操作仍待确认，当前没有成功回执。可继续确认同一操作，或取消。';
           refreshControls();
           return retained;
         } else {
-          form.remove(); receipt(current.operation,content,trigger,current.liquidity_floor_minor);
+          form.remove(); receipt(current.operation,content,receiptTrigger,current.liquidity_floor_minor);
         }
       } catch(_) {
         if(!isCurrent()){abort();return;}
