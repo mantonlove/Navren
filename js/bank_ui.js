@@ -666,7 +666,7 @@ window.BankUI = (() => {
     else if(op.action==='collect_split_payment')content.append(node('p','登记 '+(view.participant?.display_name||'参与人')+' 已支付 '+B.money(view.participant?(view.participant.share_minor-view.participant.paid_minor):0)),
       note('确认后记录一笔收款；记录收款不代表资金已到账。'));
     else if(op.action==='cancel_subscription')content.append(node('p','取消 '+(view.subscription?.plan_name||'商户订阅')),
-      note('本次取消账户中的订阅记录，不会自动关闭银行代扣授权；商户取消结果仍需单独核实。'));
+      note(view.subscription?.details?.record_origin==='user_entered_simulation'?'仅取消本人登记的本机模拟订阅；模拟扣费安排保留。不会联系或取消真实商户，也不会修改真实银行授权。':'本次取消账户中的订阅记录，不会自动关闭银行代扣授权；商户取消结果仍需单独核实。'));
     else if(op.action==='reserve_funds')content.append(node('p','为 '+(view.task?.title||'未命名任务')+' 预留 '+B.money(op.payload.amount_minor)),
       note('只占用当前可用额度，不会扣款；预留到期后会自动释放。'));
     else if(op.action==='release_funds')content.append(node('p','解除 '+B.money(view.hold?.amount_minor||0)+' 的资金预留。'));
@@ -677,7 +677,7 @@ window.BankUI = (() => {
       content.append(note('R'+view.product.risk_level+' · 锁定 '+view.product.term_days+' 天 · 赎回后 '+view.product.redemption_delay_days+' 个业务自然日到账'));
       content.append(note(view.product.risk_notice));
       content.append(note('费用资料尚未取得；待结算赎回不计入可用余额。'));
-    } else if(view.mandate) content.append(note('仅关闭当前账户的银行代扣协议。商户订阅合同及应付款不随之取消。'));
+    } else if(view.mandate) content.append(note(view.mandate.merchant_contract_status==='user_entered_simulation'?'仅关闭本人登记的本机模拟扣费安排，不影响真实银行授权或商户合同。':'仅关闭当前账户的银行代扣协议。商户订阅合同及应付款不随之取消。'));
     else if(view.card) {
       if(op.action==='card_control') {
         const kind=op.payload.control_type;

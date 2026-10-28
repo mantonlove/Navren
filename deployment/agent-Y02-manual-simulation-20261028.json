@@ -1,0 +1,13 @@
+{
+  "branch": "codex/agent-nonpersonal-acceptance-20261028",
+  "business_accepted": false,
+  "files": {
+    "finance_gateway.py": "02044600ffb987c67a8391e876887aa4f86a5284951c12e1cf104186467b6bd2",
+    "js/account.js": "aa956321e8542e8237cdfce4317f907107ba50480a74b46138518d78c3e8dda6",
+    "js/bank_ui.js": "3a4a5617e4d2128452a1766210730e9362a9cb368267460eeb12b5798897a322",
+    "simulated_bank/manual_subscriptions.py": "7fdf9329c62c91c712a4d58ecd9a12830d1661a345e74f3e6cfb6184d0664c8a"
+  },
+  "repository": "https://github.com/mantonlove/Navren",
+  "schema": "navren.deployment-manifest/1",
+  "scope": "Y02 explicit local simulation registration and recoverable retry; no real merchant/bank action"
+}
