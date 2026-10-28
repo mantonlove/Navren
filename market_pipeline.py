@@ -4,6 +4,7 @@ import concurrent.futures, fcntl, hashlib, json, time, uuid
 import logging, re, urllib.error
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from market_sources import SOURCES, discover, read_article, score_article, cluster_key, now_iso, readable_article, ArticleUnavailable, text_only_article, source_verified_text_event
 from market_content import MarketStore, week_periods, packed, CN, WEEKLY_GENERATION_CONTRACT, event_input_hash, EVENT_EDITOR_POLICY
 from market_editor import MarketEditor
@@ -11,6 +12,7 @@ from market_model import market_model_session
 from market_schedule import plan
 from market_daily import DailyMarket
 from market_source_attribution import first_publication_verified
+from market_semantic_checks import old_announcement_headline_issues
 
 EDITOR_VERSION=EVENT_EDITOR_POLICY
 DAILY_HOTSPOT_COUNT=6
@@ -20,6 +22,110 @@ WEEKLY_RESERVE_SECONDS=320
 # 仅用于主动选择的受控缓存复用，不改变正常产品的复抓/发布时效合同。
 CONTROLLED_REUSE_SECONDS=10800
 CONTROLLED_REUSE_HEADROOM=95
+
+def _verified_editorial_source_audit(approval_path,declaration,articles):
+    """Require the readable, GitHub-pinned full-source review for an exact hold."""
+    try:
+        name=declaration['full_source_audit_path']
+        relative=Path(name)
+        if (not isinstance(name,str) or not name or relative.is_absolute()
+                or '..' in relative.parts):return False
+        raw=(approval_path.parent / relative).read_bytes()
+        if hashlib.sha256(raw).hexdigest()!=declaration['full_source_audit_sha256']:return False
+        audit=json.loads(raw)
+        if (audit['schema']!='navren_market_editorial_source_audit_v1'
+                or audit['assessment']!=declaration['assessment']
+                or audit['event_id']!=declaration['event_id']
+                or audit['event_version']!=declaration['event_version']
+                or audit['event_body_sha256']!=declaration['event_body_sha256']
+                or audit['full_source_evidence_sha256']!=declaration['full_source_evidence_sha256']):return False
+        audited=audit['article_bindings']
+        if not isinstance(audited,list) or len(audited)!=len(articles):return False
+        expected=sorted((b['article_id'],b['version'],b['article_body_sha256'])
+            for b in declaration['article_bindings'])
+        if expected!=sorted((b['article_id'],b['version'],b['article_body_sha256'])
+                for b in audited):return False
+        by_key={(a['id'],a['version']):a for a in articles}
+        for binding in audited:
+            article=by_key[(binding['article_id'],binding['version'])]
+            if (article.get('url')!=binding['source_url']
+                    or article.get('published_at')!=binding['published_at']
+                    or article.get('first_publication_status')!=binding['first_publication_status']
+                    or article.get('read_scope')!='full_text'
+                    or binding['read_scope']!='full_text'
+                    or article.get('evidence_truncated') is not False
+                    or binding['evidence_truncated'] is not False
+                    or hashlib.sha256(article['evidence_text'].encode()).hexdigest()
+                        !=binding['evidence_text_sha256']):return False
+        return bool(audit['paragraph_review'])
+    except (OSError,ValueError,KeyError,TypeError):return False
+
+def held_old_announcement_groups(store,groups,approval_path=None):
+    """Skip paid regeneration only with a separate source-level editorial signoff.
+
+    A draft's bad angle alone never proves its original source lacks genuine
+    new information. The GitHub-pinned approval must explicitly affirm that
+    full-source finding and bind the exact audited event and article bytes.
+    A later published event, revised article, added source or changed body
+    removes the hold. No publication or source row is changed here.
+    """
+    if not groups:return set()
+    approval_path=Path(approval_path or '/etc/navren-market/approved-cutover.json')
+    try:
+        declared=json.loads(approval_path.read_text()).get('editorial_source_holds',[])
+    except (OSError,ValueError,TypeError):return set()
+    if not isinstance(declared,list) or not declared:return set()
+    with store.db() as db:
+        quarantined=db.execute('SELECT q.event_id,q.event_version,q.body_sha256,e.status,e.body '
+            'FROM market_editorial_quarantines q JOIN market_events e '
+            'ON e.id=q.event_id AND e.version=q.event_version '
+            'WHERE e.version=(SELECT MAX(version) FROM market_events WHERE id=e.id)').fetchall()
+        old_signatures=set()
+        for row in quarantined:
+            if (row['status']!='editorial_review_required' or
+                    hashlib.sha256(row['body'].encode()).hexdigest()!=row['body_sha256']):continue
+            try:
+                declarations=[item for item in declared if isinstance(item,dict)
+                    and item.get('event_id')==row['event_id']
+                    and item.get('event_version')==row['event_version']
+                    and item.get('event_body_sha256')==row['body_sha256']
+                    and item.get('assessment')=='source_no_current_day_new_fact_verified'
+                    and re.fullmatch(r'[0-9a-f]{64}',item.get('full_source_audit_sha256') or '')
+                    and re.fullmatch(r'[0-9a-f]{64}',item.get('full_source_evidence_sha256') or '')]
+                if len(declarations)!=1:continue
+                declaration=declarations[0]
+                event=json.loads(row['body'])
+                bindings=event['generation']['article_bindings']
+                if not isinstance(bindings,list) or not bindings:continue
+                expected=tuple(sorted((b['article_id'],b['version'],b['article_body_sha256'])
+                    for b in declaration['article_bindings']))
+                articles=[];signature=[]
+                for binding in bindings:
+                    aid=binding['article_id'];version=binding['version'];digest=binding['article_body_sha256']
+                    article=db.execute('SELECT body FROM market_articles WHERE id=? AND version=?',(aid,version)).fetchone()
+                    if article is None or hashlib.sha256(article['body'].encode()).hexdigest()!=digest:break
+                    articles.append(json.loads(article['body']))
+                    signature.append((aid,version,digest))
+                else:
+                    if (tuple(sorted(signature))==expected
+                            and len({a for a,_,_ in signature})==len(signature)
+                            and _verified_editorial_source_audit(approval_path,declaration,articles)
+                            and old_announcement_headline_issues(event,articles)):
+                        old_signatures.add((event['id'],tuple(sorted(signature))))
+            except (KeyError,TypeError,ValueError):continue
+        if not old_signatures:return set()
+        held=set()
+        for group in groups:
+            if not any(group['id']==event_id for event_id,_ in old_signatures):continue
+            signature=[]
+            for article in group['articles']:
+                row=db.execute('SELECT body,status FROM market_articles WHERE id=? AND version=?',
+                    (article['id'],article['version'])).fetchone()
+                if row is None or row['status']!='active':break
+                signature.append((article['id'],article['version'],hashlib.sha256(row['body'].encode()).hexdigest()))
+            else:
+                if (group['id'],tuple(sorted(signature))) in old_signatures:held.add(group['id'])
+        return held
 
 class ControlledRecoveryError(ValueError):
     def __init__(self,code):self.code='controlled_recovery_'+code;super().__init__(self.code)
@@ -289,7 +395,11 @@ def refresh(store=None,editor=None,*,source_limit=30,backfill_weeks=2,ingest_onl
             verified_text_bindings={tuple(sorted(e['article_versions'].items())) for e in existing.values()
                 if e['status']=='published' and e.get('content_mode')=='source_verified_text'
                 and source_verified_text_event(e,[current_articles[i] for i in e['article_ids'] if i in current_articles]) and store._event_is_reusable(e)}
-            pending=[g for g in selected if not (
+            old_announcement_holds=held_old_announcement_groups(store,selected)
+            for event_id in sorted(old_announcement_holds):
+                report['rejected'].append({'stage':'candidate_reuse','ids':[event_id],
+                    'reason':'quarantined_old_announcement_source_unchanged'})
+            pending=[g for g in selected if g['id'] not in old_announcement_holds and not (
                 (g['id'] in existing and existing[g['id']].get('input_hash')==input_hash(g) and store._event_is_reusable(existing[g['id']],input_hash(g)))
                 or tuple(sorted((a['id'],a['version']) for a in g['articles'])) in verified_text_bindings)]
             def publish_events(pending,reserve=0,until_daily_target=False):

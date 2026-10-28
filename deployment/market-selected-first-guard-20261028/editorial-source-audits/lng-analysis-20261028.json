@@ -1,0 +1,39 @@
+{
+  "schema": "navren_market_editorial_source_audit_v1",
+  "reviewed_at": "2026-10-28T17:05:00+08:00",
+  "assessment": "source_no_current_day_new_fact_verified",
+  "scope": "Only the already-announced 2026-10-22 QatarEnergy-Cheniere agreement selected by this event, not the legitimacy or freshness of the 2026-10-28 analysis article itself.",
+  "event_id": "e_609c7df81c59f073faeb21ce",
+  "event_version": 1,
+  "event_body_sha256": "513a32950d94a0da0f412a5defea32b78827bb84cc2878f7e82ddbd08514f72e",
+  "full_source_evidence_sha256": "ee1acb5f048bbdb6beb49e0963d56d4581dd839573bd2066d33eab1d95a951ea",
+  "source_evidence_location": "Local restricted deployment receipt stage47-card1-original.json; raw source text is not reproduced in Git.",
+  "article_bindings": [
+    {
+      "article_id": "a_6b6cac001b5d51846c47c249",
+      "version": 1,
+      "article_body_sha256": "43dd2d0dac281d4744ab1c9dd0a6563385df230035d8c8e8087c765ccc09c870",
+      "source_url": "https://www.news.cn/fortune/20261028/c7f2ec284e674c6aaf1d21eed57e7777/c.html",
+      "published_at": "2026-10-28T07:11:16+00:00",
+      "first_publication_status": "verified_original_page",
+      "read_scope": "full_text",
+      "evidence_truncated": false,
+      "evidence_text_sha256": "ae9f7498e4bb4c0857379690b8db679e84b36b4c1ab10f9d49c995de6673e025"
+    }
+  ],
+  "paragraph_review": [
+    {"numbers": [1, 2, 3], "role": "28 October dateline, analysis title and reporter credit; these date the publication, not the agreement announcement."},
+    {"numbers": [4], "role": "Introduction describes the agreement as recent and frames why an exporter buys US LNG; no newly dated agreement step."},
+    {"numbers": [5], "role": "Says QatarEnergy publicly announced the two long-term agreements on 22 October; gives volume, sites, delivery window and shipping terms of that announcement."},
+    {"numbers": [6], "role": "Explains the existing Gulf conflict and transport exposure as background."},
+    {"numbers": [7], "role": "Attributes figures and forecast to an IEA report issued in July and earlier March-June shipment data."},
+    {"numbers": [8], "role": "Reporter analysis of supply and performance risk, without a newly dated agreement fact."},
+    {"numbers": [9], "role": "Researcher background and social-media comment; no date is given for the comment, so it is not treated as a 28 October interview or development."},
+    {"numbers": [10], "role": "Analyst interpretation of supply diversification; 2031 delivery start is part of the earlier agreement."},
+    {"numbers": [11], "role": "Earlier Golden Pass investment and production/export milestones from March and April."},
+    {"numbers": [12], "role": "Previously announced North Field expansion plan and analyst interpretation."},
+    {"numbers": [13], "role": "Undated chief executive statement about expected benefits of the agreement; not evidence of a new 28 October term or milestone."},
+    {"numbers": [14], "role": "Concluding risk analysis, without a new dated agreement fact."}
+  ],
+  "finding": "The source is a genuine first-published 28 October analysis. Within the complete captured text, the selected contract had been publicly announced on 22 October; no concrete 28 October new term, execution milestone, or dated interview about that selected contract was identified. This finding is limited to the exact event and article bytes above. If new dated evidence is added or the source changes, the hold must cease."
+}
