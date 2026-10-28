@@ -1,0 +1,10 @@
+{
+  "branch": "codex/agent-nonpersonal-acceptance-20261028",
+  "business_accepted": false,
+  "files": {
+    "js/chat.js": "c98371cfaec097607f7bb3dbc48e873446c4dca940dbd8d49b444edd86b598d3"
+  },
+  "repository": "https://github.com/mantonlove/Navren",
+  "schema": "navren.deployment-manifest/1",
+  "scope": "voice privacy copy only; no logic or provider change"
+}

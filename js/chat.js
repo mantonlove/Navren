@@ -10,12 +10,8 @@ const PRESET_QUESTIONS = {
 
 let currentMode = 'classic';
 let isListening = false;
-let pendingImage = null;
-// 保留选择的原始 bytes；预览 dataURL 不作为服务端上传原件。
-let pendingImageFile = null;
-const chatImageUploadKeys=new WeakMap();
-const chatImageUploads=new WeakMap();
-const activeChatImageReaders=new Set();
+const chatAttachmentUploadKeys=new WeakMap();
+const chatAttachmentUploads=new WeakMap();
 let handoffActive = false;
 let chatSending=false;
 let chatRequestVersion=0;
@@ -155,7 +151,7 @@ function archivedUserMessageHtml(row){
   const english=window.NavrenI18n?.language==='en';
   const references=(row.references||[]).map(ref=>'<span class="chat-user-reference" role="group">'+
     '<span class="chat-user-reference-label">'+(english?'Reference':'关联资料')+'</span>'+
-    '<span class="chat-user-reference-title" translate="no" data-i18n-skip>'+escapeHtml(ref.label)+'</span></span>').join('');
+    '<span class="chat-user-reference-title" translate="no" data-i18n-skip>'+escapeHtml(chatReferenceTitle(ref))+'</span></span>').join('');
   const attachment=(row.attachments||[]).some(item=>item.storage_status==='not_archived')?'<span class="chat-user-text">'+
     (english?'The original image was not archived.':'原图片未存档。')+'</span>':'';
   return references+attachment+(row.text?'<span class="chat-user-text">'+escapeHtml(row.text)+'</span>':'');
@@ -178,6 +174,7 @@ function mountArchivedMedia(message,row,run,guard){
     }
     if(row.role!=='user')continue;
     const host=message.querySelector('.message-body');if(!host)continue;
+    if(media.kind==='document'){window.NavrenChatAttachments?.mountStoredDocument(host,media,current);continue;}
     const note=document.createElement('span');note.className='chat-user-text';note.textContent='正在读取图片…';host.prepend(note);
     tasks.push(window.NavrenChatMedia.open(media).then(handle=>{
       if(!current()){handle.dispose();return;}
@@ -243,18 +240,16 @@ function renderChatArchiveState(state,run,guard){
     let message=chatArchiveNodes.get(row.message_id);
     if(!message){
       const role=row.role==='user'?'user':'ai';
-      message=addMessage(role,role==='user'?archivedUserMessageHtml(row):renderReplyText(row.text),row.kind==='safe-status',{historical:true});
+      message=addMessage(role,role==='user'?archivedUserMessageHtml(row):renderReplyText(row.text,{safeStatus:row.kind==='safe-status'}),row.kind==='safe-status',{historical:true});
       message.dataset.chatArchiveRow=row.message_id;
       message.dataset.historyReadonly='true';
       message.dataset.bankResponseId=row.request_id;
       renderArchivedComponents(message,row,guard);
       chatArchiveNodes.set(row.message_id,message);
       // 下一微任务时消息已在本次排序后的容器内；旧页/旧身份不允许挂载原件。
-      queueMicrotask(()=>{
-        if(run!==chatArchiveRun||!guard.valid()||!message.isConnected)return;
-        const mediaTask=mountArchivedMedia(message,row,run,guard);
-        chatArchiveMediaTasks.add(mediaTask);mediaTask.finally(()=>chatArchiveMediaTasks.delete(mediaTask));
-      });
+      const mediaTask=Promise.resolve().then(()=>{if(run===chatArchiveRun&&guard.valid()&&message.isConnected)return mountArchivedMedia(message,row,run,guard);});
+      chatArchiveMediaTasks.add(mediaTask);
+      mediaTask.then(()=>chatArchiveMediaTasks.delete(mediaTask),()=>chatArchiveMediaTasks.delete(mediaTask));
     }
     ordered.push(message);
   }
@@ -359,9 +354,6 @@ function resetPrivateChat(){
   globalThis.NavrenChatPrivacyVersion=(globalThis.NavrenChatPrivacyVersion||0)+1;
   cancelVoice();
   const input=document.getElementById('userInput');if(input)input.value='';
-  pendingImage=null;
-  pendingImageFile=null;
-  for(const reader of activeChatImageReaders){try{reader.abort();}catch(_){}}activeChatImageReaders.clear();
   try{removeImage();clearChatReference();}catch(_){}
   unloadChatArchive();
 }
@@ -475,11 +467,66 @@ let voiceConversation = false;
 let voiceResumeTimer = null;
 let voiceRequest = 0;
 let voiceInputState = 'idle';
+let pendingVoiceNameReview = null;
+const VOICE_NAME_REVIEW_NOTICE='请核对产品名称及份额后发送';
+
+function voiceNameReviewCurrent(review) {
+  return !!review&&review.request===voiceRequest&&review.privacyTurn===(globalThis.NavrenChatPrivacyVersion||0)&&
+    review.guard.valid(review.binding);
+}
+function clearVoiceNameReview({clearDraft=false}={}) {
+  const review=pendingVoiceNameReview;pendingVoiceNameReview=null;
+  if(!review)return;
+  const input=document.getElementById('userInput');
+  if(clearDraft&&input?.value===review.raw_text&&chatDraftRevision===review.draftRevision){
+    input.value='';input.dispatchEvent(new Event('input'));
+  }
+  const status=document.getElementById('voiceStatus');
+  if(status){status.textContent='';status.classList.remove('visible');}
+  updateChatSendState();
+}
+function renderVoiceNameReview() {
+  const review=pendingVoiceNameReview;
+  if(!voiceNameReviewCurrent(review)){clearVoiceNameReview({clearDraft:true});return;}
+  const status=document.getElementById('voiceStatus');
+  if(status){
+    status.textContent=VOICE_NAME_REVIEW_NOTICE+(review.names.length?'。参考名称：'+review.names.join('；'):'');
+    status.classList.add('visible');
+  }
+  updateChatSendState();
+}
+async function checkedVoiceNameReview(raw,metadata) {
+  // 兼容没有该字段的原服务；有字段但无法核对时只保留 raw 供本人编辑，不信任候选名。
+  if(metadata===undefined)return null;
+  const manual={names:[]};
+  const keys=['schema_version','status','reason','notice','names','raw_sha256','public_release_id','hint_only','identity_authority'];
+  if(!metadata||typeof metadata!=='object'||Array.isArray(metadata)||Object.keys(metadata).some(key=>!keys.includes(key))||
+    metadata.schema_version!=='navren.asr-name-review.v1'||!['review_required','not_required'].includes(metadata.status)||
+    metadata.hint_only!==true||metadata.identity_authority!==false||
+    !['possible_public_name_mismatch','no_public_name_mismatch','public_name_hints_unavailable','candidate_assist_limit'].includes(metadata.reason)||
+    typeof metadata.notice!=='string'||metadata.notice.length>512||
+    (metadata.status==='review_required'&&metadata.notice!==VOICE_NAME_REVIEW_NOTICE)||
+    !Array.isArray(metadata.names)||metadata.names.length>3||new Set(metadata.names).size!==metadata.names.length||metadata.names.some(name=>
+      typeof name!=='string'||!name||name!==name.trim()||name.length>160||/[\u0000-\u001f\u007f]/.test(name))||
+    (metadata.status==='not_required'&&(metadata.names.length!==0||metadata.notice!==''||metadata.reason!=='no_public_name_mismatch'))||
+    typeof metadata.raw_sha256!=='string'||!/^[a-f0-9]{64}$/.test(metadata.raw_sha256)||
+    !(typeof metadata.public_release_id==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(metadata.public_release_id)||
+      metadata.public_release_id===null&&metadata.names.length===0))return manual;
+  try {
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+    const hex=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+    if(hex!==metadata.raw_sha256)return manual;
+  }catch(_){return manual;}
+  return metadata.status==='review_required'?{names:[...new Set(metadata.names)]}:null;
+}
 
 function setupVoice() {
   const btn = document.getElementById('voiceBtn');
   btn.dataset.idleContent = btn.innerHTML;
   btn.classList.remove('hidden');
+  // 沿用原发送键；这个标记只区分本人提交输入框，不是业务授权。
+  const send=document.getElementById('sendBtn');
+  if(send)send.onclick=()=>sendMessage(null,null,{manualVoiceReview:true});
   voiceButton();
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') cancelVoice();
@@ -508,12 +555,15 @@ function voiceButton(state = 'idle') {
       state === 'finishing' ? '正在整理识别内容…' : '';
     status.classList.toggle('visible', Boolean(status.textContent));
   }
+  // 正常收起录音器不等于本人取消，仍保留这一轮已绑定的待核对草稿。
+  if(state==='idle'&&voiceNameReviewCurrent(pendingVoiceNameReview))renderVoiceNameReview();
 }
 
 function cancelVoice() {
   voiceConversation = false;
   clearTimeout(voiceResumeTimer);
   voiceRequest++;
+  clearVoiceNameReview({clearDraft:true});
   NavrenSpeech.stop();
   voiceButton();
 }
@@ -525,39 +575,55 @@ async function toggleVoice() {
     return;
   }
   clearTimeout(voiceResumeTimer);
+  clearVoiceNameReview({clearDraft:true});
   voiceConversation = true;
   const request = ++voiceRequest;
+  const binding=chatBinding(),guard=BankClient.guard(),privacyTurn=globalThis.NavrenChatPrivacyVersion||0;
+  const current=()=>request===voiceRequest&&privacyTurn===(globalThis.NavrenChatPrivacyVersion||0)&&guard.valid(binding);
+  if(!binding.workspace_id||!current()){voiceConversation=false;voiceButton();return;}
   const input = document.getElementById('userInput');
   const before = input.value;
-  let voiceMessage=null,recording=null;
+  let voiceMessage=null,recording=null,nameReview;
   try {
     const text = await NavrenSpeech.startASR({ finishOnSentence: false,
-      onState: voiceButton,
+      onState: state=>{if(current())voiceButton(state);},
       onRecording: async clip=>{
-        if(request!==voiceRequest)return;
+        if(!current())return;
         recording=await VoiceMessages.save(clip);
-        if(request!==voiceRequest)return;
+        if(!current())return;
         voiceMessage=addMessage('user','');voiceMessage.dataset.recordingId=recording.id;VoiceMessages.mount(voiceMessage,recording);
         const history=currentChatHistory();
         history.push({role:'user',client_origin:'live',content:'',recording_id:recording.id,...chatBinding(),timestamp:new Date().toISOString()});
         Storage.set('qingzhou_chatHistory',history);scrollToBottom();
       },
-      onTranscript: text => {
-        if (request !== voiceRequest) return;
+      onTranscript: (text,final,review) => {
+        if (!current()) return;
+        if(review!==undefined)nameReview=review;
         input.value = text;
         input.dispatchEvent(new Event('input'));
       }
     });
-    if (request !== voiceRequest) return;
+    if (!current()) return;
     voiceButton();
     if(voiceMessage)VoiceMessages.update(voiceMessage,text);
     if(recording){const history=Storage.get('qingzhou_chatHistory')||[];const entry=history.find(m=>m.recording_id===recording.id);if(entry)entry.content=text;Storage.set('qingzhou_chatHistory',history);}
     if (text.trim()||recording?.media) {
+      const draftValue=input.value,draftRevision=chatDraftRevision;
+      const review=nameReview===undefined?null:await checkedVoiceNameReview(text,nameReview);
+      if(!current())return;
+      const voiceEntry=recording?{recording_id:recording.id,message:voiceMessage,media:recording.media,clip:recording}:null;
+      const editedWhileChecking=input.value!==draftValue||chatDraftRevision!==draftRevision;
+      if(review||editedWhileChecking){
+        if(!editedWhileChecking)input.value=text;
+        pendingVoiceNameReview={raw_text:text,names:review?.names||[],voiceEntry,request,guard,binding,privacyTurn,
+          draftRevision:chatDraftRevision};
+        input.dispatchEvent(new Event('input'));renderVoiceNameReview();input.focus({preventScroll:true});return;
+      }
       input.value = text;
-      await sendMessage(recording?{recording_id:recording.id,message:voiceMessage,media:recording.media,clip:recording}:null);
+      await sendMessage(voiceEntry);
     } else { voiceConversation = false; showToast('未取得可保存的录音，请重新录音。'); }
   } catch (error) {
-    if (request !== voiceRequest) return;
+    if (!current()) return;
     voiceButton();
     voiceConversation = false;
     if (error.name === 'AbortError') { input.value = before; input.dispatchEvent(new Event('input')); }
@@ -587,16 +653,16 @@ function renderPrivacyGuide() {
     : {classic:'🔒 隐私与个性化服务说明',senior:'您的专属理财小档案',youth:'你的数据，你做主'};
   const copy = english ? [
     'To tailor its banking and everyday financial services to you, Navren learns about your investment preferences and assets during conversations and builds a personal profile.',
-    'Conversations and demo account records are stored on this computer. Account summaries needed to answer your questions are sent to DeepSeek and GLM.',
-    'When you use voice features, recordings and text to be read aloud are sent to Alibaba Cloud Model Studio for processing. Original chat images and audio are stored privately with your account for playback after sign-in.',
+    'Conversations and account records are stored on this computer. Account summaries needed to answer your questions are sent to DeepSeek and GLM.',
+    'Voice recognition is processed on this computer. When cloud read-aloud is enabled, text is sent to Alibaba Cloud Model Studio for speech synthesis. Original chat images and audio are stored privately with your account for playback after sign-in.',
     'Your data will not be used for other purposes without your confirmation.',
-    'Manage conversation permissions in Profile. Change demo risk and funding settings in Accounts.'
+    'Manage conversation permissions in Profile. Change risk and funding settings in Accounts.'
   ] : [
     '为提供更贴合你的银行与生活财务服务，Navren会在对话中了解您的投资偏好和资产情况，并建立个人档案。',
-    '对话与模拟账户记录保存在本机；回答问题所需的账户摘要会发送至 DeepSeek 和 GLM',
-    '使用语音时，录音和待朗读文字发送至阿里云百炼处理；聊天图片和原始音频随本人账户私密保存，登录后可回看和回放',
+    '对话与账户记录保存在本机；回答问题所需的账户摘要会发送至 DeepSeek 和 GLM',
+    '使用语音时，语音识别在本机处理；启用云端朗读时，待朗读文字发送至阿里云百炼。聊天图片和原始音频随本人账户私密保存，登录后可回看和回放',
     '未经您确认，不会用于其他用途',
-    '聊天授权在「我的」中管理；模拟风险与资金设置请在「账户」中修改'
+    '聊天授权在「我的」中管理；风险与资金设置请在「账户」中修改'
   ];
   guide.lang = english ? 'en' : 'zh-CN';
   guide.querySelector('#privacyTitle').textContent = titles[currentMode] || titles.classic;
@@ -625,57 +691,41 @@ async function checkVoiceGuide() {
   }
 }
 
-// ── Image Upload ──
-function triggerUpload() {
-  document.getElementById('imageInput').click();
-}
-
+// 文件选择与剪贴板共用原件队列；点击发送前不上传。
+function triggerUpload() {document.getElementById('imageInput').click();}
 function handleImageUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  if(!['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)||file.size>10485760||file.size<1){
-    showToast('请选择 10 MB 以内的 PNG、JPEG、WebP 或 GIF 图片。');event.target.value='';return;
-  }
-  const guard=BankClient.guard(),request=chatRequestVersion;
-  if(!guard.valid())return;
-  const reader = new FileReader();activeChatImageReaders.add(reader);
-  reader.onload = (e) => {
-    if(request!==chatRequestVersion||!guard.valid())return;
-    pendingImage = e.target.result;
-    pendingImageFile = file;
-    document.getElementById('previewImg').src = pendingImage;
-    document.getElementById('imagePreview').classList.remove('hidden');
-    updateChatSendState();
-  };
-  reader.onloadend=()=>activeChatImageReaders.delete(reader);
-  reader.readAsDataURL(file);
+  window.NavrenChatAttachments?.addFiles(Array.from(event.target.files||[]));event.target.value='';
 }
-
 function removeImage() {
-  pendingImage = null;
-  pendingImageFile = null;
-  document.getElementById('imagePreview').classList.add('hidden');
-  document.getElementById('imageInput').value = '';
+  window.NavrenChatAttachments?.clear();
+  const input=document.getElementById('imageInput');if(input)input.value='';
   updateChatSendState();
 }
+window.NavrenChatAttachments?.init({onChange:()=>{chatDraftRevision++;updateChatSendState();},notify:message=>showToast(message)});
 
 // ── Send Message ──
 async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}) {
   const input = document.getElementById('userInput');
   const text = retrySnapshot ? retrySnapshot.text : input.value.trim();
   if(chatSending||!chatArchiveReady||chatArchiveBusy||typeof text!=='string')return;
+  let voiceReview=null;
+  if(!voiceEntry&&!retrySnapshot&&options.internalChoice!==true&&pendingVoiceNameReview){
+    if(!voiceNameReviewCurrent(pendingVoiceNameReview)){clearVoiceNameReview({clearDraft:true});return;}
+    if(options.manualVoiceReview!==true){renderVoiceNameReview();return;}
+    if(!text.trim())return;
+    voiceReview=pendingVoiceNameReview;voiceEntry=voiceReview.voiceEntry;voiceConversation=true;
+  }
   const reference = retrySnapshot ? cloneChatReference(retrySnapshot.reference) : currentChatReference();
   const internalChoice=options.internalChoice===true;
-  const imageToSend=internalChoice?null:retrySnapshot?(typeof retrySnapshot.image==='string'?retrySnapshot.image:null):pendingImage;
-  const imageFileToSend=internalChoice?null:retrySnapshot?retrySnapshot.imageBlob||null:pendingImageFile;
+  const attachmentFiles=internalChoice?[]:retrySnapshot?(retrySnapshot.attachmentFiles|| (retrySnapshot.imageBlob?[retrySnapshot.imageBlob]:[])):(window.NavrenChatAttachments?.files()||[]);
   const voiceClip=internalChoice?null:voiceEntry?.clip||retrySnapshot?.voiceClip||null;
-  if(!text.trim()&&!reference&&!imageFileToSend&&!voiceEntry?.recording_id&&!voiceClip?.blob)return;
-  if(retrySnapshot?.had_image&&!imageToSend){
-    showToast('原问题包含图片，请重新附上图片后使用发送按钮。');return;
+  if(!text.trim()&&!reference&&!attachmentFiles.length&&!voiceEntry?.recording_id&&!voiceClip?.blob)return;
+  if((retrySnapshot?.had_attachments||retrySnapshot?.had_image)&&!attachmentFiles.length){
+    showToast('原问题包含附件，请重新添加原附件后发送。');return;
   }
   const requestSnapshot = Object.freeze({text,reference:reference?JSON.parse(JSON.stringify(reference)):null,
-    internal_choice:internalChoice,
-    image:imageToSend,imageBlob:imageFileToSend,had_image:Boolean(imageToSend),voiceClip,had_audio:Boolean(voiceClip?.blob||voiceEntry?.recording_id),
+    internal_choice:internalChoice,attachmentFiles:Object.freeze([...attachmentFiles]),had_attachments:attachmentFiles.length>0,
+    had_image:attachmentFiles.some(file=>file.type.startsWith('image/')),voiceClip,had_audio:Boolean(voiceClip?.blob||voiceEntry?.recording_id),
     return_view:JSON.parse(JSON.stringify(retrySnapshot?.return_view||window.NavrenChatReturnView||{page:'chat',view:'home'}))});
   // 显式重试只使用冻结请求；即使新草稿内容相同，也不消费输入区。
   let consumesComposer=!internalChoice&&!retrySnapshot;
@@ -695,6 +745,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     (!turnGuard||turnGuard.valid(binding));
   clearTimeout(voiceResumeTimer);
   voiceRequest++;
+  if(voiceReview)voiceReview.request=voiceRequest;else clearVoiceNameReview();
   const voiceTurn = voiceRequest;
   const userMessageId=voiceEntry?.recording_id||newChatMessageId();
   NavrenSpeech.stop();
@@ -704,15 +755,15 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
   const media=[];
   updateChatSendState();
   try{
-    if(imageFileToSend){
-      if(!window.NavrenChatMedia)throw Error('图片保存服务暂不可用，请稍后重试。');
-      let descriptor=chatImageUploads.get(imageFileToSend);
+    for(const file of attachmentFiles){
+      if(!window.NavrenChatMedia)throw Error('附件保存服务暂不可用，请稍后重试。');
+      let descriptor=chatAttachmentUploads.get(file);
       if(!descriptor){
-        let uploadKey=chatImageUploadKeys.get(imageFileToSend);
-        if(!uploadKey){uploadKey=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');chatImageUploadKeys.set(imageFileToSend,uploadKey);}
-        descriptor=await NavrenChatMedia.upload(imageFileToSend,{uploadKey});
+        let uploadKey=chatAttachmentUploadKeys.get(file);
+        if(!uploadKey){uploadKey=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');chatAttachmentUploadKeys.set(file,uploadKey);}
+        descriptor=await NavrenChatMedia.upload(file,{uploadKey});
         if(!turnCurrent())return;
-        chatImageUploads.set(imageFileToSend,descriptor);
+        chatAttachmentUploads.set(file,descriptor);
       }
       media.push(NavrenChatMedia.validate(descriptor));
     }
@@ -731,28 +782,29 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     return;
   }finally{
     // 成功后由本轮继续持有发送锁；取消/失败时立即释放，不留下虚假的已发送消息。
-    if(!turnCurrent()||media.length!==(Number(Boolean(imageFileToSend))+Number(Boolean(voiceEntry?.recording_id||voiceClip?.blob)))){
-      if(requestVersion===chatRequestVersion){chatSending=false;syncChatReference();updateChatSendState();}
+    if(!turnCurrent()||media.length!==(attachmentFiles.length+Number(Boolean(voiceEntry?.recording_id||voiceClip?.blob)))){
+      if(requestVersion===chatRequestVersion){
+        chatSending=false;syncChatReference();updateChatSendState();
+        if(voiceReview&&pendingVoiceNameReview===voiceReview&&voiceNameReviewCurrent(voiceReview))renderVoiceNameReview();
+      }
     }
   }
   consumesComposer=consumesComposer&&chatDraftRevision===frozenDraftRevision&&chatReferenceRevision===frozenReferenceRevision&&
-    (!imageFileToSend||pendingImageFile===imageFileToSend);
+    (!attachmentFiles.length||window.NavrenChatAttachments?.matches(attachmentFiles));
+  if(voiceReview&&pendingVoiceNameReview===voiceReview)clearVoiceNameReview();
 
-  const userContent = imageToSend
-    ? `<img src="${imageToSend}" style="max-width:200px;border-radius:8px;margin-bottom:6px;display:block;">${chatUserMessageHtml(text, requestSnapshot.reference,requestSnapshot.return_view)}`
-    : chatUserMessageHtml(text, requestSnapshot.reference,requestSnapshot.return_view);
+  const userContent = chatUserMessageHtml(text, requestSnapshot.reference,requestSnapshot.return_view);
   let userMessage=voiceEntry?.message||null;
   if(!voiceEntry?.recording_id){userMessage=addMessage('user', userContent);userMessage.dataset.clientMessageId=userMessageId;}
   if(!voiceEntry?.recording_id&&voiceClip?.blob){VoiceMessages.mount(userMessage,{...voiceClip,media:media.find(item=>item.kind==='audio')},text);renderChatVoiceReference(userMessage,requestSnapshot.reference,requestSnapshot.return_view);}
-  if(imageToSend&&(voiceEntry?.recording_id||voiceClip?.blob)&&userMessage){
-    const image=document.createElement('img');image.src=imageToSend;image.alt='聊天图片';
-    image.style.cssText='max-width:200px;border-radius:8px;margin-bottom:6px;display:block';userMessage.querySelector('.bubble')?.prepend(image);
-  }
+  window.NavrenChatAttachments?.mountFiles(userMessage,attachmentFiles,media);
   if(consumesComposer){input.value='';if(requestSnapshot.reference)clearChatReference();removeImage();}
+  else if(!internalChoice&&!retrySnapshot)window.NavrenChatAttachments?.consume(attachmentFiles);
   updateChatSendState();
 
   // 保存用户消息到历史（在所有 early return 之前）
   if(voiceEntry?.recording_id){
+    VoiceMessages.update(voiceEntry.message,text);
     const history=currentChatHistory(),entry=history.findLast(item=>item.recording_id===voiceEntry.recording_id);
     if(entry){entry.content=text;entry.attachments=media;entry.reference_snapshot=requestSnapshot.reference;entry.request_snapshot={...(entry.request_snapshot||{}),return_view:requestSnapshot.return_view};Storage.set('qingzhou_chatHistory',history);}
     const message=voiceEntry.message||[...document.querySelectorAll('#chatMessages .message.user')].findLast(item=>item.dataset.recordingId===voiceEntry.recording_id);
@@ -776,13 +828,13 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
       // 每次发送及重试都重新解析同一对象版本并创建新票据；不提交 request_mode。
       const ticket=await BankClient.post('/page-contexts',{question:requestSnapshot.text,
         reference:chatReferencePacket(requestSnapshot.reference),return_view:requestSnapshot.return_view});
-      if(!turnCurrent()){loadingMsg.remove();chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
+      if(!turnCurrent()){loadingMsg.remove();if(requestVersion===chatRequestVersion)chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
       if(typeof ticket.context_id!=='string'||!ticket.context_id)throw new Error('关联资料票据暂时无法核对。');
       pageContextId=ticket.context_id;
     }
-    if(!turnCurrent()){loadingMsg.remove();chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
+    if(!turnCurrent()){loadingMsg.remove();if(requestVersion===chatRequestVersion)chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
     // 一旦提交回合，上传ID可能已被服务端绑定；显式重试重新上传原Blob，不跨请求重绑旧ID。
-    if(imageFileToSend){chatImageUploads.delete(imageFileToSend);chatImageUploadKeys.delete(imageFileToSend);}
+    for(const file of attachmentFiles){chatAttachmentUploads.delete(file);chatAttachmentUploadKeys.delete(file);}
     result = await Api.sendMessage(requestSnapshot.text, currentMode, null, sentiment,
       event => renderRuntimeEvent(loadingMsg,event),{page_context_id:pageContextId,isolated_text:internalChoice,media_ids:media.map(item=>item.media_id)});
   } catch (e) {
@@ -791,17 +843,18 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
   }
 
   // 最终答复与确认组件真正插入后，再由 finishRuntimeProgress 移除本轮进度。
-  chatSending=false;
+  if(requestVersion===chatRequestVersion)chatSending=false;
   syncChatReference();
   if(!turnCurrent()){loadingMsg.remove();taskRequest?.component.destroy();return;}
   try {
   result.reply=NavrenPresentation.text(result.reply);
   const attachmentReceived=result.attachment_receipt?.status==='archived'&&result.attachment_receipt.request_id===result.bank_response_id&&
     result.workspace_id===binding.workspace_id&&result.privacy_revision===binding.privacy_revision;
-  if(attachmentReceived)voiceConversation=false;
+  const reviewedVoiceReply=!!voiceReview&&result.isFallback!==true&&typeof result.speech_receipt==='string'&&!!result.speech_receipt.trim();
+  if(attachmentReceived&&!reviewedVoiceReply)voiceConversation=false;
   const replyProjection=verifiedReplyProjection(result,binding);
   if(replyProjection?.text)result.reply=replyProjection.text;
-  let replyHtml = renderReplyText(result.reply);
+  let replyHtml = renderReplyText(result.reply,{safeStatus:result.isFallback===true&&result.bank===true});
 
   // 金融产品名蓝色加粗高亮
   const highlightNames = result.highlight_names && result.highlight_names.length > 0
@@ -845,7 +898,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
 
   // 语音播报与每条回复的朗读按钮共用控制器。
   const voiceEnabled = Storage.get('qingzhou_voiceEnabled');
-  if (!attachmentReceived&&!result.task_result_rejected&&(voiceEnabled || voiceConversation) && voiceTurn === voiceRequest) {
+  if ((!attachmentReceived||reviewedVoiceReply)&&!result.task_result_rejected&&(voiceEnabled || voiceConversation) && voiceTurn === voiceRequest) {
     speakMessage(msgEl, result.reply, scheduleVoiceResume);
   }
 
@@ -917,7 +970,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     client_origin:'live',
     client_message_id:msgEl.dataset.clientMessageId,
     consumed_reply_controls:msgEl.__navrenConsumedReplyControls||{},
-    request_snapshot: {text:requestSnapshot.text,reference:requestSnapshot.reference,return_view:requestSnapshot.return_view,internal_choice:requestSnapshot.internal_choice,had_image:requestSnapshot.had_image,had_audio:requestSnapshot.had_audio},
+    request_snapshot: {text:requestSnapshot.text,reference:requestSnapshot.reference,return_view:requestSnapshot.return_view,internal_choice:requestSnapshot.internal_choice,had_attachments:requestSnapshot.had_attachments,had_image:requestSnapshot.had_image,had_audio:requestSnapshot.had_audio},
     presentation_ref:localSocialReply ? null : (window.NavrenPresentationBridge?.descriptor?.(result)||null),
     ...binding,
     content: result.reply,
@@ -1002,7 +1055,7 @@ const RUNTIME_TOOL_LABELS = Object.freeze({
   "periodic_charges": "查询周期扣费",
   "cashflow": "分析现金流",
   "money_calculation": "进行金额计算",
-  "products": "核对模拟产品与适配条件",
+  "products": "核对产品与适配条件",
   "service_offer_rules": "查询服务条件",
   "service_offer_preview": "核对服务条件预览",
   "service_application_status": "查询服务申请回执",
@@ -1046,7 +1099,7 @@ const RUNTIME_SOURCE_LABELS = Object.freeze({
   "profile_sources": "已登记资料",
   "maintainer_skill": "专业技能资料",
   "conversation_candidate": "待核实资料",
-  "simulation": "模拟账户数据",
+  "simulation": "账户记录",
   "imported": "导入资料",
   "local_rule": "本地规则"
 });
@@ -1067,7 +1120,7 @@ function runtimeActivityPresentation(activity) {
   }
   if (activity.kind === 'model') return {category: '分析处理', label: '分析当前问题与已有资料', code: ''};
   return {category: '工具调用', label: Object.hasOwn(RUNTIME_TOOL_LABELS, activity.name)
-    ? RUNTIME_TOOL_LABELS[activity.name] : '调用工具', code: activity.name};
+    ? RUNTIME_TOOL_LABELS[activity.name] : activity.name, code: activity.name};
 }
 
 function runtimeActivitySummary(kind, summary) {
@@ -1106,7 +1159,7 @@ function runtimeActivityPanel(message) {
   list.setAttribute('aria-label', '本次实际调用');
   list.tabIndex = 0;
   panel.append(heading, list); bubble.append(panel);
-  state = {panel, latest, list, records: new Map(), steps: new Map(), sequence: 0,
+  state = {panel, latest, list, records: new Map(), groups: [], steps: new Map(), sequence: 0,
     requestId: '', typedSeen: false, finished: false, transportFinished: false, runError: false};
   runtimeActivityStates.set(message, state);
   return state;
@@ -1117,29 +1170,51 @@ function updateRuntimeActivity(state, activity) {
   let record = state.records.get(activity.callId);
   if (record?.typed && !activity.typed) return;
   if (!record) {
-    const row = document.createElement('li'); row.className = 'runtime-step';
-    const category = document.createElement('span'); category.className = 'runtime-activity-kind';
-    const title = document.createElement('span'); title.className = 'runtime-activity-label';
-    const name = document.createElement('code'); name.className = 'runtime-activity-name';
-    const status = document.createElement('span'); status.className = 'runtime-activity-state';
-    const details = document.createElement('span'); details.className = 'runtime-activity-data';
-    row.append(category, title, status, name, details); state.list.append(row);
-    record = {row, category, title, name, status, details}; state.records.set(activity.callId, record);
+    const skill = activity.kind === 'skill' || activity.name === 'load_skill';
+    const key = activity.kind + ':' + activity.name + (skill ? ':' + (runtimeSafeName(activity.summary?.skill) || activity.callId) : '');
+    let group = state.groups.at(-1);
+    // 只归组连续的同名能力，调用ID仍逐条保存；绝不按金额或工具结果去重。
+    if (!group || group.key !== key || !group.row.isConnected) {
+      const row = document.createElement('li'); row.className = 'runtime-step';
+      const category = document.createElement('span'); category.className = 'runtime-activity-kind';
+      const title = document.createElement('span'); title.className = 'runtime-activity-label';
+      const label = document.createElement('span');
+      const count = document.createElement('span'); count.className = 'runtime-activity-count'; count.hidden = true;
+      title.append(label, count);
+      const name = document.createElement('code'); name.className = 'runtime-activity-name';
+      const status = document.createElement('span'); status.className = 'runtime-activity-state';
+      const details = document.createElement('span'); details.className = 'runtime-activity-data';
+      row.append(category, title, status, name, details); state.list.append(row);
+      group = {key, row, category, label, count, name, status, details, records: new Map()};
+      state.groups.push(group);
+    }
+    record = {row: group.row, group}; state.records.set(activity.callId, record);
+    group.records.set(activity.callId, record);
   }
   // 同一调用只更新这一行；重复或兼容事件不能重新打开已结束的调用。
   if (record.activity?.status !== 'started' && record.activity && activity.status === 'started') return;
   record.typed = record.typed || activity.typed;
   record.activity = activity;
-  state.latestRecord = record;
+  const group = record.group;
   const view = runtimeActivityPresentation(activity);
-  const statuses = {started: '进行中', completed: '已完成', failed: '未完成'};
-  record.row.className = 'runtime-step ' + ({started: 'running', completed: 'done', failed: 'rejected'}[activity.status]);
-  record.category.textContent = view.category;
-  record.title.textContent = view.label;
-  record.name.textContent = view.code; record.name.hidden = !view.code;
-  record.status.textContent = statuses[activity.status];
-  const details = runtimeActivitySummary(activity.kind, activity.summary);
-  record.details.textContent = details.join(' · '); record.details.hidden = !details.length;
+  const calls = [...group.records.values()].map(item => item.activity).filter(Boolean);
+  const running = calls.filter(item => item.status === 'started').length;
+  const failed = calls.filter(item => item.status === 'failed').length;
+  const completed = calls.filter(item => item.status === 'completed').length;
+  group.row.className = 'runtime-step ' + (running ? 'running' : failed ? 'rejected' : 'done');
+  group.category.textContent = view.category;
+  group.label.textContent = view.label;
+  group.count.textContent = calls.length + (activity.name === 'budget' ? '次读取' : '次'); group.count.hidden = calls.length < 2;
+  group.name.textContent = view.code; group.name.hidden = !view.code;
+  group.status.textContent = running ? '进行中' : failed ? '未完成' : '已完成';
+  const summaries = calls.map(item => runtimeActivitySummary(item.kind, item.summary));
+  const common = summaries[0]?.filter(part => summaries.every(parts => parts.includes(part))) || [];
+  const outcomes = [];
+  if (calls.length > 1 && completed && (failed || running)) outcomes.push(completed + '次已完成');
+  if (calls.length > 1 && failed) outcomes.push(failed + '次未完成');
+  if (calls.length > 1 && running) outcomes.push(running + '次进行中');
+  group.details.textContent = [...common, ...outcomes].join(' · ');
+  group.details.hidden = !group.details.textContent;
   state.latest.textContent = activity.status === 'started' ? '正在' + view.label : '正在处理';
   state.panel.dataset.status = 'running';
   if (followLatest) state.list.scrollTop = state.list.scrollHeight;
@@ -1254,7 +1329,24 @@ function addMessage(role, content, isFallback = false, options = {}) {
   return div;
 }
 
-function renderReplyText(text) {
+function renderReplyText(text, {safeStatus=false}={}) {
+  // 回退只有原正文，没有可用的签名投影。仅重排明确的原账本行，不计算、补值或提高事实资格。
+  if (safeStatus && typeof text === 'string') {
+    const split = text.indexOf('\n\n');
+    if (split > 0) {
+      const lines = text.slice(0, split).split('\n');
+      const header = /^(账户账本)(?: · (\d{4}-\d{2}-\d{2}))?$/.exec(lines[0]);
+      const rows = lines.slice(1).map(line => /^([^\r\n]+) · 已结算余额：(\s*[^\r\n]+)$/.exec(line));
+      if (header && rows.length > 0 && rows.length <= 5 && rows.every(Boolean)) {
+        const ledger = '<section class="reply-ledger-preview" aria-label="账户账本"><header><strong>' + escapeHtml(header[1]) +
+          '</strong>' + (header[2] ? '<span>' + escapeHtml(header[2]) + '</span>' : '') + '</header>' +
+          '<p class="reply-ledger-note">已结算余额</p><dl>' + rows.map(row =>
+            '<div class="reply-ledger-row"><dt>' + escapeHtml(row[1]) + '</dt><dd><strong>' + escapeHtml(row[2].trim()) + '</strong></dd></div>').join('') + '</dl></section>';
+        const tail = text.slice(split + 2);
+        return ledger + (window.NavrenMarkdown?.render(tail) ?? escapeHtml(tail).replace(/\n/g, '<br>'));
+      }
+    }
+  }
   return window.NavrenMarkdown?.render(text) ?? escapeHtml(text).replace(/\n/g, '<br>');
 }
 
@@ -1277,7 +1369,7 @@ function ensureMessageTools(message) {
   });
   bubble.querySelectorAll(':scope > .message-bookmark-control, :scope > .message-audio-control').forEach(button => tools.append(button));
   bubble.querySelectorAll(':scope > .chat-retry, :scope > .message-tools > .chat-retry').forEach(button => {
-    button.classList.add('message-action'); messageToolActions(message).append(button);
+    button.classList.add('message-action'); messageToolActions(message).prepend(button);
   });
   bubble.append(tools);
   return tools;
@@ -1461,9 +1553,9 @@ function renderServiceNegotiationPrompt(message, request) {
   if (!request || typeof request.text !== 'string') return;
   const card = document.createElement('section');
   card.className = 'service-negotiation-card';
-  const title = document.createElement('h3'); title.textContent = '模拟银行服务协商';
+  const title = document.createElement('h3'); title.textContent = '银行服务协商';
   const intro = document.createElement('p');
-  intro.textContent = '先核对你的条件。Navren 只会从已批准的合成优惠规则中匹配方案，不会生成贷款、外部商家报价或真实合同。';
+  intro.textContent = '先核对你的条件。Navren 按已批准的服务规则匹配方案；匹配结果不构成贷款、商家报价或合同。';
   const text = document.createElement('textarea');
   text.value = request.text; text.rows = 3; text.maxLength = 1200;
   text.setAttribute('aria-label', '本次协商条件');
@@ -1471,13 +1563,13 @@ function renderServiceNegotiationPrompt(message, request) {
   shareLabel.className = 'service-memory-share';
   const share = document.createElement('input'); share.type = 'checkbox';
   const shareText = document.createElement('span');
-  shareText.textContent = '本次向模拟银行代理分享已确认的财务目标、流动性偏好和产品兴趣（默认关闭；不分享消费明细、风险测评或资金承诺）。';
+  shareText.textContent = '本次向银行服务代理分享已确认的财务目标、流动性偏好和产品兴趣（默认关闭；不分享消费明细、风险测评或资金承诺）。';
   shareLabel.append(share, shareText);
   const preview = document.createElement('button');
   preview.type = 'button'; preview.className = 'p-btn'; preview.textContent = '按当前条件匹配方案';
   const result = document.createElement('div'); result.className = 'service-negotiation-result';
   preview.addEventListener('click', async () => {
-    preview.disabled = true; preview.textContent = '正在核验模拟规则…'; result.replaceChildren();
+    preview.disabled = true; preview.textContent = '正在核验服务条件…'; result.replaceChildren();
     try {
       const view = await BankClient.post('/service-negotiations/preview', {
         text: text.value.trim(), share_memory: share.checked
@@ -1487,7 +1579,7 @@ function renderServiceNegotiationPrompt(message, request) {
       result.append(messageLine);
       if (view.shared_memory?.length) {
         const disclosure = document.createElement('p');
-        disclosure.textContent = '本次实际分享给模拟银行代理：' + view.shared_memory.map(item => item.value).join('；');
+        disclosure.textContent = '本次实际分享给银行服务代理：' + view.shared_memory.map(item => item.value).join('；');
         result.append(disclosure);
       } else if (share.checked) {
         const noMemory = document.createElement('p');
@@ -1496,7 +1588,7 @@ function renderServiceNegotiationPrompt(message, request) {
       }
       if (view.offers?.length) {
         const participants = document.createElement('p');
-        participants.textContent = '流程：用户利益代理 → 模拟银行服务代理 → 规则独立审核。';
+        participants.textContent = '流程：用户利益代理 → 银行服务代理 → 独立审核。';
         result.append(participants);
         view.offers.forEach(offer => result.append(renderServiceOffer(view.draft_id, offer)));
       }
@@ -1515,14 +1607,14 @@ function renderServiceOffer(draftId, offer) {
   const title = document.createElement('h4'); title.textContent = offer.title;
   const amount = document.createElement('p');
   amount.textContent = '每月最多减免 ' + formatServiceMoney(offer.monthly_value_minor)
-    + '，期限 ' + offer.duration_months + ' 个月，模拟成本上限 ' + formatServiceMoney(offer.max_cost_minor) + '。';
+    + '，期限 ' + offer.duration_months + ' 个月，方案成本上限 ' + formatServiceMoney(offer.max_cost_minor) + '。';
   const conditions = document.createElement('ul');
   (offer.conditions || []).forEach(item => { const li = document.createElement('li'); li.textContent = item; conditions.append(li); });
   const investment = document.createElement('p');
   investment.textContent = '是否要求购买理财：' + (offer.requires_investment_purchase ? '是' : '否');
   const status = document.createElement('p'); status.textContent = offer.status_label || '条件申请待核验';
   const accept = document.createElement('button'); accept.type = 'button'; accept.className = 'p-btn';
-  accept.textContent = '我接受这些条件，提交模拟申请';
+  accept.textContent = '我接受这些条件，提交申请';
   accept.addEventListener('click', async () => {
     accept.disabled = true;
     try {
@@ -1531,7 +1623,7 @@ function renderServiceOffer(draftId, offer) {
       });
       row.replaceChildren(title, amount, conditions, investment);
       const receipt = document.createElement('p');
-      receipt.textContent = '模拟申请已提交，状态：' + application.status + '；编号 ' + application.application_id;
+      receipt.textContent = '申请已提交，状态：' + application.status + '；编号 ' + application.application_id;
       const notice = document.createElement('small'); notice.textContent = application.notice;
       row.append(receipt, notice);
     } catch (error) {
@@ -1815,7 +1907,7 @@ function bookmarkIcon(button, saved) {
   button.closest('.bubble')?.classList.add('has-message-actions');
 }
 function configureAccountBookmark(button, message, text, entry = {}, result) {
-  const origin=chatBinding(), snippet=text.slice(0,200);
+  const origin=chatBinding(), snippet=(window.NavrenConversationComponents?.plainText(text) ?? text).slice(0,200);
   const messageId=entry.client_message_id||entry.bank_response_id||message.dataset.clientMessageId||message.dataset.bankResponseId||message.dataset.chatArchiveRow||newChatMessageId();
   const valid=()=>Storage.accountReady()&&origin.registered_user_id===BankClient.identity()?.registered_user_id&&origin.workspace_id===BankClient.identity()?.workspace_id&&origin.privacy_revision===BankClient.identity()?.privacy_revision;
   const matches=row=>(!row.category||row.category==='chat_message')&&row.workspace_id===origin.workspace_id&&row.privacy_revision===origin.privacy_revision&&(row.message_id?row.message_id===messageId:row.text===snippet);
@@ -1942,7 +2034,7 @@ function extractProfileFromMessage(text) {
 function handleKeyDown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    sendMessage();
+    sendMessage(null,null,{manualVoiceReview:true});
   }
 }
 
@@ -2012,7 +2104,7 @@ function rebindBubbleEvents(msgEl, historyEntry, retryQuestion = '') {
   }
   if(body&&historyEntry?.content){
     const names=historyEntry.highlight_names || [...body.querySelectorAll('.product-name')].map(node=>node.textContent);
-    body.classList.add('message-body','message-prose');body.innerHTML=highlightProductNames(renderReplyText(historyEntry.content),names);
+    body.classList.add('message-body','message-prose');body.innerHTML=highlightProductNames(renderReplyText(historyEntry.content,{safeStatus:historyEntry.isFallback===true}),names);
   }
 
   // 将历史收藏控件统一升级，去掉旧外圈和金色内联样式。
@@ -2410,7 +2502,7 @@ async function triggerHandoff(reason) {
     const state=await BankClient.get('/overview');if(!guard.valid(state))return;
     const risk=Storage.get('qingzhou_riskProfile');
     const boundRisk=risk?.workspace_id===state.workspace_id&&risk?.privacy_revision===state.privacy_revision;
-    const syncedItems=['业务参考日期：'+state.as_of,'业务风险配置：R'+state.profile.risk_level+'（演示配置，非正式测评）'];
+    const syncedItems=['业务参考日期：'+state.as_of,'业务风险配置：R'+state.profile.risk_level+'（账户配置，非正式测评）'];
     if(boundRisk)syncedItems.push('本地问卷参考：'+risk.level+' '+risk.label+'（不替代正式测评）');
     const recentMessages=currentChatHistory().slice(-4).map(m=>({role:m.role,text:String(m.content||'').replace(/<[^>]*>/g,'').slice(0,180)}));
     const packet={...chatBinding(),reason:String(reason),syncedItems,recentMessages,productCtx:'产品身份与购买条件请在发现逐项重新核对',timestamp:new Date().toISOString()};
@@ -2530,7 +2622,7 @@ function chatReferencePacket(ref){
 }
 function updateChatSendState(){
   const button=document.getElementById('sendBtn'),input=document.getElementById('userInput');
-  if(button)button.disabled=chatSending||!chatArchiveReady||chatArchiveBusy||(!input?.value.trim()&&!currentChatReference()&&!pendingImageFile);
+  if(button)button.disabled=chatSending||!chatArchiveReady||chatArchiveBusy||(!input?.value.trim()&&!currentChatReference()&&!(window.NavrenChatAttachments?.files().length));
 }
 function clearChatReference(){
   chatReferenceRevision++;
@@ -2547,21 +2639,23 @@ function retryChatRequest(snapshot,binding,message=null){
   }
   const ref=cloneChatReference(snapshot.reference);
   if(typeof snapshot.text!=='string')return;
-  if(snapshot.had_image&&(!snapshot.imageBlob||typeof snapshot.image!=='string')){
-    showToast('原问题包含图片，请重新附上图片后使用发送按钮。');return;
-  }
+  const attachmentFiles=snapshot.attachmentFiles||(snapshot.imageBlob?[snapshot.imageBlob]:[]);
+  if((snapshot.had_attachments||snapshot.had_image)&&!attachmentFiles.length){showToast('原问题包含附件，请重新添加原附件后发送。');return;}
   if(snapshot.had_audio&&!snapshot.voiceClip?.blob){showToast('原问题包含录音，请重新录音后发送。');return;}
-  if(!snapshot.text.trim()&&!ref&&!snapshot.imageBlob&&!snapshot.voiceClip?.blob)return;
+  if(!snapshot.text.trim()&&!ref&&!attachmentFiles.length&&!snapshot.voiceClip?.blob)return;
   if(message?.__navrenConsumedReplyControls?.retry===true)return;
   if(message&&!consumeReplyControl(message,'retry',binding))return;
   // 重试直接使用冻结请求；不会先把旧引用放进另写的草稿。
   sendMessage(null,{text:snapshot.text,reference:ref,return_view:snapshot.return_view,internal_choice:snapshot.internal_choice===true,
-    image:snapshot.image,imageBlob:snapshot.imageBlob,had_image:snapshot.had_image===true,
+    attachmentFiles,had_attachments:snapshot.had_attachments===true,had_image:snapshot.had_image===true,
     voiceClip:snapshot.voiceClip,had_audio:snapshot.had_audio===true},
     {internalChoice:snapshot.internal_choice===true});
 }
 function chatReferenceTitle(ref){
-  return String(ref?.title||ref?.label||ref?.id||'关联资料').slice(0,200);
+  const title=String(ref?.title||ref?.label||ref?.id||'关联资料').slice(0,200);
+  if(/^(?:(?:市场事件|Market event)\s*[·:]\s*)?e_[a-f0-9]{16,64}$/i.test(title))
+    return window.NavrenI18n?.language==='en'?'Market event':'关联市场事件';
+  return title;
 }
 function chatReferenceUi(text){return window.NavrenI18n?.t(text)??text;}
 function chatReferenceHref(view){
