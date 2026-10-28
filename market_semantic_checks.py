@@ -227,14 +227,29 @@ def old_announcement_headline_issues(row, articles):
                 continue
             # An explicitly dated new action in selected evidence can justify
             # another angle; absent such evidence the headline remains old.
-            if any(isinstance(other, dict) and isinstance(other.get('quote'), str)
-                   and any(not new['gap'].lstrip().startswith(('电', '讯'))
-                           and _action_day(new, published) == published for new in
-                           _DATED_ACTION.finditer(other['quote'])) for other in facts):
+            if any(_source_bound_current_day_action(other, refs, published)
+                   for other in facts):
                 continue
             return [{'code': 'selected_old_announcement_without_new_fact',
                      'article_id': article['id']}]
     return []
+
+
+def _source_bound_current_day_action(fact, refs, published):
+    """A generated today-claim cannot rescue an old headline without its own source."""
+    if not isinstance(fact, dict) or not isinstance(fact.get('quote'), str):
+        return False
+    article = refs.get(fact.get('article_id'))
+    source = article.get('evidence_text') if article else None
+    quote = fact['quote']
+    if (not isinstance(source, str) or quote not in source
+            or article.get('read_scope') != 'full_text'
+            or article.get('evidence_truncated') is not False):
+        return False
+    return any(not new['gap'].lstrip().startswith(('电', '讯'))
+               and not re.search(r'\d{1,2}日', new['gap'])
+               and _action_day(new, published) == published
+               for new in _DATED_ACTION.finditer(quote))
 
 
 def _announcement_sections(article):
