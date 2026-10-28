@@ -74,6 +74,22 @@ class OldAnnouncementGuardTests(unittest.TestCase):
         event['headline'] = '记者专访甲公司负责人谈协议影响'
         self.assertFalse(old_announcement_headline_issues(event, [source]))
 
+    def test_invented_today_quote_cannot_rescue_old_announcement(self):
+        event, source = selected(), article()
+        event['facts'].append({'article_id': 'a_demo', 'quote': '28日披露新增条款',
+                               'text': '28日披露新增条款。'})
+        self.assertEqual(old_announcement_headline_issues(event, [source])[0]['code'],
+                         'selected_old_announcement_without_new_fact')
+
+    def test_today_report_of_old_disclosure_is_not_new_action(self):
+        event, source = selected(), article()
+        source['evidence_text'] += ' 28日报道22日宣布签署协议。'
+        event['facts'].append({'article_id': 'a_demo',
+                               'quote': '28日报道22日宣布签署协议',
+                               'text': '28日报道22日宣布签署协议。'})
+        self.assertEqual(old_announcement_headline_issues(event, [source])[0]['code'],
+                         'selected_old_announcement_without_new_fact')
+
     def test_undated_new_main_fact_with_old_background_is_not_rejected(self):
         event, source = selected(), article()
         source['evidence_text'] += ' 甲公司与丙公司签署追加协议。'
