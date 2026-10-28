@@ -376,21 +376,24 @@ window.MarketUI=(()=>{
   async function latestReadableHotspots(data,isCurrent){
     const today=chinaDay(marketNow()),current=checkedHotspots(data,today),currentEdition={edition_date:today,status:data.status,revision:data.edition_date===today?data.revision:null};
     const observation={coverage:data.coverage,current_edition:data.current_edition||currentEdition};
-    if(current.events.length===6)return {...current,...observation};
-    if(data.display_mode==='retained'&&data.is_fallback===true&&validDay(data.edition_date)&&data.edition_date<today){const retained=checkedHotspots(data,data.edition_date);if(retained.events.length===6)return {...retained,...observation};}
+    const complete=packet=>packet.total_count===6&&packet.readable_count===6&&packet.distinct_event_count===6;
+    if(current.events.length===6&&complete(data))return {...current,...observation};
+    if(data.display_mode==='retained'&&data.is_fallback===true&&validDay(data.edition_date)&&data.edition_date<today){const retained=checkedHotspots(data,data.edition_date);if(retained.events.length===6&&complete(data))return {...retained,...observation};}
     const index=await get('hotspots/history');if(!isCurrent())return null;
     if(!Array.isArray(index?.dates)||index.dates.length>62)throw Error(t('精选清单格式异常，保留最近成功内容。'));
     if(hotData?.events.length){const previous=index.dates.find(row=>row.date===hotData.edition_date);if(previous&&previous.readable_count===0)discardInvalidDisplayed({edition_date:previous.date,revision:previous.revision,events:[]});}
-    const candidates=index.dates.filter(row=>validDay(row.date)&&row.date<today&&row.readable_count===6&&Number.isSafeInteger(Number(row.revision))&&Number(row.revision)>0).sort((a,b)=>b.date.localeCompare(a.date));
+    const candidates=index.dates.filter(row=>validDay(row.date)&&row.date<today&&Number.isSafeInteger(row.complete_revision)&&row.complete_revision>0).sort((a,b)=>b.date.localeCompare(a.date));
     for(const candidate of candidates.slice(0,3)){
-      // 此路由不接受revision参数；把目录版次和实际日版次、各卡归档身份逐一核对。
-      const packet=await get('hotspots/history/'+encodeURIComponent(candidate.date));if(!isCurrent())return null;
-      if(packet.edition_date!==candidate.date||Number(packet.revision)!==Number(candidate.revision))continue;
+      // 明确读取目录标记的完整版次，避免当日较新版次不完整时回退到重复卡。
+      const packet=await get('hotspots/history/'+encodeURIComponent(candidate.date)+'?revision='+candidate.complete_revision);if(!isCurrent())return null;
+      if(packet.edition_date!==candidate.date||packet.revision!==candidate.complete_revision||!complete(packet))continue;
       discardInvalidDisplayed(packet);const retained=checkedHotspots(packet,candidate.date);
       if(retained.events.length===6)return {...retained,...observation};
     }
     if(candidates.length>3)throw Error('最近精选核验尚未完成，请稍后重试。');
-    return {...current,...observation};
+    return current.events.length===6&&!complete(data)
+      ? {...current,events:[],status:'no_qualified_hotspots',display_mode:'empty',is_fallback:false,...observation}
+      : {...current,...observation};
   }
   function applyHotspots(){
     if(!prefs()?.marketHotVisible){pendingHot=null;return;}if(!pendingHot||deck&&deck.state!=='idle'||document.querySelector('dialog[open]'))return;const root=document.getElementById('marketHot');if(!root)return;

@@ -1,0 +1,14 @@
+{
+  "schema": "navren.github-deployment-manifest/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "main",
+  "files": {
+    "market_daily.py": "673a3d979074266b52f81bff2d28ab38952f10fa1be86738ea6f4116ab67f19b",
+    "js/market_ui.js": "7f9eb1167012393945b2a91acade696780eb724d16e21f31a57e6264351b92b4",
+    "js/market_history.js": "12a7245b4d75e0b8923a4ffe685749f7203d34375c51610697b44c5a97f62e0e",
+    "recommend.html": "b5c5989b3194731e651cc54c7d56be2fd7d7039bfb0ad215026401f7c4049cbf",
+    "deployment/market-archive-identity-20261028/collector-manifest.json": "0a1c86f1a5db80cbd2cbe505019ce73ba31ef5c2a9e406071f7f937df8303f3c",
+    "deployment/market-archive-identity-20261028/approved-cutover.json": "ff0adf4346bf161ac2651b03104fe62ba7c9ad1c59dfdb5629da52fedda1d1e6"
+  },
+  "purpose": "Read-only source-backed New York close identity; exclude one exact unverified Goldman roundup substory from current daily publication; retain immutable archive and select the newest valid six-card revision."
+}
