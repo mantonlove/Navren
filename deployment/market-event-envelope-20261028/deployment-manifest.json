@@ -1,0 +1,23 @@
+{
+  "schema": "navren.github-deployment-manifest/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "main",
+  "files": {
+    "market_editor.py": "b60a965acf037389bfd940791cccc8a0f36209645c32ca1bd32158ed19cd0543",
+    "deployment/market-event-envelope-20261028/collector-manifest.json": "6b278294a007e88c76cc674c83e07d522b09b3707bd30c7995752938d360381a",
+    "deployment/market-event-envelope-20261028/approved-cutover.json": "31284a4f9a6cc6bbc78c35da852c0c99a8c1ce045b4eb17735d8bb5a700b7082"
+  },
+  "editorial_quarantine": {
+    "event_id": "e_c1161b53fb9f368866a04ec6",
+    "event_version": 1,
+    "expected_status": "published",
+    "event_body_sha256": "042f13b14b55935b3211f9afeef8b9bbcd9578a1942d0de42a6933e91f9c31f3",
+    "primary_article_id": "a_6b0141953abd10c4b74d0aec",
+    "primary_article_version": 1,
+    "primary_article_expected_status": "active",
+    "primary_article_body_sha256": "73dbefc8c623586f10bdbb7daab8cca7e7660fe6354f62e2b15e4a6b0a239418",
+    "target_status": "editorial_review_required",
+    "reason": "Google Genie 4 card uncertainty incorrectly treats already stated subscriber and early-partner categories as undisclosed; summary omits the company-scope qualifier for first."
+  },
+  "purpose": "Constrain event JSON root and scope claims; quarantine only the exact Google event version after GitHub main adoption, preserving original source and historical evidence. No model call or collection by deployer."
+}
