@@ -1,5 +1,5 @@
 {
-  "manifest_sha256": "aabfa2435a821d8a4f435b9a01847d773b2586041c10c59657df37feb8a42e25",
+  "manifest_sha256": "58f12b904c630330b6a16e94a105a0cfa8439729577c33ec9beb3e941b70c09d",
   "db_path": "/var/lib/navren-market/public/market.sqlite3",
   "local_collector_disabled": true,
   "allow_paid_collection": true,
@@ -13,7 +13,7 @@
     "src/market_pipeline.py": "b1dd0fd532b51f6cf9bf2d16f1e71a34e9a969d5e52c408614d0ffd7f72f0a95",
     "src/market_schedule.py": "1a7e54300208d3ca60202f1dd76cddf5865f83cef76c168ac030c58231eddfc5",
     "src/market_source_attribution.py": "6ae41479f28ee05f9093d08e43e31d6f01e1ebd59af02dce1aaf58e5542383e5",
-    "src/market_semantic_checks.py": "79521411d9b3eef1868ed731f8eef3bcd1718c37acd9123975400cff19a2e025",
+    "src/market_semantic_checks.py": "8e9abb6251204dc5d8af4d21bf3785682cea33c8c6a919e13daa16cfb36ca430",
     "src/market_model.py": "87ac36ed9d4ad2ad544fac4f4c2e9a8fbe2865ae32ad0267822a6a6a7cb24f0b",
     "src/public_market_history.py": "0638bfb3f4fd375d27ee528c48d511acd368f4b11831c87c4e2bc6d10475e60b",
     "src/market_statistical_identity.py": "5cf550d0fb7dc6692dea6242b8f323cd693c31487c34910e38bca7e27fdfb3ab",

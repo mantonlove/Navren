@@ -94,6 +94,20 @@ class OldAnnouncementGuardTests(unittest.TestCase):
         self.assertTrue(old_announcement_headline_issues(event, [source]))
         event['headline'] = '最新进展：甲公司与乙公司签署长期协议'
         self.assertTrue(old_announcement_headline_issues(event, [source]))
+        event['headline'] = '首次披露：甲公司与乙公司签署长期协议'
+        self.assertTrue(old_announcement_headline_issues(event, [source]))
+
+    def test_old_signing_date_is_not_proof_of_old_publication(self):
+        event, source = selected(), article()
+        source['evidence_text'] = source['evidence_text'].replace('22日宣布，与', '22日与')
+        event['summary'] = '甲公司22日与乙公司签署协议，28日由记者首次报道。'
+        event['facts'][0]['quote'] = '甲公司22日与乙公司签署长期协议'
+        event['facts'][0]['text'] = '甲公司22日与乙公司签署长期协议。'
+        self.assertFalse(old_announcement_headline_issues(event, [source]))
+        source['evidence_text'] = '新华社10月28日电。甲公司22日签署协议，28日首次披露。'
+        event['summary'] = '甲公司22日签署协议，28日首次披露。'
+        event['facts'][0]['quote'] = '甲公司22日签署协议，28日首次披露'
+        self.assertFalse(old_announcement_headline_issues(event, [source]))
 
     def test_ambiguous_cross_month_and_unverified_page_fail_open(self):
         event, source = selected(), article()

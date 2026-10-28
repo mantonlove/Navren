@@ -152,9 +152,14 @@ _ISSUER_HEADER = re.compile(r'(?:^|[\s。；;】])(?P<issuer>[\u4e00-\u9fffA-Za-
 # market close, a future delivery date, or the source page's own dateline.
 _SECONDARY_REPORT = re.compile(r'新闻分析|(?:深度|专题)分析|综述|回顾|盘点|汇编|合集|一览')
 _PUBLIC_ACTION = re.compile(r'宣布|签署|公布|披露|发布|决定|批准|获批|达成|启动|上线')
+_DATED_ACTION = re.compile(
+    r'(?P<date>(?:(?P<year>20\d{2})年)?(?:(?P<month>\d{1,2})月)?(?P<day>\d{1,2})日)'
+    r'(?P<gap>[^。；;！？!?]{0,42}?)(?:' + _PUBLIC_ACTION.pattern + r')')
+# Signing, approval and launch dates are event dates, not proof that the action
+# was already public. Only an explicit disclosure verb starts the old clock.
 _DATED_PUBLIC_ACTION = re.compile(
     r'(?P<date>(?:(?P<year>20\d{2})年)?(?:(?P<month>\d{1,2})月)?(?P<day>\d{1,2})日)'
-    r'(?P<gap>[^。；;！？!?]{0,42}?)(?:宣布|签署|公布|披露|发布|决定|批准|获批|达成|启动|上线)')
+    r'(?P<gap>[^。；;！？!?]{0,16}?)(?:宣布|公开披露|披露|公布|发布|公告)')
 
 
 def _action_day(match, published):
@@ -212,8 +217,9 @@ def old_announcement_headline_issues(row, articles):
         except (KeyError, TypeError, ValueError):
             continue
         for match in _DATED_PUBLIC_ACTION.finditer(quote):
-            if match['gap'].lstrip().startswith(('电', '讯')):
-                continue  # A wire dateline is not the selected action's date.
+            if (match['gap'].lstrip().startswith(('电', '讯'))
+                    or re.search(r'\d{1,2}日', match['gap'])):
+                continue  # A wire dateline or later date is not the old action's public date.
             old = _action_day(match, published)
             if old is None or (published - old).days < 2 or match['date'] not in first_summary:
                 continue
@@ -224,7 +230,7 @@ def old_announcement_headline_issues(row, articles):
             if any(isinstance(other, dict) and isinstance(other.get('quote'), str)
                    and any(not new['gap'].lstrip().startswith(('电', '讯'))
                            and _action_day(new, published) == published for new in
-                           _DATED_PUBLIC_ACTION.finditer(other['quote'])) for other in facts):
+                           _DATED_ACTION.finditer(other['quote'])) for other in facts):
                 continue
             return [{'code': 'selected_old_announcement_without_new_fact',
                      'article_id': article['id']}]
