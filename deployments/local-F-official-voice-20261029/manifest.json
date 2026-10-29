@@ -1,0 +1,31 @@
+{
+  "schema": "navren.local-F-GLM-voice-github-first-deployment/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "main",
+  "scope": "local F voice provider configuration and matching privacy copy only; no cloud root-file replacement or deployment",
+  "files": {
+    "deployments/local-F-official-voice-20261029/source/voice_gateway.py": "ccf2f017e4de090b51973dbb8e67474be3efaf6bc0289d55e91dcfaac513e3d4",
+    "deployments/local-F-official-voice-20261029/source/glm_speech_task.py": "deced03ed12278e49a8401e3d4d95c347e04f6d3a658e0b7c3087cdfc0922506",
+    "deployments/local-F-official-voice-20261029/source/js/chat.js": "c354b4c11befd798666ba991d390a3b2f1dd9b35792a552e480b240e911f6fd0"
+  },
+  "target_map": {
+    "voice_gateway.py": {
+      "repository_path": "deployments/local-F-official-voice-20261029/source/voice_gateway.py",
+      "expected_before_sha256": "24d28c8e591f69b2ea349206aebe8d4da80a2674e7d9a7dd8d116adcd83aea9d",
+      "sha256": "ccf2f017e4de090b51973dbb8e67474be3efaf6bc0289d55e91dcfaac513e3d4"
+    },
+    "glm_speech_task.py": {
+      "repository_path": "deployments/local-F-official-voice-20261029/source/glm_speech_task.py",
+      "expected_before_sha256": null,
+      "sha256": "deced03ed12278e49a8401e3d4d95c347e04f6d3a658e0b7c3087cdfc0922506"
+    },
+    "js/chat.js": {
+      "repository_path": "deployments/local-F-official-voice-20261029/source/js/chat.js",
+      "expected_before_sha256": "c98371cfaec097607f7bb3dbc48e873446c4dca940dbd8d49b444edd86b598d3",
+      "sha256": "c354b4c11befd798666ba991d390a3b2f1dd9b35792a552e480b240e911f6fd0"
+    }
+  },
+  "no_model_audio_SMS_calls": true,
+  "six_pending_Agent_candidates_adopted": false,
+  "business_or_overall_accepted": false
+}

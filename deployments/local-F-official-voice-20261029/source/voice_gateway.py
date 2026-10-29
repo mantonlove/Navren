@@ -1,0 +1,395 @@
+"""语音代理：同源会话、一次性票据、PCM 流及已批准助手音频原件归档。"""
+import json
+import math
+import os
+import re
+import secrets
+import socket
+import subprocess
+import threading
+import time
+import uuid
+from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
+
+from conversation_panels import panel_plain_text
+from finance_gateway import request_json
+from simulated_bank import BankError
+from glm_speech_task import (ASR_MODEL, TTS_MODEL, ASR_RATE, TTS_RATE, VOICES,
+                             APPROVED_SPEECH, CLOUD_ASR_OPT_IN, SpeechTask,
+                             endpoint, load_key)
+
+
+
+
+
+
+
+
+
+def _component_speech_markup(text):
+    """只移除已知展示围栏，保留标题、正文、数字和所有限定条件。"""
+    lines = text.splitlines(keepends=True)
+    output = []
+    index = 0
+    while index < len(lines):
+        opening = re.fullmatch(r' {0,3}(`{3,}|~{3,})([^\r\n]*)', lines[index].rstrip('\r\n'))
+        if opening is None:
+            output.append(lines[index]); index += 1; continue
+        marker, lang = opening.groups()
+        closing = index + 1
+        pattern = r' {0,3}' + re.escape(marker[0]) + '{' + str(len(marker)) + r',}[ \t]*'
+        while closing < len(lines) and re.fullmatch(pattern, lines[closing].rstrip('\r\n')) is None:
+            closing += 1
+        if closing == len(lines):
+            output.extend(lines[index:]); break
+        if lang.strip() == 'navren-panel':
+            plain = panel_plain_text(''.join(lines[index + 1:closing]))
+            if plain is None:
+                output.extend(lines[index:closing + 1])
+            else:
+                output.append(plain + '\n')
+            index = closing + 1
+            continue
+        known = re.fullmatch(r'navren-(?:facts|compare|steps|note)(?:[ \t]+([^\r\n]{1,40}))?', lang.strip())
+        if known is None:
+            output.extend(lines[index:closing + 1])
+        else:
+            if known.group(1): output.append(known.group(1).strip() + '\n')
+            output.extend(lines[index + 1:closing])
+        index = closing + 1
+    return ''.join(output)
+
+
+def speech_text(text):
+    """去掉展示标记并规范符号，保留全部风险披露和金额数值。"""
+    if not isinstance(text, str) or not text.strip() or len(text) > 8000:
+        raise BankError('INVALID_SPEECH_TEXT', '朗读内容为空或超过八千字，请分段朗读。')
+    text = _component_speech_markup(text)
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    text = re.sub(r'(?m)^\s{0,3}(?:#{1,6}|>|[-*])\s+', '', text)
+    text = text.replace('**', '').replace('`', '').replace('⚠️', '注意：')
+    text = re.sub(r'(\d+(?:\.\d+)?)\s*%', r'百分之\1', text)
+    text = re.sub(r'[¥￥]\s*([\d,]+(?:\.\d+)?)', lambda m: m[1].replace(',', '') + '元', text)
+    return re.sub(r'\n+', '。', text).strip()
+
+
+
+
+
+
+class BrowserSocket:
+    """wsproto 处理升级和帧，不自行实现 WebSocket 编解码。"""
+    def __init__(self, handler):
+        from wsproto import WSConnection, ConnectionType
+        from wsproto.events import AcceptConnection, Request
+        self.connection = WSConnection(ConnectionType.SERVER)
+        self.socket = handler.connection
+        self.lock = threading.Lock()
+        self.closed = False
+        self.connection.initiate_upgrade_connection(
+            [(k.lower().encode('ascii'), v.encode('latin1')) for k, v in handler.headers.items()], handler.path)
+        if not any(isinstance(event, Request) for event in self.connection.events()):
+            raise ValueError('无效 WebSocket 握手')
+        self.socket.sendall(self.connection.send(AcceptConnection()))
+        handler.close_connection = True
+        self.socket.settimeout(1)
+
+    def send(self, value):
+        from wsproto.events import BytesMessage, TextMessage
+        with self.lock:
+            if self.closed:
+                raise ConnectionError('连接已关闭')
+            data = self.connection.send(BytesMessage(data=value) if isinstance(value, bytes)
+                                        else TextMessage(data=json.dumps(value, ensure_ascii=False)))
+            self.socket.sendall(data)
+
+    def receive(self):
+        from wsproto.events import BytesMessage, TextMessage, Ping, CloseConnection
+        pending_bytes, pending_text = bytearray(), ''
+        while not self.closed:
+            try:
+                data = self.socket.recv(8192)
+            except socket.timeout:
+                yield None
+                continue
+            if not data:
+                return
+            with self.lock:
+                self.connection.receive_data(data)
+                events = list(self.connection.events())
+            for event in events:
+                if isinstance(event, Ping):
+                    with self.lock:
+                        self.socket.sendall(self.connection.send(event.response()))
+                elif isinstance(event, CloseConnection):
+                    return
+                elif isinstance(event, BytesMessage):
+                    pending_bytes.extend(event.data)
+                    if len(pending_bytes) > 65536:
+                        raise BankError('INVALID_AUDIO', '单次录音数据过大。')
+                    if event.message_finished:
+                        yield bytes(pending_bytes)
+                        pending_bytes.clear()
+                elif isinstance(event, TextMessage):
+                    pending_text += event.data
+                    if len(pending_text) > 20000:
+                        raise BankError('INVALID_SPEECH_TEXT', '语音请求过大。')
+                    if event.message_finished:
+                        value = json.loads(pending_text)
+                        if not isinstance(value, dict):
+                            raise ValueError('请求必须为对象')
+                        yield value
+                        pending_text = ''
+
+    def close(self):
+        from wsproto.events import CloseConnection
+        with self.lock:
+            if not self.closed:
+                try:
+                    self.socket.sendall(self.connection.send(CloseConnection(code=1000, reason='任务结束')))
+                except Exception:
+                    pass
+                self.closed = True
+
+
+class VoiceGateway:
+    def __init__(self, key=None, url=None, task_factory=SpeechTask, *, allow_cloud_asr=None):
+        from local_speech_task import LocalASRConfig, LocalTTSConfig
+        self.local_asr = LocalASRConfig.from_environment()
+        self.local_tts = LocalTTSConfig.from_environment()
+        # 显式本地模式既不取云密钥，也不读取/校验云endpoint；云TTS须明确传key。
+        local_selected = self.local_asr is not None or self.local_tts is not None
+        self.key = ('' if local_selected else load_key()) if key is None else key
+        self.url = ('' if local_selected and not self.key else endpoint()) if url is None else url
+        self.task_factory = task_factory
+        self.allow_cloud_asr = (os.environ.get('NAVREN_ALLOW_CLOUD_ASR')=='1') if allow_cloud_asr is None else bool(allow_cloud_asr)
+        self.tickets = {}
+        self.lock = threading.Lock()
+        self.slots = threading.BoundedSemaphore(3)
+
+    def status(self):
+        import importlib.util
+        dependencies = all(importlib.util.find_spec(name) for name in ('websocket', 'wsproto'))
+        local_asr_ready = self.local_asr is not None and self.local_asr.ready() and dependencies
+        local_tts_ready = self.local_tts is not None and self.local_tts.ready() and dependencies
+        cloud_ready = bool(self.key) and dependencies
+        asr_ready = local_asr_ready or (self.local_asr is None and cloud_ready and self.allow_cloud_asr)
+        tts_ready = local_tts_ready or (self.local_tts is None and cloud_ready)
+        asr_message = (self.local_asr.error_message if self.local_asr is not None else '')
+        tts_message = (self.local_tts.error_message if self.local_tts is not None else '')
+        local_selected = self.local_asr is not None or self.local_tts is not None
+        message = '; '.join(value for value in (asr_message, tts_message) if value)
+        if not message and local_selected:
+            message = ('本地识别可用' if asr_ready else '本地识别不可用') + '；' + ('本地朗读可用。' if local_tts_ready else '本地朗读未配置。')
+        elif not local_selected:
+            message = '' if cloud_ready else '语音服务尚未配置密钥或安装依赖。'
+        return {'configured': asr_ready or tts_ready,
+                'asr_model': self.local_asr.model_id if self.local_asr is not None else ASR_MODEL,
+                'tts_model': 'macos-say' if self.local_tts is not None else TTS_MODEL,
+                'asr_available': asr_ready, 'tts_available': tts_ready,
+                'asr_streaming': False,
+                'cloud_provider': 'glm_official',
+                'asr_privacy_mode': ('local_audio_only' if self.local_asr is not None else
+                    'explicit_cloud_audio_opt_in' if self.allow_cloud_asr else 'local_asr_required'),
+                'voices': self.local_tts.voices if self.local_tts is not None else VOICES,
+                'asr_sample_rate': ASR_RATE, 'tts_sample_rate': TTS_RATE,
+                'message': message, 'asr_message': asr_message, 'tts_message': tts_message}
+
+
+    def authorize(self, handler):
+        finance = handler.server.finance
+        finance.origin_check(handler)
+        _, token = finance.identity(handler)
+        return token
+
+    def session(self, handler):
+        token = self.authorize(handler)
+        handler.server.finance.check_csrf(handler, token)
+        data = request_json(handler)
+        kind = data.get('kind')
+        if set(data)-{'kind','speech_receipt','purpose'}:
+            raise BankError('INVALID_SPEECH_REQUEST','语音请求包含未支持字段。')
+        if kind not in ('asr', 'tts'):
+            raise BankError('INVALID_SPEECH_KIND', '语音任务类型无效。')
+        if kind=='asr' and not self.status()['asr_available']:
+            raise BankError('LOCAL_ASR_REQUIRED','语音输入需要本地识别服务，目前请使用文字输入。',403)
+        workspace,_=handler.server.finance.identity(handler)
+        receipt=data.get('speech_receipt') if kind=='tts' else None
+        if kind=='tts' and data.get('purpose')=='voice_preview':
+            finance=handler.server.finance
+            fixed='您好，我是 Navren，可以帮您看懂账单、比较产品和安排资金。理财有风险，请仔细阅读产品说明。'
+            receipt=finance.approve_speech(workspace,{'reply':fixed,'compliance_pass':True,
+                'answer_contract':{'kind':'fixed_public_voice_preview'},**finance.session_data(workspace,token)},token)
+        elif data.get('purpose') is not None:
+            raise BankError('INVALID_SPEECH_REQUEST','语音用途无效。')
+        if kind=='tts':handler.server.finance.resolve_speech(workspace,receipt,token)
+        if kind=='tts' and not self.status()['tts_available']:
+            raise BankError('SPEECH_NOT_CONFIGURED', self.status()['message'] or '朗读服务尚未配置。', 503)
+        ticket = secrets.token_urlsafe(32)
+        with self.lock:
+            now = time.monotonic()
+            self.tickets = {k: v for k, v in self.tickets.items() if v[2] > now}
+            if len(self.tickets) >= 64:
+                raise BankError('SPEECH_BUSY', '语音服务繁忙，请稍后重试。', 429)
+            self.tickets[ticket] = (token, kind, now + 30, workspace, receipt,
+                                    kind == 'tts' and data.get('purpose') != 'voice_preview')
+        return {'path': '/api/speech/ws?ticket=' + ticket, 'kind': kind}
+
+    def socket(self, handler):
+        token = self.authorize(handler)
+        # 浏览器升级也必须明确携带同源 Origin，防跨站消耗模型额度。
+        if handler.headers.get('Origin') != 'http://' + handler.headers.get('Host', ''):
+            raise BankError('CROSS_ORIGIN_DENIED', '拒绝跨站语音请求。', 403)
+        ticket = parse_qs(urlsplit(handler.path).query).get('ticket', [''])[0]
+        with self.lock:
+            entry = self.tickets.pop(ticket, None)
+        if not entry or entry[0] != token or entry[2] < time.monotonic():
+            raise BankError('SPEECH_TICKET_EXPIRED', '语音会话已过期，请重试。', 403)
+        if not self.slots.acquire(blocking=False):
+            raise BankError('SPEECH_BUSY', '语音服务繁忙，请稍后重试。', 429)
+        browser, task, receiver = None, None, None
+        ended = threading.Event()
+        generated_audio = bytearray()
+        deadline, audio_bytes = time.monotonic() + 120, 0
+        try:
+            browser = BrowserSocket(handler)
+            for value in browser.receive():
+                handler.server.finance.demo_sessions.validate(token,entry[3])
+                if ended.is_set():
+                    break
+                if time.monotonic() > deadline:
+                    raise BankError('SPEECH_TIMEOUT', '语音会话已超时，请重新开始。', 408)
+                if value is None:
+                    continue
+                if isinstance(value, dict) and value.get('type') == 'cancel':
+                    break
+                if task is None:
+                    if not isinstance(value, dict) or value.get('type') != 'start':
+                        raise BankError('SPEECH_PROTOCOL_ERROR', '语音启动请求无效。')
+                    if entry[1]=='tts':
+                        with handler.server.finance.speech_guard(entry[3],entry[4],token) as approved_text:
+                            value={**value,'text':approved_text}
+                            if self.local_tts is not None:
+                                from local_speech_task import LocalTTSTask
+                                task = LocalTTSTask(entry[1], value, '', '', config=self.local_tts)
+                            else:
+                                task = self.task_factory(entry[1], {**value, 'text': speech_text(approved_text),
+                                    '_speech_approval': APPROVED_SPEECH}, self.key, self.url)
+                    elif self.local_asr is not None:
+                        from local_speech_task import LocalSpeechTask
+                        task = LocalSpeechTask(entry[1], value, '', '', config=self.local_asr)
+                    else:
+                        if not self.allow_cloud_asr:
+                            raise BankError('LOCAL_ASR_REQUIRED', '云端语音识别需要明确授权。', 403)
+                        task = self.task_factory(entry[1], {**value,
+                            '_cloud_asr_opt_in': CLOUD_ASR_OPT_IN}, self.key, self.url)
+                    browser.send({'type': 'ready', 'kind': entry[1], 'sample_rate':
+                                  ASR_RATE if entry[1] == 'asr' else TTS_RATE})
+
+                    def pump():
+                        try:
+                            while not ended.is_set():
+                                handler.server.finance.demo_sessions.validate(token,entry[3])
+                                try:
+                                    message = task.receive()
+                                except (socket.timeout, TimeoutError):
+                                    continue
+                                except Exception as error:
+                                    from websocket import WebSocketTimeoutException
+                                    if isinstance(error, WebSocketTimeoutException):
+                                        continue
+                                    raise
+                                # receive可能跨过账户切换；每个输出在银行身份锁内发布。
+                                def publish(value):
+                                    finance=handler.server.finance
+                                    guard=finance.speech_guard(entry[3],entry[4],token) if entry[1]=='tts' else finance.bank.transaction()
+                                    with finance.demo_sessions.request(token,entry[3]), guard:
+                                        finance.demo_sessions.validate(token,entry[3])
+                                        if (entry[1]=='asr' and getattr(task,'local_only',False)
+                                                and isinstance(value,dict) and value.get('type')=='transcript'
+                                                and value.get('final') is True):
+                                            from asr_name_review import attach_name_review
+                                            value=attach_name_review(value,getattr(finance,'knowledge_provider',None))
+                                        browser.send(value)
+                                if isinstance(message, bytes):
+                                    if entry[1] == 'tts' and len(generated_audio) + len(message) > 25 * 1024 * 1024:
+                                        raise BankError('CHAT_MEDIA_TOO_LARGE', '这段朗读超过原件保存上限，请分段朗读。', 413)
+                                    publish(message)
+                                    if entry[1] == 'tts': generated_audio.extend(message)
+                                    continue
+                                event = message.get('header', {}).get('event')
+                                if event == 'result-generated' and entry[1] == 'asr':
+                                    output=message.get('payload', {}).get('output', {})
+                                    if (getattr(task, 'local_only', False) or getattr(task, 'normalized_sentence', False)):
+                                        sentence = output.get('sentence') or {}
+                                    else:
+                                        from dashscope.audio.asr import RecognitionResult
+                                        from dashscope.api_entities.dashscope_response import RecognitionResponse
+                                        response=RecognitionResponse(status_code=200,request_id=task.id,output=output)
+                                        sentence = RecognitionResult(response).get_sentence() or {}
+                                    if not sentence.get('heartbeat'):
+                                        publish({'type': 'transcript', 'text': sentence.get('text', ''),
+                                                      'final': bool(sentence.get('sentence_end')),
+                                                      'sentence_id': sentence.get('sentence_id', sentence.get('begin_time', 0))})
+                                elif event == 'task-finished':
+                                    completed = {'type': 'done'}
+                                    finance = handler.server.finance
+                                    media = getattr(finance, 'chat_media', None)
+                                    if (entry[1] == 'tts' and entry[5] and generated_audio and media is not None
+                                            and getattr(finance, 'registered_mode', False)):
+                                        # 媒体包装沿用原 speech_guard，并绑定同一次采集授权；
+                                        # 退出该银行发布锁后才提交，提交端复验会话/原文/隐私。
+                                        with finance.demo_sessions.request(token, entry[3]), media.assistant_speech_guard(entry[3], entry[4], token):
+                                            permit = media.prepare_assistant_audio(entry[3], bytes(generated_audio), 'audio/pcm',
+                                                speech_receipt=entry[4], session_token=token,
+                                                audio_format={'encoding': 'pcm_s16le', 'sample_rate': TTS_RATE, 'channels': 1})
+                                        completed['media'] = media.commit_assistant_audio(permit)
+                                    publish(completed)
+                                    break
+                        except Exception as error:
+                            try:
+                                browser.send(safe_error(error))
+                            except Exception:
+                                pass
+                        finally:
+                            generated_audio.clear()
+                            ended.set()
+                    receiver = threading.Thread(target=pump, daemon=True)
+                    receiver.start()
+                elif isinstance(value, bytes) and entry[1] == 'asr':
+                    audio_bytes += len(value)
+                    if audio_bytes > ASR_RATE * 2 * 120:
+                        raise BankError('SPEECH_TIMEOUT', '录音达到两分钟上限，请分段说。')
+                    task.audio(value)
+                elif isinstance(value, dict) and value.get('type') == 'finish' and entry[1] == 'asr':
+                    if not audio_bytes:
+                        raise BankError('MICROPHONE_NO_AUDIO','没有收到麦克风音频，请检查输入设备与系统录音权限。')
+                    task.finish()
+                    deadline = time.monotonic() + 15
+                else:
+                    raise BankError('SPEECH_PROTOCOL_ERROR', '语音请求无效。')
+        except Exception as error:
+            if browser:
+                try:
+                    browser.send(safe_error(error))
+                except Exception:
+                    pass
+            else:
+                raise
+        finally:
+            ended.set()
+            if task:
+                task.close()
+            if receiver:
+                receiver.join(2)
+            if browser:
+                browser.close()
+            self.slots.release()
+
+
+def safe_error(error):
+    if isinstance(error, BankError):
+        return {'type': 'error', 'code': error.code, 'message': error.message}
+    return {'type': 'error', 'code': 'SPEECH_UNAVAILABLE',
+            'message': '语音连接暂不可用，请稍后重试或使用文字输入。'}
