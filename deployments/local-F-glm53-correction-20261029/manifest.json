@@ -1,0 +1,30 @@
+{
+  "schema": "navren.local-F-GLM53-user-correction-github-first/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "main",
+  "scope": "local F official reviewer model correction; main payload only, no cloud root-file replacement or deployment",
+  "files": {
+    "deployments/local-F-glm53-correction-20261029/source/agent_runtime/model_adapters.py": "311b123a39b367a9e58cc83442845a629aeb0a5324c22a1026a9d586b6c933bd",
+    "deployments/local-F-glm53-correction-20261029/source/agent_runtime/conversation.py": "adbee4641e7ef7d2483c748a8ce6b5e62509fb3a4eed4af8e415c5291ba0583d"
+  },
+  "target_map": {
+    "agent_runtime/model_adapters.py": {
+      "repository_path": "deployments/local-F-glm53-correction-20261029/source/agent_runtime/model_adapters.py",
+      "expected_before_sha256": "8aa68165f033ad344dc427c513e4a09adc60472bee8c4f69f133018e8d4491b9",
+      "sha256": "311b123a39b367a9e58cc83442845a629aeb0a5324c22a1026a9d586b6c933bd"
+    },
+    "agent_runtime/conversation.py": {
+      "repository_path": "deployments/local-F-glm53-correction-20261029/source/agent_runtime/conversation.py",
+      "expected_before_sha256": "571c4eead439316d349734a19ed1eeefabf323e869b9b4ae913eebbf86165260",
+      "sha256": "adbee4641e7ef7d2483c748a8ce6b5e62509fb3a4eed4af8e415c5291ba0583d"
+    }
+  },
+  "official_model": "glm-5.3-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "review_output_limit_including_thinking": 8192,
+  "reviewer_seconds": 35,
+  "turn_seconds": 105,
+  "turn_token_limit": 100000,
+  "new_model_calls_or_whole_acceptance": false
+}
