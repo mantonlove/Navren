@@ -1,0 +1,26 @@
+{
+  "schema": "navren.local-F-GLM53-finalproof-compat-github-first/1",
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "main",
+  "scope": "local F FinalProof official GLM 5.3 review wire compatibility and reviewer binding; repository payload only, no cloud root replacement or server deployment",
+  "files": {
+    "deployments/local-F-glm53-finalproof-compat-20261029/source/agent_runtime/final_proof.py": "134fe690a7bd2cde0111a3d9de7883cd5bac6b122a4ad06a3c1f6d434b3d28e2",
+    "deployments/local-F-glm53-finalproof-compat-20261029/source/agent_runtime/conversation.py": "84048bf41d5ee9015f5997d14fd745e1a65618aa2b6f9b658684e6fdf096071b"
+  },
+  "target_map": {
+    "agent_runtime/final_proof.py": {
+      "repository_path": "deployments/local-F-glm53-finalproof-compat-20261029/source/agent_runtime/final_proof.py",
+      "expected_before_sha256": "82457f132b9b325ee045df916055d58cb434f4c8a57c2dd553a1de9193a5a09b",
+      "sha256": "134fe690a7bd2cde0111a3d9de7883cd5bac6b122a4ad06a3c1f6d434b3d28e2"
+    },
+    "agent_runtime/conversation.py": {
+      "repository_path": "deployments/local-F-glm53-finalproof-compat-20261029/source/agent_runtime/conversation.py",
+      "expected_before_sha256": "adbee4641e7ef7d2483c748a8ce6b5e62509fb3a4eed4af8e415c5291ba0583d",
+      "sha256": "84048bf41d5ee9015f5997d14fd745e1a65618aa2b6f9b658684e6fdf096071b"
+    }
+  },
+  "official_model": "glm-5.3-flash",
+  "candidate_only": true,
+  "server_deployment_authorized": false,
+  "new_model_calls_or_business_acceptance": false
+}
