@@ -26,6 +26,7 @@ from .model_adapters import (ZHIPU_URL, GLM_REVIEW_MODEL, GLM_ALTERNATE_REVIEW_M
                              GLM_REASONING_OUTPUT_LIMIT, ModelAdapterError,
                              OpenAICompatibleJsonClient, _unique_object)
 from .native_client import AIPingToolClient, DeepSeekToolClient
+from .primary_tool_transport import pack_review_data_payload
 from .data_boundary import CloudDataBoundary, BoundaryError
 from .operation_claims import OperationWordingError
 from .metric_claims import MetricClaimError, monetary_occurrences
@@ -485,11 +486,13 @@ class GLMConversationReviewer:
             system = self.review_system(packet)
             full, _ = pack_review_carrier(packet, allowed_version=CARRIER_LITERAL)
             literal = self._payload(system, encoded(self._financial_packet(full)))
+            literal = pack_review_data_payload(literal)
             witness = self.carrier_witness(packet)
             packed, effective = pack_review_carrier(packet,
                 allowed_version=self._carrier_active_version, witness=witness)
             if effective == CARRIER_V2:
                 candidate = self._payload(system+'\n'+CARRIER_GUIDE, encoded(self._financial_packet(packed)))
+                candidate = pack_review_data_payload(candidate)
                 if len(json.dumps(candidate,ensure_ascii=False).encode('utf-8')) < len(json.dumps(literal,ensure_ascii=False).encode('utf-8')):
                     return candidate, CARRIER_V2
             return literal, CARRIER_LITERAL
@@ -615,6 +618,27 @@ def _standard_reviewer(reviewer):
     if type(reviewer) is EvidenceGuardedClient and type(reviewer.client) is GLMConversationReviewer:
         return reviewer.client
     return None
+
+def _canonical_review_output_limit(reviewer):
+    """只读标准官方审核器的实际完整 payload；未知付费适配器拒绝准入。"""
+    inner = _standard_reviewer(reviewer)
+    if inner is None:
+        raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','审核器完整输出限额无法核验。',503)
+    methods = ('_payload','_request_parts','request_payload','serialized_request',
+               'request_input_bound','review_system','review')
+    client = vars(inner).get('client')
+    if (any(name in vars(inner) or getattr(type(inner),name,None) is not getattr(GLMConversationReviewer,name) for name in methods)
+            or not _official_review_client(client)
+            or any(name in vars(client) for name in ('_request_payload','complete_json'))
+            or inner.model_id != client.model_id or client.max_retries != 0
+            or type(client.max_retries) is not int or client.timeout != 35):
+        raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','审核器完整输出限额无法核验。',503)
+    expected = OpenAICompatibleJsonClient._request_payload(client,system='',user='',stage='reviewer.conversation')
+    limit = vars(inner).get('output_token_limit')
+    if type(limit) is not int or limit != expected['max_tokens'] or limit < 1:
+        raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','审核器输出限额与实际请求不一致。',503)
+    return limit
+
 
 def _turn_reviewer(reviewer, *, financial_catalog):
     """只复制可信标准适配器；不改共享实例或绕过实际 BaseGuard。"""
@@ -1227,6 +1251,7 @@ class ConversationAgent:
         draft_growth_bytes = 8192
         paid_primary = getattr(self.primary,'billing_mode',None) != 'unpaid_fixture'
         paid_reviewer = not facts_only_query and getattr(self.reviewer,'billing_mode',None) != 'unpaid_fixture'
+        reviewer_output_tokens = _canonical_review_output_limit(request_reviewer) if paid_reviewer else 0
         def closing_reserve(primary_input):
             # Exploration must leave room to submit a final answer, repair one
             # existing monetary contract, and still send the complete review.
@@ -1337,7 +1362,7 @@ class ConversationAgent:
                 (1 if any('reserve_receipt' in entry for entry in presentations.entries.values()) else 0)) if presentations is not None else 0
             presentation_contract_bound=presentation_copies*(24*(2*largest_record+128)+draft_growth_bytes+1024)
             input_cap = shadow_input+contracts_bound+presentation_contract_bound+growth+1024
-            return input_cap, input_cap+1400, {'metric_count':len(records),'claim_limit':24,
+            return input_cap, input_cap+reviewer_output_tokens, {'metric_count':len(records),'claim_limit':24,
                 'shadow_input_bytes':shadow_input,'worst_case_input_bytes':input_cap,
                 'largest_projected_record_bytes':largest_record,'contract_reserve_bytes':contracts_bound,
                 'presentation_contract_reserve_bytes':presentation_contract_bound,
@@ -1566,14 +1591,14 @@ class ConversationAgent:
                 source_boundary=shadow_boundary,source_reviewer=shadow_reviewer)
             minimum=details['shadow_input_bytes']+1024
             cap=max(0,min(worst,self.max_tokens-budget_tokens-
-                final_estimate['input_token_estimate']-4000-1400))
+                final_estimate['input_token_estimate']-4000-reviewer_output_tokens))
             reserved_seconds=final_reserve_seconds+review_reserve_seconds+publish_reserve_seconds
             accepted=(cap>=minimum and deadline-time.monotonic()>reserved_seconds)
             admission={'stage':'optional_read','tool':name,
                 'budget_before':budget_tokens,'input_bytes':final_estimate['input_bytes'],
                 'input_token_estimate':final_estimate['input_token_estimate'],
                 'output_tokens':4000,'review_input_cap':cap,'minimum_review_input':minimum,
-                'review_reserve':cap+1400,'reserved_seconds':reserved_seconds,
+                'review_reserve':cap+reviewer_output_tokens,'reserved_seconds':reserved_seconds,
                 'candidate_original_sha256':hashlib.sha256(encoded(output['data']).encode()).hexdigest(),
                 'candidate_projected_sha256':hashlib.sha256(encoded(projected).encode()).hexdigest(),
                 'reserve_details':details,'accepted':accepted,
@@ -1612,7 +1637,7 @@ class ConversationAgent:
                             boundary.native_tools([s for s in native_tools(metric_selections=metric_selection_mode) if s['function']['name'] in
                             ('answer_facts','answer_reviewed')],metric_selections=metric_selection_mode)),paid_primary)+draft_growth_bytes+4000
                         review_input,_,details=reviewer_reserve()
-                        review_min=details['shadow_input_bytes']+1024+1400 if paid_reviewer else 0
+                        review_min=details['shadow_input_bytes']+1024+reviewer_output_tokens if paid_reviewer else 0
                         required=input_estimate+output_estimate+final_reserve+review_min
                         reserved_seconds=final_reserve_seconds+review_reserve_seconds+publish_reserve_seconds
                         accepted=(budget_tokens+required<self.max_tokens and deadline-time.monotonic()>reserved_seconds)
@@ -2021,7 +2046,7 @@ class ConversationAgent:
                         token_bound(self.primary,(terminal_messages(view_messages),final_schemas),True))
                     worst_review_input,_,details=reviewer_reserve()
                     reserve_final=0 if bounded_payment else closing_reserve(final_input)
-                    review_output=1400 if paid_reviewer else 0
+                    review_output=reviewer_output_tokens if paid_reviewer else 0
                     minimum_review=details['shadow_input_bytes']+1024 if paid_reviewer else 0
                     review_input_cap=max(0,min(worst_review_input,self.max_tokens-budget_tokens-reserve_final-review_output)) if paid_reviewer else 0
                     required=reserve_final+review_input_cap+review_output
@@ -2046,7 +2071,7 @@ class ConversationAgent:
                     # R is a locally enforced complete-wire admission cap, not
                     # a promise that every possible 24-claim answer will fit.
                     # Unknown future results are re-evaluated after each tool.
-                    review_output=1400 if paid_reviewer else 0
+                    review_output=reviewer_output_tokens if paid_reviewer else 0
                     minimum_review=reserve_details['shadow_input_bytes']+1024 if paid_reviewer else 0
                     capacity=self.max_tokens-budget_tokens-primary_input-4000-reserve_final-review_output
                     review_input_cap=max(0,min(worst_review_input,capacity)) if paid_reviewer else 0
@@ -2803,7 +2828,7 @@ class ConversationAgent:
                     _observe_carrier(request_reviewer,packet,cloud_packet,tools,boundary)
                     tools.fresh()
                     review_input=wire_bound(request_reviewer,(cloud_packet,),paid_reviewer)
-                    reserve=review_input+1400
+                    reserve=review_input+reviewer_output_tokens
                     if budget_tokens+reserve>self.max_tokens:
                         budget_limit='tokens'
                         raise BankError('AGENT_BUDGET_EXCEEDED','本轮剩余预算不足以完成独立审核。',503)
@@ -2813,7 +2838,7 @@ class ConversationAgent:
                         # usage is now known, so release only that unused space;
                         # the whole reviewer wire and output still fit the same
                         # turn limit. Unknown usage already stops metered_call.
-                        available=self.max_tokens-budget_tokens-1400
+                        available=self.max_tokens-budget_tokens-reviewer_output_tokens
                         recovered=(usage_complete is True and review_input<=available)
                         budget_admissions.append({'stage':'reviewer_reserve_recovery',
                             'budget_before':budget_tokens,'previous_input_cap':review_input_cap,
@@ -2826,7 +2851,7 @@ class ConversationAgent:
                         review_input_cap=available
                     review_remaining=deadline-time.monotonic()-(publish_reserve_seconds if paid_reviewer else 0)
                     budget_admissions.append({'stage':'reviewer','budget_before':budget_tokens,
-                        'input_bytes':review_input,'output_tokens':1400,'terminal_reserve':0,'review_reserve':0,
+                        'input_bytes':review_input,'output_tokens':reviewer_output_tokens,'terminal_reserve':0,'review_reserve':0,
                         'reserved_seconds':publish_reserve_seconds if paid_reviewer else 0,
                         'bound_method':'full_wire_utf8_estimate','provider_bound_certified':False,
                         'accepted':review_remaining>0 and budget_tokens+reserve<=self.max_tokens})
@@ -2875,7 +2900,7 @@ class ConversationAgent:
                             restored_projection['provider_review']=restored_receipt
                         review_wire=review.pop('_agent_review_wire',None)
                         approval_token=self._final_proofs.approved(gateway=g,workspace=w,request_id=request_id,
-                            language=language,round_number=round_number+1,reviewer_model=self.reviewer.model_id,
+                            language=language,round_number=round_number+1,reviewer_model=self.reviewer.model_id,reviewer=request_reviewer,
                             verdict=review,projection=restored_projection,raw_projection=packet,actual_projection=cloud_packet,
                             metric_batches=tools.metric_batches,
                             observer_batches=getattr(g.financial_metrics,'batches',tools.metric_batches),

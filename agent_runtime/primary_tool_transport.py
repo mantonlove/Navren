@@ -171,3 +171,166 @@ def pack_primary_payload(payload):
         return candidate
     except (ValueError, TypeError, RecursionError, OverflowError, UnicodeError, AttributeError):
         return payload
+
+
+# 复用 F 已有的审核无损编码；原 primary 编码逐字保留。
+_REVIEW_SIGNED_FIELDS = frozenset(('contract_version','metric_id','subject_id','metric_name',
+    'currency','unit','value_minor','as_of','period_start','period_end','data_scope',
+    'calculation_status','basis','formula_id','input_refs','source_versions','excluded_items',
+    'coverage_gaps','assumed_inputs'))
+
+_REVIEW_LITERAL_KEYS = frozenset(('metric_batch','amount_contract','body_amount_contract',
+    'ratio_contract','amount_claims','ratio_claims','source_versions','source_version_sets',
+    'financial_metric_catalog','review_metric_catalog'))
+
+def _review_literal_subtree(value):
+    if type(value)is dict:
+        return (_REVIEW_SIGNED_FIELDS<=set(value)or bool(_REVIEW_LITERAL_KEYS.intersection(value))
+            or any(_review_literal_subtree(v)for v in value.values()))
+    return type(value)is list and any(_review_literal_subtree(v)for v in value)
+
+def restore_review_data_tables(packet,system):
+    """Only actual review wire with this exact guide may use these known slots."""
+    if type(system)is not str or not system.endswith('\n'+TABLE_GUIDE):return packet
+    if type(packet)is not dict or not (_collision(packet)or _LITERAL_KEY in packet):raise ToolTableError('review_table_missing')
+    result=deepcopy(packet)
+    if _LITERAL_KEY in result:
+        if not system.endswith('\n'+_LITERAL_GUIDE+'\n'+TABLE_GUIDE):raise ToolTableError('review_literal_guide')
+        catalog=result.pop(_LITERAL_KEY)
+        roots,slots=_review_literal_roots(result,restoring=True)
+        restored=_restore_literal_values(roots,catalog)
+        for (parent,key),value in zip(slots,restored):parent[key]=value
+    for entry in result.get('evidence',[]):
+        if type(entry)is not dict:raise ToolTableError('review_table_evidence')
+        if _collision(entry.get('data')):
+            if _review_literal_subtree(entry['data']):raise ToolTableError('review_table_financial_literal')
+            entry['data']=decode_tool_json(entry['data'])
+            if _review_literal_subtree(entry['data']):raise ToolTableError('review_table_financial_literal')
+    if _collision(result.get('monetary_evidence')):
+        result['monetary_evidence']=decode_tool_json(result['monetary_evidence'])
+    if _collision(result):raise ToolTableError('review_table_wrong_slot')
+    return result
+
+def pack_review_data_payload(payload):
+    """Actual GLM serializer and reserve share one full-wire choose-shorter path."""
+    try:
+        if (type(payload)is not dict or type(payload.get('messages'))is not list or len(payload['messages'])!=2
+                or payload['messages'][0].get('role')!='system'or payload['messages'][1].get('role')!='user'
+                or type(payload['messages'][0].get('content'))is not str
+                or payload['messages'][0]['content'].endswith('\n'+TABLE_GUIDE)):
+            return payload
+        original=json.loads(payload['messages'][1]['content'],object_pairs_hook=_unique,parse_constant=_reject_constant)
+        if type(original)is not dict or _collision(original):return payload
+        packed=deepcopy(original);changed=False
+        for entry in packed.get('evidence',[]):
+            if type(entry)is not dict or 'data'not in entry:continue
+            value=entry['data']
+            if _review_literal_subtree(value):continue
+            organized=_pack(value)
+            if not _same_json(decode_tool_json(organized),value):return payload
+            if not _same_json(organized,value):entry['data']=organized;changed=True
+        rows=packed.get('monetary_evidence')
+        # These are the original unsigned scalar compatibility facts, never
+        # metric signatures or amount claim parameters. Unknown rows stay literal.
+        allowed=frozenset(('evidence_id','value','currency','unit','scope','article_id','citation_id'))
+        if (type(rows)is list and rows and all(type(r)is dict and set(r)<=allowed
+                and all(v is None or type(v)in(str,int,float,bool)for v in r.values())for r in rows)):
+            organized=_pack(rows)
+            if not _same_json(decode_tool_json(organized),rows):return payload
+            if not _same_json(organized,rows):packed['monetary_evidence']=organized;changed=True
+        if not changed:return _pack_review_literals(payload)
+        candidate=deepcopy(payload);candidate['messages'][0]['content']+='\n'+TABLE_GUIDE
+        candidate['messages'][1]['content']=json.dumps(packed,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False)
+        if not _same_json(restore_review_data_tables(packed,candidate['messages'][0]['content']),original):return payload
+        if len(json.dumps(candidate,ensure_ascii=False).encode())>=len(json.dumps(payload,ensure_ascii=False).encode()):return _pack_review_literals(payload)
+        return _pack_review_literals(candidate)
+    except (AttributeError,KeyError,ValueError,TypeError,OverflowError,RecursionError,UnicodeError):
+        return payload
+
+_LITERAL_KEY='__navren_input_literals_v1__'
+
+_LITERAL_PREFIX='~L:'
+
+_LITERAL_GUIDE=('本包__navren_input_literals_v1__按0起始索引逐字列出重复字符串。'
+    '仅tool.data/tool.facts或审核evidence.data/monetary_evidence中的完整字符串"~L:N"'
+    '引用目录第N项，先逐字还原再读取；不用于其他字段，不新增事实、签名或权限。'
+    '原字段、类型、顺序和全部值均保留，终稿仍按原schema与原ID提交。')
+
+def _literal_catalog(values):
+    counts={}
+    def scan(value):
+        if type(value)is str:
+            if value.startswith(_LITERAL_PREFIX):raise ToolTableError('literal_collision')
+            if len(_encoded(value).encode())>=12:counts[value]=counts.get(value,0)+1
+        elif type(value)is list:
+            for item in value:scan(item)
+        elif type(value)is dict:
+            if _LITERAL_KEY in value:raise ToolTableError('literal_collision')
+            for item in value.values():scan(item)
+    for value in values:scan(value)
+    catalog=[s for s,n in counts.items()if n>1 and (n-1)*len(_encoded(s).encode())>n*10+3]
+    if not catalog:return values,None
+    aliases={s:_LITERAL_PREFIX+str(i)for i,s in enumerate(catalog)}
+    def encode(value):
+        if type(value)is str:return aliases.get(value,value)
+        if type(value)is list:return [encode(x)for x in value]
+        if type(value)is dict:return {k:encode(v)for k,v in value.items()}
+        return value
+    packed=[encode(v)for v in values]
+    if not _same_json(_restore_literal_values(packed,catalog),values):raise ToolTableError('literal_roundtrip')
+    return packed,catalog
+
+def _restore_literal_values(values,catalog):
+    if (type(catalog)is not list or not catalog or any(type(s)is not str or s.startswith(_LITERAL_PREFIX)for s in catalog)
+            or len(set(catalog))!=len(catalog)):raise ToolTableError('literal_catalog')
+    used=set()
+    def restore(value):
+        if type(value)is str and value.startswith(_LITERAL_PREFIX):
+            suffix=value[len(_LITERAL_PREFIX):]
+            if not suffix.isascii()or not suffix.isdigit()or str(int(suffix))!=suffix:raise ToolTableError('literal_ref')
+            index=int(suffix)
+            if not 0<=index<len(catalog):raise ToolTableError('literal_ref')
+            used.add(index);return catalog[index]
+        if type(value)is list:return [restore(x)for x in value]
+        if type(value)is dict:
+            if _LITERAL_KEY in value:raise ToolTableError('literal_collision')
+            return {k:restore(v)for k,v in value.items()}
+        return value
+    result=[restore(v)for v in values]
+    if used!=set(range(len(catalog))):raise ToolTableError('literal_unused')
+    return result
+
+def _review_literal_roots(packet,*,restoring=False):
+    roots=[];slots=[]
+    for entry in packet.get('evidence',[]):
+        if type(entry)is dict and 'data'in entry and not _review_literal_subtree(entry['data']):
+            roots.append(entry['data']);slots.append((entry,'data'))
+    rows=packet.get('monetary_evidence');decoded=None if restoring else decode_tool_json(rows)
+    allowed={'evidence_id','value','currency','unit','scope','article_id','citation_id'}
+    if (restoring or type(decoded)is list and all(type(row)is dict and set(row)<=allowed
+            and all(v is None or type(v)in(str,int,float,bool)for v in row.values())for row in decoded)):
+        roots.append(rows);slots.append((packet,'monetary_evidence'))
+    return roots,slots
+
+def _pack_review_literals(payload):
+    try:
+        original=json.loads(payload['messages'][1]['content'],object_pairs_hook=_unique,parse_constant=_reject_constant)
+        if type(original)is not dict or _LITERAL_KEY in original:return payload
+        packed=deepcopy(original);roots,slots=_review_literal_roots(packed)
+        values,catalog=_literal_catalog(roots)
+        if catalog is None:return payload
+        for (parent,key),value in zip(slots,values):parent[key]=value
+        packed[_LITERAL_KEY]=catalog;candidate=deepcopy(payload)
+        system=candidate['messages'][0]['content'];tail='\n'+TABLE_GUIDE
+        if system.endswith(tail):system=system[:-len(tail)]
+        candidate['messages'][0]['content']=system+'\n'+_LITERAL_GUIDE+tail
+        candidate['messages'][1]['content']=json.dumps(packed,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False)
+        # Compare the entire logical packet after both independent transports.
+        decoded=restore_review_data_tables(packed,candidate['messages'][0]['content'])
+        expected=(restore_review_data_tables(original,payload['messages'][0]['content'])
+            if _collision(original)else original)
+        if not _same_json(decoded,expected):return payload
+        if len(json.dumps(candidate,ensure_ascii=False).encode())>=len(json.dumps(payload,ensure_ascii=False).encode()):return payload
+        return candidate
+    except (AttributeError,KeyError,ValueError,TypeError,OverflowError,RecursionError,UnicodeError):
+        return payload

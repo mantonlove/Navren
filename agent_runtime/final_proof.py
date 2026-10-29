@@ -316,7 +316,24 @@ def _unique_json(pairs):
     return out
 
 
-def validate_review_projection(boundary, raw, actual, *, review_wire, reviewer_model,
+def _review_wire_parameters_match(wire, reviewer_model, reviewer):
+    """GLM5.3 必须绑定实际标准官方审核器；旧型号保留原1400门。"""
+    from .model_adapters import GLM_REVIEW_MODEL, OpenAICompatibleJsonClient
+    if reviewer_model != GLM_REVIEW_MODEL:
+        return type(wire.get('max_tokens')) is int and wire['max_tokens'] == 1400
+    from .conversation import _standard_reviewer, _canonical_review_output_limit
+    try:
+        inner = _standard_reviewer(reviewer)
+        limit = _canonical_review_output_limit(reviewer)
+        expected = OpenAICompatibleJsonClient._request_payload(inner.client,system='',user='',stage='reviewer.conversation')
+        return (inner.model_id == reviewer_model and limit == expected['max_tokens']
+                and strict_equal({k:v for k,v in wire.items() if k != 'messages'},
+                                 {k:v for k,v in expected.items() if k != 'messages'}))
+    except (BankError, AttributeError, TypeError, ValueError):
+        return False
+
+
+def validate_review_projection(boundary, raw, actual, *, review_wire, reviewer_model, reviewer=None,
                                review_carrier_version=CARRIER_LITERAL,
                                review_carrier_witness=None, transport=None,
                                historical_quote_market=None, historical_quote_session=None,
@@ -327,12 +344,14 @@ def validate_review_projection(boundary, raw, actual, *, review_wire, reviewer_m
     try:
         carrier_version(review_carrier_version)
         wire = json.loads(review_wire, object_pairs_hook=_unique_json)
-        if (type(wire) is not dict or wire.get('model') != reviewer_model or wire.get('max_tokens') != 1400
+        if (type(wire) is not dict or wire.get('model') != reviewer_model or not _review_wire_parameters_match(wire, reviewer_model, reviewer)
                 or type(wire.get('messages')) is not list or len(wire['messages']) != 2
                 or wire['messages'][0].get('role') != 'system' or wire['messages'][1].get('role') != 'user'
                 or type(wire['messages'][1].get('content')) is not str):
             fail('AGENT_FINAL_REVIEW_WIRE_INVALID', 503)
         sent = json.loads(wire['messages'][1]['content'], object_pairs_hook=_unique_json)
+        from .primary_tool_transport import restore_review_data_tables
+        sent = restore_review_data_tables(sent, wire['messages'][0].get('content'))
         expanded = _expand_review(boundary, actual, review_carrier_version=review_carrier_version,
             review_carrier_witness=review_carrier_witness)
         if not strict_equal(_expand_review(boundary, sent, review_carrier_version=review_carrier_version,
@@ -392,7 +411,7 @@ class FinalResponseProofs:
 
     def approved(self, *, gateway, workspace, request_id, language, round_number, reviewer_model,
                  verdict, projection, raw_projection, actual_projection, metric_batches, observer_batches,
-                 publication_sources, deadline, boundary, review_wire,
+                 publication_sources, deadline, boundary, review_wire, reviewer=None,
                  review_carrier_version=CARRIER_LITERAL, review_carrier_witness=None,
                  private_context_disabled=False, generated_code_session=None, operation_tools=None,
                  historical_quote_session=None, historical_quote_proof=None):
@@ -450,7 +469,7 @@ class FinalResponseProofs:
         require_complete(projection)
         review_transport={}
         restored = validate_review_projection(boundary, raw_projection, actual_projection,
-            review_wire=review_wire, reviewer_model=reviewer_model,
+            review_wire=review_wire, reviewer_model=reviewer_model, reviewer=reviewer,
             review_carrier_version=review_carrier_version,review_carrier_witness=review_carrier_witness,
             transport=review_transport,historical_quote_market=quote_market,
             historical_quote_session=historical_quote_session,historical_quote_proof=historical_quote_proof)
