@@ -3,6 +3,7 @@ from contextlib import closing
 from datetime import date,timedelta
 from decimal import Decimal,ROUND_DOWN
 import json,hashlib
+from pathlib import Path
 from fund_history import FUNDS,cached
 from wealth_returns import value_minor,calculate,COMPONENTS
 from simulated_bank import BankError
@@ -31,41 +32,52 @@ class WealthPortfolio:
     def products(self):
         return [d['product']for c in FUNDS if(d:=cached(c))]
 
-    def provision(self,w):
+    def source_revision(self):
+        """只读公开来源指纹，不创建、刷新或激活任何组合。"""
+        data=[d for c in FUNDS if(d:=cached(c))]
+        return hashlib.sha256(pack({'expected':list(FUNDS),'sources':data}).encode()).hexdigest()
+
+    def provision(self,w,*,db=None):
         """只构建独立历史回放；绝不把回放份额写回真实/现有账户。幂等、源修订生成新版。"""
+        # Explicit lifecycle writes may share their caller's bank transaction.
+        if db is None:
+            with self.bank.transaction() as connection:
+                return self.provision(w,db=connection)
+        main=next((r[2] for r in db.execute('PRAGMA database_list') if r[1]=='main'),None)
+        if not main or Path(main).resolve()!=self.bank.database.resolve() or not db.in_transaction:
+            raise BankError('PORTFOLIO_BANK_TRANSACTION_REQUIRED','历史组合需同一银行活动写事务。',403)
+        self.bank._workspace(db,w)
         data=[d for c in FUNDS if(d:=cached(c))]
         if not data:
-            with closing(self.bank.connect())as db:prior=db.execute("SELECT payload FROM portfolio_versions WHERE workspace_id=? AND kind='historical' AND active=1",(w,)).fetchone()
+            prior=db.execute("SELECT payload FROM portfolio_versions WHERE workspace_id=? AND kind='historical' AND active=1",(w,)).fetchone()
             if not prior:return
             prior=json.loads(prior['payload'])
         revision=hashlib.sha256(pack({'expected':list(FUNDS),'sources':data}).encode()).hexdigest()[:16]
         pid='history-'+revision
-        with self.bank.transaction()as db:
-            self.bank._workspace(db,w)
-            if db.execute('SELECT 1 FROM portfolio_versions WHERE workspace_id=? AND id=?',(w,pid)).fetchone():
-                db.execute("UPDATE portfolio_versions SET active=0 WHERE workspace_id=? AND kind='historical' AND id!=?",(w,pid))
-                db.execute('UPDATE portfolio_versions SET active=1 WHERE workspace_id=? AND id=?',(w,pid))
-                return
-            db.execute("UPDATE portfolio_versions SET active=0 WHERE workspace_id=? AND kind='historical'",(w,))
-            begin=max(d['coverage']['actual_from']for d in data) if data else prior['from'];end=min(d['coverage']['actual_to']for d in data) if data else prior['to']
-            payload={'identity':'基于真实行情的历史模拟组合','quantity_origin':'独立示例，每只基金1000份，不代表用户历史持仓或推荐','from':begin,'to':end,'currency':'CNY','accounting_basis':'total_equity_v2','source_revision':revision,'expected_funds':['ORIENT:'+c for c in FUNDS],'source_gaps':['ORIENT:'+c for c in FUNDS if not any(d['product']['share_code']==c for d in data)],'valuation_dates':sorted({r['nav_on']for d in data for r in d['navs']if begin<=r['nav_on']<=end}) if data else prior['valuation_dates']}
-            db.execute('INSERT INTO portfolio_versions VALUES(?,?,?,?,?,?)',(w,pid,'historical',1,begin,pack(payload)))
-            for d in data:
-                product=d['product'];fid=product['fund_id'];navs=[r for r in d['navs']if begin<=r['nav_on']<=end];quantity='1000';cost=value_minor(quantity,navs[0]['unit_nav']);acc='historical-example'
-                pos={'fund_id':fid,'product':product,'quantity':quantity,'initial_cost_minor':cost,'remaining_cost_minor':cost,'rounding_cash_minor':0,'capital_origin':'模拟期初资金，无期间买卖，开户前费用不纳入期间收益','trades':[],'acquired_on':navs[0]['nav_on'],'source_revision':revision}
-                db.execute('INSERT INTO portfolio_positions VALUES(?,?,?,?,?)',(w,pid,acc,fid,pack(pos)))
-                previous=None
-                for nav in navs:
-                    curr=state(quantity,nav['unit_nav']);point={'accounting_basis':'total_equity_v2','opening':state(quantity,previous['unit_nav'])if previous else curr,'closing':curr,'owner_contribution_minor':0,'owner_withdrawal_minor':0,'remaining_cost_minor':cost,'cumulative_pnl_minor':value_minor(quantity,nav['unit_nav'])-cost,'realized_net_pnl_minor':0,'cost_rule':'独立期初模拟持仓，期间无买卖；移动平均成本','nav_complete':previous is not None,'closing_nav_complete':True,'entitlements_complete':True,'transactions_complete':True,'corporate_actions_complete':d['coverage']['corporate_actions_complete'],'fees_complete':True,'valuation_on':nav['nav_on'],'opening_on':previous['nav_on']if previous else None,'nav_asof':nav['nav_on'],'interval_days':(date.fromisoformat(nav['nav_on'])-date.fromisoformat(previous['nav_on'])).days if previous else None,'nav_evidence':nav['source'],'portfolio_version':pid,'product_name':product['name'],'account_id':acc,'quantity':quantity,'unit_nav':nav['unit_nav'],'currency':'CNY','fee_assumptions':'期初持仓，无期间申赎/额外费用；运作费用已含净值，不重复扣。'}
-                    db.execute('INSERT INTO portfolio_valuations VALUES(?,?,?,?,?,?)',(w,pid,acc,fid,nav['nav_on'],pack(point)));previous=nav
-            for code in FUNDS:
-                if any(d['product']['share_code']==code for d in data):continue
-                fid='ORIENT:'+code;acc='historical-example'
-                pos={'fund_id':fid,'product':{'fund_id':fid,'name':FUNDS[code][0],'share_code':code,'currency':'CNY','current_channel_status':'unknown','source_status':'unavailable'},'quantity':'1000','initial_cost_minor':None,'remaining_cost_minor':None,'source_revision':revision,'source_status':'unavailable'}
-                db.execute('INSERT INTO portfolio_positions VALUES(?,?,?,?,?)',(w,pid,acc,fid,pack(pos)))
+        self.bank._workspace(db,w)
+        if db.execute('SELECT 1 FROM portfolio_versions WHERE workspace_id=? AND id=?',(w,pid)).fetchone():
+            db.execute("UPDATE portfolio_versions SET active=0 WHERE workspace_id=? AND kind='historical' AND id!=?",(w,pid))
+            db.execute('UPDATE portfolio_versions SET active=1 WHERE workspace_id=? AND id=?',(w,pid))
+            return
+        db.execute("UPDATE portfolio_versions SET active=0 WHERE workspace_id=? AND kind='historical'",(w,))
+        begin=max(d['coverage']['actual_from']for d in data) if data else prior['from'];end=min(d['coverage']['actual_to']for d in data) if data else prior['to']
+        payload={'identity':'基于真实行情的历史模拟组合','quantity_origin':'独立示例，每只基金1000份，不代表用户历史持仓或推荐','from':begin,'to':end,'currency':'CNY','accounting_basis':'total_equity_v2','source_revision':revision,'expected_funds':['ORIENT:'+c for c in FUNDS],'source_gaps':['ORIENT:'+c for c in FUNDS if not any(d['product']['share_code']==c for d in data)],'valuation_dates':sorted({r['nav_on']for d in data for r in d['navs']if begin<=r['nav_on']<=end}) if data else prior['valuation_dates']}
+        db.execute('INSERT INTO portfolio_versions VALUES(?,?,?,?,?,?)',(w,pid,'historical',1,begin,pack(payload)))
+        for d in data:
+            product=d['product'];fid=product['fund_id'];navs=[r for r in d['navs']if begin<=r['nav_on']<=end];quantity='1000';cost=value_minor(quantity,navs[0]['unit_nav']);acc='historical-example'
+            pos={'fund_id':fid,'product':product,'quantity':quantity,'initial_cost_minor':cost,'remaining_cost_minor':cost,'rounding_cash_minor':0,'capital_origin':'模拟期初资金，无期间买卖，开户前费用不纳入期间收益','trades':[],'acquired_on':navs[0]['nav_on'],'source_revision':revision}
+            db.execute('INSERT INTO portfolio_positions VALUES(?,?,?,?,?)',(w,pid,acc,fid,pack(pos)))
+            previous=None
+            for nav in navs:
+                curr=state(quantity,nav['unit_nav']);point={'accounting_basis':'total_equity_v2','opening':state(quantity,previous['unit_nav'])if previous else curr,'closing':curr,'owner_contribution_minor':0,'owner_withdrawal_minor':0,'remaining_cost_minor':cost,'cumulative_pnl_minor':value_minor(quantity,nav['unit_nav'])-cost,'realized_net_pnl_minor':0,'cost_rule':'独立期初模拟持仓，期间无买卖；移动平均成本','nav_complete':previous is not None,'closing_nav_complete':True,'entitlements_complete':True,'transactions_complete':True,'corporate_actions_complete':d['coverage']['corporate_actions_complete'],'fees_complete':True,'valuation_on':nav['nav_on'],'opening_on':previous['nav_on']if previous else None,'nav_asof':nav['nav_on'],'interval_days':(date.fromisoformat(nav['nav_on'])-date.fromisoformat(previous['nav_on'])).days if previous else None,'nav_evidence':nav['source'],'portfolio_version':pid,'product_name':product['name'],'account_id':acc,'quantity':quantity,'unit_nav':nav['unit_nav'],'currency':'CNY','fee_assumptions':'期初持仓，无期间申赎/额外费用；运作费用已含净值，不重复扣。'}
+                db.execute('INSERT INTO portfolio_valuations VALUES(?,?,?,?,?,?)',(w,pid,acc,fid,nav['nav_on'],pack(point)));previous=nav
+        for code in FUNDS:
+            if any(d['product']['share_code']==code for d in data):continue
+            fid='ORIENT:'+code;acc='historical-example'
+            pos={'fund_id':fid,'product':{'fund_id':fid,'name':FUNDS[code][0],'share_code':code,'currency':'CNY','current_channel_status':'unknown','source_status':'unavailable'},'quantity':'1000','initial_cost_minor':None,'remaining_cost_minor':None,'source_revision':revision,'source_status':'unavailable'}
+            db.execute('INSERT INTO portfolio_positions VALUES(?,?,?,?,?)',(w,pid,acc,fid,pack(pos)))
 
     def versions(self,w):
-        self.provision(w)
         with self.bank.transaction()as db:
             self.bank._workspace(db,w)
             rows=[{**dict(r),'metadata':json.loads(r['payload'])}for r in db.execute('SELECT * FROM portfolio_versions WHERE workspace_id=? ORDER BY effective_on DESC',(w,))]
@@ -73,7 +85,6 @@ class WealthPortfolio:
         return {'versions':rows,'products':self.products(),'accounting_basis':'total_equity_v2'}
 
     def points(self,w,start,end,portfolio='historical'):
-        self.provision(w)
         with self.bank.transaction()as db:
             self.bank._workspace(db,w)
             version=db.execute('SELECT * FROM portfolio_versions WHERE workspace_id=? AND '+('kind=? AND active=1'if portfolio in ['historical','current']else 'id=?'),(w,portfolio)).fetchone()

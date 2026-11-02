@@ -37,9 +37,9 @@ CSV_PREVIEW_PATHS = {'/api/finance/statements/preview', '/api/finance/calendar/i
 CHAT_MEDIA_UPLOAD_PATH = '/api/finance/chat-media'
 MAX_CHAT_MEDIA_BODY = 25 * 1024 * 1024
 CHAT_MEDIA_UPLOAD_HEADERS = frozenset({'x-navren-expected-workspace','x-navren-privacy-revision',
-    'x-navren-archive-epoch','x-navren-upload-key'})
+    'x-navren-archive-epoch','x-navren-upload-key','x-navren-file-name'})
 CHAT_MEDIA_BIND_PATH = '/api/finance/chat-media/bind'
-CHAT_MEDIA_BIND_HEADERS = CHAT_MEDIA_UPLOAD_HEADERS - {'x-navren-upload-key'}
+CHAT_MEDIA_BIND_HEADERS = CHAT_MEDIA_UPLOAD_HEADERS - {'x-navren-upload-key','x-navren-file-name'}
 ACCOUNT_STATE_WRITE_PATH = '/api/finance/account-state'
 ACCOUNT_STATE_WRITE_HEADERS = frozenset({'x-navren-workspace','x-navren-privacy-revision'})
 RESEARCH_UPLOAD_PATH = '/api/finance/research/attachments'
@@ -673,9 +673,17 @@ class RegisteredExperienceAdapter:
                 raise AuthError('当前业务会话已退出，请重新登录。',409,'WELCOME_BUSINESS_REVOKED')
             previous = self.auth.upstream_cookie(session['user_id'],session_token=token)
             bank_token = WelcomeHandler._bank_cookie_value(previous) if previous else None
-            lease = self._call('resume',session['registered_user_id'],self.auth.auth_subject(session),
-                auth_expires_at=session['expires_at'],bank_session_token=bank_token)
-            return self._store(token,session,lease,previous,may_issue=bank_token is None)
+            recovered = False
+            try:
+                lease = self._call('resume',session['registered_user_id'],self.auth.auth_subject(session),
+                    auth_expires_at=session['expires_at'],bank_session_token=bank_token)
+            except AuthError as error:
+                if bank_token is None or error.code != 'SESSION_CHANGED':
+                    raise
+                lease = self._call('recover_committed_selection',session['registered_user_id'],self.auth.auth_subject(session),
+                    auth_expires_at=session['expires_at'],bank_session_token=bank_token)
+                recovered = True
+            return self._store(token,session,lease,previous,may_issue=bank_token is None or recovered)
 
     def select(self, token, persona):
         session = self._session(token)
@@ -685,6 +693,7 @@ class RegisteredExperienceAdapter:
                 raise AuthError('当前业务会话已退出，请重新登录。',409,'WELCOME_BUSINESS_REVOKED')
             previous = self.auth.upstream_cookie(session['user_id'],session_token=token)
             current = self.resume(token) if previous else None
+            previous = self.auth.upstream_cookie(session['user_id'],session_token=token)
             lease = self._call('select_registered',session['registered_user_id'],persona,self.auth.auth_subject(session),
                 auth_expires_at=session['expires_at'],expected_workspace_id=current['workspace_id'] if current else None)
             return self._store(token,session,lease,previous,may_issue=True)

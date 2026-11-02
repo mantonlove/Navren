@@ -132,6 +132,15 @@ CREATE TABLE IF NOT EXISTS agent_user_turn_archive(
  PRIMARY KEY(workspace_id,request_id),UNIQUE(workspace_id,archive_sequence),
  CHECK(archive_sequence>=1),CHECK(personal_revision>=0),CHECK(privacy_revision>=0),
  CHECK(substr(user_text_cipher,1,4)='pd1:'));
+CREATE TABLE IF NOT EXISTS agent_conversation_membership(
+ workspace_id TEXT NOT NULL,request_id TEXT NOT NULL,conversation_id TEXT NOT NULL,
+ archive_sequence INTEGER NOT NULL,archive_epoch INTEGER NOT NULL,binding_cipher TEXT NOT NULL,
+ PRIMARY KEY(workspace_id,request_id),
+ FOREIGN KEY(workspace_id,request_id) REFERENCES agent_user_turn_archive(workspace_id,request_id) ON DELETE CASCADE,
+ CHECK(archive_sequence>=1),CHECK(archive_epoch>=0),CHECK(length(conversation_id)=32),
+ CHECK(substr(binding_cipher,1,4)='pd1:'));
+CREATE INDEX IF NOT EXISTS conversation_membership_lookup
+ ON agent_conversation_membership(workspace_id,conversation_id,archive_sequence);
 CREATE TABLE IF NOT EXISTS agent_widget_history(
  workspace_id TEXT NOT NULL,response_id TEXT NOT NULL,widgets TEXT NOT NULL,created_at REAL NOT NULL,
  PRIMARY KEY(workspace_id,response_id));
@@ -995,7 +1004,8 @@ class PersonalDataStore:
         return clean,clean_attachments
 
     def archive_user_turn_guarded(self, owner, request_id, text, registered_user_id, *, bank_db,
-                                  expected_revision, expected_privacy, references=None, attachments=None,media_ids=None):
+                                  expected_revision, expected_privacy, references=None, attachments=None,media_ids=None,
+                                  conversation_scope_validator=None):
         """只存受理原话/只读引用；普通资料更新保留原件，撤回按独立epoch失效。"""
         if not self._guarded_bank_owner(owner, bank_db):
             return False
@@ -1030,6 +1040,13 @@ class PersonalDataStore:
                     db.rollback();return False
                 db.execute('INSERT OR IGNORE INTO dialogue_archive_epochs(workspace_id,archive_epoch) VALUES(?,0)', (owner,))
                 epoch = self.archive_epoch_from_db(db, owner)
+                conversation_id = None
+                if conversation_scope_validator is not None:
+                    if not callable(conversation_scope_validator):
+                        raise BankError('CONVERSATION_SCOPE_INVALID','对话范围无法核验。',422)
+                    conversation_id = conversation_scope_validator(db)
+                    if type(conversation_id) is not str or re.fullmatch(r'[0-9a-f]{32}',conversation_id) is None:
+                        raise BankError('CONVERSATION_SCOPE_INVALID','对话范围无法核验。',422)
                 if media_ids:
                     service=getattr(self,'chat_media',None)
                     if service is None:raise BankError('CHAT_MEDIA_UNAVAILABLE','媒体存储尚未接线。',503)
@@ -1087,6 +1104,29 @@ class PersonalDataStore:
                     db.execute('INSERT INTO agent_user_turn_archive(workspace_id,request_id,archive_sequence,archive_epoch,user_text_cipher,personal_revision,privacy_revision,received_at) VALUES(?,?,?,?,?,?,?,?)',
                                (owner, request_id, sequence, epoch, sealed, expected_revision, expected_privacy,
                                 packet['received_at']))
+                member = db.execute('SELECT * FROM agent_conversation_membership WHERE workspace_id=? AND request_id=?',
+                                    (owner,request_id)).fetchone()
+                if conversation_id is None:
+                    if member is not None:
+                        raise BankError('CONVERSATION_SCOPE_CONFLICT','当前请求已绑定另一对话。',409)
+                else:
+                    binding = {'contract':'navren.conversation-membership/1','workspace_id':owner,
+                        'registered_user_id':registered_user_id,'request_id':request_id,
+                        'conversation_id':conversation_id,'archive_sequence':packet['archive_sequence'],
+                        'archive_epoch':epoch,'privacy_revision':expected_privacy}
+                    if member is None:
+                        if existing is not None:
+                            raise BankError('CONVERSATION_SCOPE_CONFLICT','历史原件不能自动绑定新对话。',409)
+                        sealed_binding=self.protect(json.dumps(binding,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False))
+                        db.execute('INSERT INTO agent_conversation_membership(workspace_id,request_id,conversation_id,archive_sequence,archive_epoch,binding_cipher) VALUES(?,?,?,?,?,?)',
+                            (owner,request_id,conversation_id,packet['archive_sequence'],epoch,sealed_binding))
+                    else:
+                        try:verified=json.loads(self._decode(member['binding_cipher']))
+                        except (BankError,TypeError,ValueError):
+                            raise BankError('CONVERSATION_SCOPE_CONFLICT','对话归属无法核验。',409) from None
+                        if (type(verified) is not dict or _json(verified) != _json(binding) or member['conversation_id'] != conversation_id
+                                or member['archive_sequence'] != packet['archive_sequence'] or member['archive_epoch'] != epoch):
+                            raise BankError('CONVERSATION_SCOPE_CONFLICT','当前请求已绑定另一对话。',409)
                 db.commit()
             except Exception:
                 db.rollback();raise

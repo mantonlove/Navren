@@ -9,6 +9,8 @@ import re
 from .service import BankError
 
 from .sms_mfa import SmsVerified
+from sms_aliyun import SmsFailure
+from sms_auth import context_digest
 
 
 class AliyunOperationSmsProvider:
@@ -129,9 +131,30 @@ class AliyunOperationSmsProvider:
         phone = self._resolve(binding.subject)
         if not phone:
             return None
-        proof = self.auth.sms.verify(binding.challenge_id, 'bank-user:' + str(phone['user_id']),
-            'operation', phone['phone'], code,
-            {'operation': asdict(binding), 'phone_binding_id': phone['id']}, deadline=deadline)
+        context = {'operation': asdict(binding), 'phone_binding_id': phone['id']}
+        try:
+            proof = self.auth.sms.verify(binding.challenge_id, 'bank-user:' + str(phone['user_id']),
+                'operation', phone['phone'], code, context, deadline=deadline)
+        except SmsFailure as error:
+            if error.same_challenge_retry is True:
+                current = self._resolve(binding.subject)
+                now = self.auth.clock()
+                allowed = bool(current and current['id'] == phone['id']
+                    and current['user_id'] == phone['user_id'] and current['phone'] == phone['phone']
+                    and binding.issued_at <= now < min(deadline, binding.expires_at))
+                if allowed:
+                    with self.auth.connect() as db:
+                        challenge = db.execute('SELECT * FROM sms_challenges WHERE id=?',
+                                               (binding.challenge_id,)).fetchone()
+                    allowed = bool(challenge and challenge['state'] == 'sent'
+                        and challenge['principal'] == 'bank-user:' + str(phone['user_id'])
+                        and challenge['purpose'] == 'operation' and challenge['phone'] == phone['phone']
+                        and challenge['context_digest'] == context_digest(context)
+                        and challenge['created_at'] <= now < challenge['expires_at'] <= binding.expires_at
+                        and type(challenge['attempts']) is int and challenge['attempts'] < 5)
+                if not allowed:
+                    raise SmsFailure('SMS_CHALLENGE_INVALID', '验证请求已变化，请重新发送。') from None
+            raise error from None
         current = self._resolve(binding.subject)
         if not current or current['id'] != phone['id']:
             return None

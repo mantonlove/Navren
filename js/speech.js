@@ -231,7 +231,7 @@ window.NavrenSpeech = (() => {
                 if (!previous?.final || message.final) op.sentences.set(message.sentence_id, { text: message.text, final: message.final });
                 const text = [...op.sentences.entries()].sort((a, b) => Number(a[0]) - Number(b[0]))
                   .map(([, sentence]) => sentence.text).join('');
-                options.onTranscript?.(text, message.final);
+                options.onTranscript?.(text, message.final, message.name_review);
                 if (message.final && message.text && options.finishOnSentence) op.finish();
               } else if (message.type === 'done') {
                 op.serverDone = true;

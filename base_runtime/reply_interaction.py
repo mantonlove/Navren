@@ -111,3 +111,24 @@ def build_reply_interaction(workspace_id, response_id, privacy_revision, spec,
         'expires_at': (timestamp + timedelta(minutes=10)).isoformat(),
         'kind': normalized['kind'], 'prompt': normalized['prompt'], 'options': options,
         'scope': 'conversation_only'}
+
+
+def legacy_followups_interaction(followups, *, language):
+    """Map one complete ordinary-question list; never filter or truncate it.
+
+    This is the existing interaction display canonicalization (NFKC), not a
+    choice of intent, financial parameters, user consent or an execution action.
+    Ineligible legacy lists remain legacy at the caller.
+    """
+    prompts={'zh':'接下来想了解哪一项？','en':'What would you like to explore next?'}
+    if type(language)is not str or language not in prompts:return None
+    if (type(followups)is not list or not 2<=len(followups)<=3
+            or any(type(item)is not str for item in followups)):
+        return None
+    try:
+        return validate_interaction({'kind':'single_choice',
+            'prompt':prompts[language],
+            'options':[{'id':'followup_'+str(index+1),'label':text}
+                for index,text in enumerate(followups)]})
+    except BankError:
+        return None

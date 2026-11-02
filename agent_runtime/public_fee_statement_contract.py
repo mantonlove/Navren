@@ -249,7 +249,7 @@ def build_catalog(sources, provider_id):
     if len(zero) == 1 and annual:
         selected = sorted(annual, key=lambda u: (u['fee_type'] != '销售服务费', u['fee_type']))[0]
         add('comparison', '所引赎回费零档只说明该项费率为零；同一份额原文另列非零的'
-            + selected['fee_type'] + '年费率，不能据此认定全部费用为零。',
+            + selected['fee_type'] + '年费率，不能认为全部费用为零。',
             zero[0]['witnesses'] + selected['witnesses'],
             rule='zero_redemption_tier_does_not_establish_all_fee_rates_zero')
     add('unknown', _UNKNOWN, [witness(row, 0, len(_nfkc(row['hit']['excerpt'])),
@@ -358,8 +358,343 @@ def extend_time_catalog(catalog, evidence, *, cited_ids=None):
     return result
 
 
-def validate_authored(args, catalog):
+_MIXED_INTEGER = r'(?:[1-9][0-9]{0,2}(?:,[0-9]{3})+|0|[1-9][0-9]*)'
+_MIXED_M_CONDITION = (r'(?:M[<≤>≥]' + _MIXED_INTEGER + r'|'
+    + _MIXED_INTEGER + r'[<≤]M[<≤]' + _MIXED_INTEGER + r')')
+_MIXED_PURCHASE_ROW = re.compile(
+    r'(?P<prefix>申购费 |\(前收费\) )?(?P<condition>' + _MIXED_M_CONDITION + r') '
+    r'(?:(?P<rate>' + _NUMBER + r')%|(?P<amount>' + _MIXED_INTEGER + r'(?:\.[0-9]{1,2})?)元/笔)')
+_OPEN_END_LINE = '运作方式 普通开放式 开放频率 每个开放日'
+
+
+def _mixed_m_interval(condition):
+    single = re.fullmatch(r'M([<≤>≥])(' + _MIXED_INTEGER + r')', condition)
+    if single:
+        op, value = single[1], int(single[2].replace(',', ''))
+        if value <= 0:
+            return None
+        return ((None, False, value, op == '≤') if op in ('<', '≤')
+            else (value, op == '≥', None, False))
+    pair = re.fullmatch(r'(' + _MIXED_INTEGER + r')([<≤])M([<≤])('
+        + _MIXED_INTEGER + r')', condition)
+    if pair is None:
+        return None
+    lo, hi = int(pair[1].replace(',', '')), int(pair[4].replace(',', ''))
+    if lo <= 0 or hi <= lo:
+        return None
+    return lo, pair[2] == '≤', hi, pair[3] == '≤'
+
+
+def _mixed_complete_intervals(intervals):
+    if (not intervals or any(item is None for item in intervals)
+            or any(_overlap(a, b) for i, a in enumerate(intervals) for b in intervals[i + 1:])):
+        return False
+    ordered = sorted(intervals, key=lambda item: (-1 if item[0] is None else item[0]))
+    return (ordered[0][0] is None and ordered[-1][2] is None
+        and all(a[2] == b[0] and a[3] != b[1] for a, b in zip(ordered, ordered[1:])))
+
+
+def _mixed_purchase_redemption_frame(row):
+    """Consume every M and N row; unknown/missing/overlapping rows yield no facts."""
+    if (row['hit'].get('conditions') != [] or type(row['hit'].get('title')) is not str
+            or '基金产品资料概要' not in row['hit']['title']):
+        return None
+    text = _nfkc(row['hit']['excerpt'])
+    frame = _REDEMPTION.fullmatch(text)
+    if frame is None:
+        return None
+    lines = frame['rows'].splitlines()
+    purchase, redemption, prefixes, saw_redemption = [], [], [], False
+    for line in lines:
+        tier = _TIER.fullmatch(line)
+        if tier is not None:
+            saw_redemption = True
+            interval = _interval(tier[1])
+            if interval is None or not 0 <= Decimal(tier[2]) <= 100:
+                return None
+            redemption.append({'condition': tier[1], 'rate': tier[2], 'interval': interval})
+            continue
+        if saw_redemption:
+            return None
+        match = _MIXED_PURCHASE_ROW.fullmatch(line)
+        if match is None:
+            return None
+        interval = _mixed_m_interval(match['condition'])
+        if interval is None:
+            return None
+        if match['rate'] is not None and not 0 <= Decimal(match['rate']) <= 100:
+            return None
+        if match['amount'] is not None and Decimal(match['amount'].replace(',', '')) < 0:
+            return None
+        prefixes.append(match['prefix'])
+        purchase.append(interval)
+    if (not 2 <= len(purchase) <= 12 or not 1 <= len(redemption) <= 12
+            or prefixes.count('申购费 ') != 1 or prefixes.count('(前收费) ') != 1
+            or sum(line.startswith('赎回费 ') for line in lines) != 1
+            or not _mixed_complete_intervals(purchase)
+            or not _mixed_complete_intervals([item['interval'] for item in redemption])):
+        return None
+    return {'label': frame['label'], 'redemption': redemption}
+
+
+def _delivery_witness(scope, row, role):
+    hit = row['hit']; display = _nfkc(hit['excerpt'])
+    return {**scope, **{key: hit[key] for key in (*_IDENTITY, 'document_id', 'document_version_id')},
+        'evidence_id': row['evidence_id'], 'citation_id': hit['citation_id'], 'as_of': row['as_of'],
+        'source_sha256': hashlib.sha256(hit['excerpt'].encode()).hexdigest(),
+        'display_sha256': hashlib.sha256(display.encode()).hexdigest(),
+        'offset_basis': 'NFKC_delivered_excerpt_unicode_codepoints', 'start': 0,
+        'end': len(display), 'text': display, 'role': role}
+
+
+def _delivery_unit(kind, text, witnesses, **fields):
+    unit = {'kind': kind, 'text': text, 'evidence_ids': sorted({w['evidence_id'] for w in witnesses}),
+        'witnesses': deepcopy(witnesses), **fields}
+    unit['unit_id'] = 'fee-unit-' + _digest(unit)
+    return unit
+
+
+def _mixed_public_quote_id(row, public_quote_texts):
+    # Import the original registration grammar only for the new mixed branch.
+    # The representative ID displays the whole source, not one selected amount.
+    from .bank_tools import monetary_literals, encoded
+    if (not isinstance(public_quote_texts, Mapping)
+            or any(type(key) is not str or type(text) is not str
+                for key, text in public_quote_texts.items())):
+        _fail()
+    hit = row['hit']; amounts = set(monetary_literals(hit['excerpt']))
+    if not amounts:
+        _fail()
+    registered = {'p' + hashlib.sha256(encoded([row['evidence_id'], hit['citation_id'], value, currency])
+        .encode()).hexdigest()[:20] for value, currency in amounts}
+    eligible = sorted(fid for fid in registered if public_quote_texts.get(fid) == hit['excerpt'])
+    if not eligible:
+        _fail()
+    return eligible[0]
+
+
+def _mixed_open_end_source(sources, evidence, scope, label, fee_title):
+    contexts = {evidence[row['evidence_id']]['context_hash'] for row in sources}
+    if len(contexts) != 1:
+        _fail()
+    share = re.search(r'(?:^|:)([0-9]{6})\Z', scope['share_class_id'])
+    product = re.search(r'(?:^|:)([0-9]{6})\Z', scope['product_id'])
+    if share is None or product is None:
+        return None
+    context = next(iter(contexts)); candidates = []
+    for eid, entry in sorted(evidence.items()):
+        data = entry.get('data', {})
+        if (entry.get('id') != eid or entry.get('tool') != 'knowledge_search'
+                or entry.get('source') != 'public_knowledge' or entry.get('context_hash') != context
+                or data.get('ready') is not True or data.get('scope') != 'public'
+                or data.get('provider_id') != scope['provider_id']
+                or data.get('public_release_id') != scope['release_id'] or data.get('as_of') != scope['as_of']):
+            continue
+        for hit in data.get('hits', []):
+            if (not {'general', 'terms'} <= set(hit.get('facets', [])) or hit.get('title') != fee_title
+                    or any(hit.get(key) != scope[key] for key in (*_IDENTITY, 'document_id', 'document_version_id'))
+                    or hit.get('visibility') != 'public' or hit.get('outbound_allowed') is not True
+                    or hit.get('content_status') != 'full_text' or hit.get('claims_are_account_facts') is not False
+                    or hit.get('withdrawn', False) is not False or hit.get('conditions') != []
+                    or type(hit.get('citation_id')) is not str or not hit['citation_id']
+                    or type(hit.get('excerpt')) is not str or not 0 < len(hit['excerpt']) <= 1198):
+                continue
+            text = _nfkc(hit['excerpt']); lines = text.splitlines()
+            share_lines = re.findall(r'^下属基金简称 (' + _LABEL
+                + r') 下属基金交易代码 ([0-9]{6})$', text, re.M)
+            fund_codes = re.findall(r'^基金简称 [\u4e00-\u9fff]{2,80} 基金代码 ([0-9]{6})$', text, re.M)
+            if (lines.count(_OPEN_END_LINE) != 1 or text.count('运作方式') != 1
+                    or text.count('开放频率') != 1
+                    or [(name, code) for name, code in share_lines if name == label] != [(label, share[1])]
+                    or sum(code == share[1] for _, code in share_lines) != 1
+                    or fund_codes != [product[1]]):
+                continue
+            candidates.append({'evidence_id': eid, 'hit': deepcopy(hit), 'as_of': data['as_of']})
+    candidates = canonical_source_rows(candidates)
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def extend_delivery_catalog(catalog, evidence, *, public_quote_texts=None, cited_ids=None):
+    """Add only a complete mixed-table/identity grammar; preserve old time semantics.
+
+    ``public_quote_texts`` is a trusted eligible host fact_id -> canonical full
+    source text map. It never authorizes an amount by a text fragment or alias.
+    New mixed units require explicit selection provenance at both terminals.
+    """
+    result = extend_time_catalog(catalog, evidence, cited_ids=cited_ids)
+    selected_evidence = {eid: entry for eid, entry in evidence.items()
+        if cited_ids is None or eid in cited_ids}
+    proposed = source_rows_from_evidence(selected_evidence)
+    if proposed is None:
+        return result
+    sources, provider = proposed
+    mixed = [(row, frame) for row in sources
+        if (frame := _mixed_purchase_redemption_frame(row)) is not None]
+    if len(mixed) != 1 or any(unit['kind'] == 'redemption' for unit in catalog['units']):
+        return result
+    if catalog != build_catalog(sources, provider):
+        _fail()
+    row, frame = mixed[0]; scope = catalog['scope']
+    identity = _mixed_open_end_source(sources, selected_evidence, scope, frame['label'], row['hit']['title'])
+    if identity is None:
+        # A display label alone does not establish which share code it names.
+        # No new facts, including redemption units, may bridge an unknown share.
+        return result
+    fid = _mixed_public_quote_id(row, public_quote_texts)
+    matches = [unit for unit in result['units'] if unit['kind'] == 'quote'
+        and unit['evidence_ids'] == [row['evidence_id']]
+        and len(unit['witnesses']) == 1
+        and unit['witnesses'][0]['citation_id'] == row['hit']['citation_id']
+        and unit['text'] == '“' + _nfkc(row['hit']['excerpt']) + '”']
+    if len(matches) != 1:
+        _fail()
+    quote = matches[0]
+    pointer = _delivery_unit('public_quote', quote['text'], quote['witnesses'],
+        public_quote_fact_id=fid, representative='complete_original_not_selected_amount')
+    quote.clear(); quote.update(pointer)
+    table_witness = _delivery_witness(scope, row, 'complete_single_share_mixed_purchase_redemption_table')
+    for tier in frame['redemption']:
+        result['units'].append(_delivery_unit('redemption',
+            f'本轮原文“{frame["label"]}”份额的赎回费在原文“{tier["condition"]}”档为{tier["rate"]}%。',
+            [table_witness], condition=tier['condition'], rate=tier['rate'],
+            rate_unit='percent_per_redemption_tier'))
+    if identity is not None:
+        identity_witness = _delivery_witness(scope, identity, 'complete_same_share_open_end_identity')
+        result['units'].append(_delivery_unit('open_end',
+            f'本轮原文“{frame["label"]}”份额列示运作方式为普通开放式，开放频率为每个开放日。',
+            [identity_witness]))
+        zero = [tier for tier in frame['redemption'] if Decimal(tier['rate']) == 0
+            and tier['interval'][0] is not None and tier['interval'][1] is True
+            and tier['interval'][2] is None]
+        if len(zero) == 1:
+            threshold = zero[0]['interval'][0]
+            before = [tier for tier in frame['redemption'] if Decimal(tier['rate']) > 0
+                and tier['interval'][2] == threshold and tier['interval'][3] is False]
+            if len(before) == 1:
+                zero_witness = deepcopy(table_witness); zero_witness['role'] = 'zero_redemption_threshold'
+                before_witness = deepcopy(table_witness); before_witness['role'] = 'nonzero_prethreshold_redemption_tier'
+                result['units'].append(_delivery_unit('comparison',
+                    f'本轮原文“{frame["label"]}”份额的“{zero[0]["condition"]}”档列示赎回费率为{zero[0]["rate"]}%；'
+                    f'“{before[0]["condition"]}”档另列{before[0]["rate"]}%赎回费率；同份额原文列示“普通开放式”和“每个开放日”。'
+                    '零赎回费档是费用条件，不能将该档门槛当作锁定期，也不能据此认定必须达到该持有期限后才能申请赎回。',
+                    [zero_witness, before_witness, identity_witness],
+                    rule='redemption_fee_threshold_is_not_open_end_redemption_lock',
+                    zero_condition=zero[0]['condition'], nonzero_condition=before[0]['condition']))
+    result['requires_explicit_unit_selection'] = True
+    result['delivery_extension'] = 'complete_mixed_purchase_redemption_and_same_share_open_end/1'
+    result.pop('catalog_sha256')
+    result['catalog_sha256'] = _digest(result)
+    return result
+
+
+def uses_unit_selections(args):
+    """Detect selectors only at actual part positions, including mixed-key parts.
+
+    Detection never admits a selection. The expander rejects malformed shapes,
+    text mixed with an ID, and every other non-selector part.
+    """
+    if type(args) is not dict:
+        return False
+    for field in ('direct_answer', 'conditions', 'unknowns'):
+        rows = [args.get(field)] if field == 'direct_answer' else args.get(field)
+        if type(rows) is not list:
+            continue
+        for parts in rows:
+            if type(parts) is not list:
+                continue
+            if any(type(part) is dict and 'fee_statement_unit_id' in part for part in parts):
+                return True
+    return False
+
+
+def _unit_selection_parts(args):
+    for field in ('direct_answer', 'conditions', 'unknowns'):
+        if field not in args:
+            _fail()
+        rows = [args[field]] if field == 'direct_answer' else args[field]
+        if type(rows) is not list or (field != 'direct_answer' and len(rows) > 6):
+            _fail()
+        for i, parts in enumerate(rows):
+            if type(parts) is not list or not 1 <= len(parts) <= 64:
+                _fail()
+            for j, part in enumerate(parts):
+                if type(part) is not dict:
+                    _fail()
+                path = f'{field}[{j}]' if field == 'direct_answer' else f'{field}[{i}][{j}]'
+                yield field, path, part
+
+
+def _unit_selection_catalog(catalog):
+    if type(catalog) is not dict or type(catalog.get('units')) is not list:
+        _fail()
+    units = {}
+    for unit in catalog['units']:
+        if (type(unit) is not dict or type(unit.get('unit_id')) is not str or not unit['unit_id']
+                or unit['unit_id'] in units or type(unit.get('text')) is not str
+                or unit.get('kind') not in ('quote', 'rate', 'redemption', 'deduction',
+                    'comparison', 'unknown', 'time_exact', 'open_end', 'public_quote')
+                or type(unit.get('evidence_ids')) is not list
+                or any(type(eid) is not str or not eid for eid in unit['evidence_ids'])):
+            _fail()
+        if (unit['kind'] == 'public_quote' and (type(unit.get('public_quote_fact_id')) is not str
+                or not re.fullmatch(r'p[a-f0-9]{20}', unit['public_quote_fact_id'])
+                or catalog.get('requires_explicit_unit_selection') is not True)):
+            _fail()
+        units[unit['unit_id']] = unit
+    return units
+
+
+def expand_unit_selections(args, catalog):
+    """Expand only explicitly selected units, with no inference or auto-selection.
+
+    The existing authored validator and original terminal guards still validate
+    the expanded result. Public monetary references retain their original gate;
+    this function does not mint, resolve, or approve such a reference.
+    """
+    if (type(args) is not dict or type(args.get('claims')) is not list or args['claims']
+            or not {'direct_answer', 'conditions', 'unknowns', 'claims', 'followups'} <= set(args)
+            or set(args) - {'direct_answer', 'conditions', 'unknowns', 'claims', 'followups',
+                'draft_ids', 'widget_ids', 'amount_claims', 'historical_quote_ids'}
+            or any(args.get(k) for k in ('draft_ids', 'widget_ids', 'amount_claims', 'historical_quote_ids'))):
+        _fail()
+    units = _unit_selection_catalog(catalog)
+    expanded = deepcopy(args)
+    chosen, claimed, direct_substance = set(), set(), False
+    for field, path, part in _unit_selection_parts(expanded):
+        if set(part) == {'public_quote_fact_id'}:
+            if field == 'unknowns' or type(part['public_quote_fact_id']) is not str or not part['public_quote_fact_id']:
+                _fail()
+            continue
+        if set(part) != {'fee_statement_unit_id'} or type(part['fee_statement_unit_id']) is not str:
+            _fail()
+        unit_id = part['fee_statement_unit_id']
+        unit = units.get(unit_id)
+        if unit is None or (field == 'unknowns') != (unit['kind'] == 'unknown'):
+            _fail()
+        chosen.add(unit_id)
+        part.clear()
+        if unit['kind'] == 'public_quote':
+            part['public_quote_fact_id'] = unit['public_quote_fact_id']
+            continue
+        part['text'] = unit['text']
+        if field == 'direct_answer' and unit['kind'] in ('rate', 'redemption', 'deduction', 'comparison'):
+            direct_substance = True
+        if unit['kind'] != 'unknown' and unit_id not in claimed:
+            expanded['claims'].append({'text': unit['text'], 'evidence_ids': deepcopy(unit['evidence_ids'])})
+            claimed.add(unit_id)
+    # Full fee originals must be model selections as well. The host never fills
+    # a missing quote, fee field, comparison, unknown, or complete time unit.
+    if (not direct_substance or not {uid for uid, unit in units.items()
+            if unit['kind'] in ('quote', 'public_quote')} <= chosen):
+        _fail()
+    return expanded
+
+
+def validate_authored(args, catalog, *, selection_args=None):
     """Reject unsupported whole fields. Never remove, repair, or rewrite text."""
+    if (selection_args is None and (catalog.get('requires_explicit_unit_selection') is True
+            or any(unit.get('kind') in ('open_end', 'public_quote') for unit in catalog['units']))):
+        _fail()
     units = {_nfkc(u['text']): u for u in catalog['units']}
     if len(units) != len(catalog['units']) or type(args) is not dict:
         _fail()
@@ -418,21 +753,54 @@ def validate_authored(args, catalog):
         _fail()
     for i, text in enumerate(args['followups']):
         proof.append({'path': f'followups[{i}]', 'controlled_text_sha256': _digest(text)})
-    return {'contract': 'navren.public-fee-authored-statements/1',
+    result = {'contract': 'navren.public-fee-authored-statements/1',
         'arguments_sha256': _digest(args), 'catalog_sha256': catalog['catalog_sha256'],
         'authored_fields': proof, 'host_rewrite': False,
         'guarantee': 'finite_source_bound_statements_only_not_full_financial_acceptance'}
+    if selection_args is not None:
+        expanded = expand_unit_selections(selection_args, catalog)
+        if expanded != args or _digest(expanded) != _digest(args):
+            _fail()
+        units = _unit_selection_catalog(catalog)
+        selected = []
+        for field, path, part in _unit_selection_parts(selection_args):
+            if 'fee_statement_unit_id' in part:
+                unit_id = part['fee_statement_unit_id']
+                record = {'path': path, 'unit_id': unit_id,
+                    'evidence_ids': deepcopy(units[unit_id]['evidence_ids'])}
+                if units[unit_id]['kind'] == 'public_quote':
+                    record['public_quote_fact_id'] = units[unit_id]['public_quote_fact_id']
+                selected.append(record)
+        result['explicit_unit_selection'] = {'arguments_sha256': _digest(selection_args),
+            'expanded_arguments_sha256': _digest(expanded), 'selected': selected}
+    return result
 
 
 def restrict_schema(schema, catalog):
     """Same schema builder for real calls and their unchanged budget estimate."""
     props = schema['properties']
     for field in ('direct_answer', 'conditions', 'unknowns'):
+        props[field] = deepcopy(props[field])
         parts = props[field] if field == 'direct_answer' else props[field]['items']
-        text = parts['items']['oneOf'][0]['properties']['text']
-        text['enum'] = [u['text'] for u in catalog['units']
-            if (field == 'unknowns') == (u['kind'] == 'unknown') and len(u['text']) <= text['maxLength']]
-    props['claims']['items']['properties']['text']['enum'] = [u['text'] for u in catalog['units'] if u['kind'] != 'unknown']
+        parts['description'] = ('逐片显式选择fee_statement_unit_id；必需货币金额可引用public_quote_fact_id。'
+            '禁止提交text；宿主仅逐字展开所选单元，不补选事实或结论。')
+        variants = parts['items']['oneOf']
+        maximum = variants[0]['properties']['text']['maxLength']
+        available = [u for u in catalog['units']
+            if (field == 'unknowns') == (u['kind'] == 'unknown') and len(u['text']) <= maximum]
+        description = ('只显式选择本轮单元ID，不提交正文或evidence_ids。宿主逐字展开所选正文并绑定claims，'
+            '不补选其他单元。所有kind为quote或public_quote的费用完整原文都必须显式选择；'
+            'public_quote仅展开为原public_quote_fact_id指针，仍须原金额与完整引文守卫；direct_answer还须选择'
+            '至少一个费率、赎回费档、资产扣除或费用比较单元。claims必须显式为[]。本分区unit_id到原文：\n'
+            + json.dumps({u['unit_id']: u['text'] for u in available}, ensure_ascii=False))
+        variants[0] = {'type': 'object', 'properties': {'fee_statement_unit_id': {
+            'type': 'string', 'minLength': 1, 'maxLength': 256,
+            'enum': [u['unit_id'] for u in available], 'description': description}},
+            'required': ['fee_statement_unit_id'], 'additionalProperties': False}
+        if field == 'unknowns':
+            variants[1]['properties']['public_quote_fact_id']['enum'] = []
+    props['claims']['maxItems'] = 0
+    props['claims']['description'] = '必须显式提交空数组[]；宿主仅为显式选择的非unknown单元生成绑定claims。'
     props['followups']['items']['enum'] = catalog['followups']
     props['followups']['maxItems'] = 1
     return schema

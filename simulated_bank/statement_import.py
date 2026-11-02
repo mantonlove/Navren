@@ -29,6 +29,7 @@ BEIJING = timezone(timedelta(hours=8))
 class StatementImportService:
     def __init__(self, bank: SimulatedBank, *, clock=time.time):
         self.bank, self.clock = bank, clock
+        self.on_source_activated = None  # trusted host write-lifecycle callback
         self._previews = {}
         self._lock = threading.RLock()
         with closing(self.bank.connect()) as db, db:
@@ -306,6 +307,8 @@ CREATE TABLE IF NOT EXISTS imported_periodic_marks(
         with self.bank.transaction() as db:
             self.bank._workspace(db, workspace)
             result, replay = self._commit_in_transaction(db, workspace, batch_id, entry, now)
+            if not replay and self.on_source_activated is not None:
+                self.on_source_activated(workspace, db=db)
         with self._lock:
             self._previews.pop(batch_id, None)
         return {**result, 'idempotent_replay': replay}
@@ -402,6 +405,8 @@ CREATE TABLE IF NOT EXISTS imported_periodic_marks(
                 self.bank._audit(db, workspace, 'finance_data_source_changed', {'from': previous, 'to': source,
                     'dataset_id': dataset['id'] if source == 'imported' and dataset else None,
                     'scope': 'statement_analysis_only'})
+                if self.on_source_activated is not None:
+                    self.on_source_activated(workspace, db=db)
         return self.source(workspace)
 
     def _imported_rows(self, workspace, month=None):

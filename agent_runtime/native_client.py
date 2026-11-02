@@ -8,10 +8,12 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from copy import deepcopy
 
 from .model_adapters import (DEEPSEEK_MODEL, DEEPSEEK_URL, ModelAdapterError,
                              _key_from_sources, _log_call, _unique_object,
-                             _validate_official_transport, _official_urlopen)
+                             _validate_official_transport, _official_urlopen,
+                             ModelRequestNotSentError, safe_local_rejection_diagnostic)
 from .request_budget import RequestBudgetError, estimate_request
 
 
@@ -26,7 +28,7 @@ class DeepSeekToolClient:
     def __init__(self, *, urlopen=None, key_loader=None, timeout=35, log_path=None,
                  endpoint=DEEPSEEK_URL, env_name='DEEPSEEK_API_KEY',
                  keychain_service='CC/DEEPSEEK_API_KEY', provider='deepseek',
-                 model_id=None):
+                 model_id=None, trace_observer=None):
         if provider != 'deepseek' or (model_id or self.model_id) != DEEPSEEK_MODEL:
             raise ModelAdapterError('official_native_deepseek_required',
                                     model_id=model_id or self.model_id, attempts=0)
@@ -38,6 +40,7 @@ class DeepSeekToolClient:
         self.env_name, self.keychain_service = env_name, keychain_service
         self.timeout, self.log_path = timeout, log_path
         self.endpoint, self.provider = endpoint, provider
+        self.trace_observer = trace_observer
         if model_id is not None:
             self.model_id = model_id
 
@@ -81,6 +84,10 @@ class DeepSeekToolClient:
         status, outcome, code, usage = None, 'failed', 'provider_error', {}
         request_sent = False
         response_protocol = {}
+        local_rejection_diagnostic = None
+        transport_diagnostic = None
+        trace_calls, trace_unparsed, trace_total = [], 0, None
+        qa_structure_trace = None
         try:
             self._validate_transport()
             if (type(remaining_seconds) not in (int, float)
@@ -135,12 +142,19 @@ class DeepSeekToolClient:
             # Preparation and key loading consume the caller's existing
             # allowance. urllib still applies a socket I/O timeout; this is
             # not a claim that DNS/connect/body phases share a hard deadline.
+            req._navren_request_deadline_monotonic = deadline
             request_timeout = remaining()
             self._validate_transport()
             _validate_official_transport(provider=self.provider, model_id=self.model_id,
                 url=req.full_url, env_name=self.env_name, keychain_service=self.keychain_service)
             request_sent = True
-            with self.urlopen(req, timeout=request_timeout) as resp:
+            try:
+                response = self.urlopen(req, timeout=request_timeout)
+            except ModelRequestNotSentError as error:
+                request_sent = False
+                error.model_id = self.model_id
+                raise
+            with response as resp:
                 status = getattr(resp, 'status', 200)
                 remaining()
                 envelope = json.loads(resp.read(512_000), object_pairs_hook=_unique_object)
@@ -176,6 +190,7 @@ class DeepSeekToolClient:
             if not isinstance(calls, list) or len(calls) > 12:
                 raise ValueError('invalid_tool_calls')
             seen = set()
+            trace_total = len(calls)
             response_protocol['tool_arguments'] = []
             for call in calls:
                 if (not isinstance(call, dict) or call.get('type') != 'function'
@@ -195,6 +210,11 @@ class DeepSeekToolClient:
                     parse_kind = 'invalid_json'
                 except (ValueError,TypeError):
                     parse_kind = 'duplicate_key_or_nonfinite_json'
+                if self.trace_observer is not None:
+                    if parse_kind is None:
+                        trace_calls.append({'id':call['id'],'type':'function','function':{
+                            'name':call['function']['name'],'arguments':parsed_arguments}})
+                    else:trace_unparsed += 1
                 response_protocol['tool_arguments'].append({'index':len(response_protocol['tool_arguments']),
                     'parse_error_kind':parse_kind,'length':len(raw_arguments),
                     'sha256':hashlib.sha256(raw_arguments.encode('utf-8')).hexdigest()})
@@ -206,6 +226,8 @@ class DeepSeekToolClient:
             outcome, code = 'completed', ''
             return result, usage
         except ModelAdapterError as error:
+            local_rejection_diagnostic=safe_local_rejection_diagnostic(error,stage='primary',wire=locals().get('wire'))
+            if local_rejection_diagnostic is not None:error.local_rejection_diagnostic=local_rejection_diagnostic
             code=error.code
             error.request_sent = request_sent
             if request_sent and error.attempts == 0:error.attempts = 1
@@ -216,22 +238,59 @@ class DeepSeekToolClient:
             raise
         except urllib.error.HTTPError as error:
             status, code = error.code, 'provider_http_error'
-        except (urllib.error.URLError, OSError, TimeoutError):
+        except (urllib.error.URLError, OSError, TimeoutError) as error:
+            # Fixed transport metadata only; never serialize an exception or reason.
+            classes = {'URLError', 'OSError', 'TimeoutError', 'SSLError', 'SSLEOFError', 'RemoteDisconnected',
+                'SSLCertVerificationError', 'ConnectionError', 'ConnectionAbortedError',
+                'ConnectionRefusedError', 'ConnectionResetError', 'BrokenPipeError',
+                'gaierror', 'herror', 'str'}
+            reason = error.reason if isinstance(error, urllib.error.URLError) else None
+            detail = reason if isinstance(reason, BaseException) else error
+            number = getattr(detail, 'errno', None)
+            verify = getattr(detail, 'verify_code', None)
+            transport_diagnostic = {
+                'error_class': type(error).__name__ if type(error).__name__ in classes else 'other',
+                'reason_class': (type(reason).__name__ if type(reason).__name__ in classes else 'other') if reason is not None else None,
+                'errno': number if type(number) is int and -65535 <= number <= 65535 else None,
+                'ssl_verify_code': verify if type(verify) is int and 0 <= verify <= 2147483647 else None,
+                'phase': 'response_context' if 'response' in locals() else 'urlopen' if request_sent else 'pre_request'}
             code = 'provider_unavailable'
         except (ValueError, KeyError, TypeError, IndexError, AttributeError):
             code = code if code in ('response_truncated', 'budget_estimator_drift') else 'invalid_model_contract'
         finally:
+            if self.trace_observer is not None:
+                try:
+                    observed = self.trace_observer(deepcopy({
+                        'schema':'navren.native-qa-structure-trace/1','request_id':request_id,
+                        'tool_calls':trace_calls,'tool_results':[
+                            {'content':item.get('content')} for item in messages
+                            if isinstance(item,dict) and item.get('role')=='tool'],
+                        'response_tool_call_count':trace_total,'unparsed_tool_call_count':trace_unparsed}))
+                    statuses={'recorded','disabled','rid_not_allowed','invalid_event','unstructured',
+                        'frame_limit','byte_limit','storage_unavailable','key_unavailable','writer_failed'}
+                    status_value=observed.get('status') if type(observed)is dict else None
+                    qa_structure_trace={'status':status_value if type(status_value)is str and status_value in statuses else 'observer_returned'}
+                    if type(observed)is dict:
+                        pin=observed.get('sha256');count=observed.get('frame_count')
+                        if type(pin)is str and len(pin)==64 and all(c in '0123456789abcdef' for c in pin):qa_structure_trace['sha256']=pin
+                        if type(count)is int and 0<=count<=8:qa_structure_trace['frame_count']=count
+                except Exception:
+                    qa_structure_trace={'status':'observer_failed'}
             _log_call({'timestamp': datetime.now(timezone.utc).isoformat(),
                        'request_id': request_id, 'provider': self.provider,
                        'model_id': self.model_id, 'stage': 'conversation.tools',
                        'outcome': outcome, 'duration_ms': round((time.monotonic()-started)*1000),
                        'http_status': status, 'error_code': code, 'usage': usage,
-                       'response_protocol':response_protocol}, self.log_path)
+                       'response_protocol':response_protocol,
+                       **({'local_rejection_diagnostic':local_rejection_diagnostic}if local_rejection_diagnostic is not None else {}),
+                       **({'transport_diagnostic':transport_diagnostic}if transport_diagnostic is not None else {}),
+                       **({'qa_structure_trace':qa_structure_trace}if qa_structure_trace is not None else {})}, self.log_path)
         error = ModelAdapterError(code, model_id=self.model_id, attempts=1, http_status=status)
         # A rejected/truncated answer still consumed the supplier's reported
         # usage. Expose only counters, never the rejected response body.
         error.usage = usage
         error.request_sent = request_sent
+        if transport_diagnostic is not None:error.transport_diagnostic = dict(transport_diagnostic)
         raise error
 
 

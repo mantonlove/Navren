@@ -171,17 +171,37 @@
     }
     mediaList(attachments, true);
   }
+  const DOCUMENT_MIME = Object.freeze({
+    'application/pdf':'pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'xlsx',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation':'pptx',
+    'text/plain':'txt','text/markdown':'md','text/csv':'csv'});
+  function documentFields(value) {
+    const name=value.file_name, format=DOCUMENT_MIME[value.mime_type];
+    if (!text(name,180) || name !== name.trim() || /[\/\\]/u.test(name) || /\p{C}/u.test(name) ||
+        name.lastIndexOf('.') <= 0 || name.slice(name.lastIndexOf('.')).toLowerCase() !== '.'+format ||
+        value.document_format !== format || !integer(value.text_chars,0) || value.text_chars > 120000 ||
+        !(value.extraction_status === 'text' && value.text_chars > 0 && value.extraction_warning === null ||
+          value.extraction_status === 'no_text' && value.text_chars === 0 && text(value.extraction_warning,200))) throw fail('INVALID_ARCHIVE_DTO');
+  }
   function mediaDescriptor(value) {
-    keys(value, ['contract','media_id','kind','mime_type','bytes','sha256','duration_ms','storage_status',
-      'content_url','historical_readonly','execution_authority','audio_format']);
-    const mime = new Set(['image/png','image/jpeg','image/webp','image/gif','audio/wav','audio/webm','audio/ogg','audio/mpeg','audio/mp4','audio/pcm']);
+    const document=value?.kind === 'document';
+    const required=['contract','media_id','kind','mime_type','bytes','sha256','duration_ms','storage_status',
+      'content_url','historical_readonly','execution_authority','audio_format'];
+    keys(value, document ? required.concat(['file_name','document_format','text_chars','extraction_status','extraction_warning']) : required);
+    const mime = new Set(['image/png','image/jpeg','image/webp','image/gif','audio/wav','audio/webm','audio/ogg','audio/mpeg','audio/mp4','audio/pcm',...Object.keys(DOCUMENT_MIME)]);
     if (value.contract !== 'navren.chat-media/1' || typeof value.media_id !== 'string' || !HASH.test(value.media_id) ||
-        typeof value.sha256 !== 'string' || !HASH.test(value.sha256) || !['image','audio'].includes(value.kind) ||
+        typeof value.sha256 !== 'string' || !HASH.test(value.sha256) || !['image','audio','document'].includes(value.kind) ||
         !mime.has(value.mime_type) || (value.kind === 'image') !== value.mime_type.startsWith('image/') ||
-        !integer(value.bytes,1) || value.bytes > (value.kind === 'image' ? 10485760 : 26214400) ||
+        (value.kind === 'audio') !== value.mime_type.startsWith('audio/') || document !== own(DOCUMENT_MIME,value.mime_type) ||
+        !integer(value.bytes,1) || value.bytes > (value.kind === 'audio' ? 26214400 : 10485760) ||
         value.storage_status !== 'bound' || value.content_url !== '/api/finance/chat-media/' + value.media_id ||
         value.historical_readonly !== true || value.execution_authority !== false ||
         !(value.duration_ms === null || integer(value.duration_ms,1) && value.duration_ms <= 600000)) throw fail('INVALID_ARCHIVE_DTO');
+    if (document) {
+      if (value.duration_ms !== null || value.audio_format !== null) throw fail('INVALID_ARCHIVE_DTO');
+      documentFields(value);
+    }
     const format=value.audio_format;
     if (format !== null) {
       keys(format,['encoding','sample_rate','channels']);

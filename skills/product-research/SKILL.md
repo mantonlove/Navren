@@ -1,9 +1,9 @@
 ---
 name: product-research
-description: 用户要研究或比较理财、基金、存款产品，核查费用、期限、风险、退出和当前渠道时，建立逐产品证据与适配条件，避免只按收益或评级排序。
+description: 用户要研究或比较理财、基金、存款产品时，先明确资料来源；来源未定先给比较路径并澄清，本机演示规则与真实发行产品分别建立证据，不混用资料或资格。
 metadata:
   role: advisor
-  tools: [load_skill, knowledge_status, knowledge_search, public_products, products, wealth_versions, wealth_product, account_summary, budget, answer_reviewed]
+  tools: [load_skill, knowledge_status, knowledge_search, public_products, simulation_product_catalog, products, wealth_versions, wealth_product, account_summary, budget, answer_reviewed]
   delivery: adapted
 ---
 
@@ -11,9 +11,25 @@ metadata:
 
 方法适配自 `anthropics/knowledge-work-plugins` 的 `search-strategy`、`knowledge-synthesis` 和 `validate-data`：保留问题拆解、原文归因、比较口径与缺项核验。版本/许可由 `skills/upstream/provenance.json` 登记；中国银行产品身份、收益口径和适当性规则由 Navren 维护。
 
+## 来源阶段
+
+在同一次 `load_skill` 中选择 `source_scope`。未明确资料来源用 `clarify`，也是缺省阶段；用户明确选择本机演示规则用 `current_simulation`；明确研究真实发行产品用 `real_public`。裸产品名称不是来源证明，不因名称看似相近、目录存在或知识服务就绪而猜选来源。阶段只选择方法与工具展示，不把模拟目录身份变成真实公开产品身份，不授予本人资料或执行权限。
+
+## 来源澄清
+
+先简短说明比较将核对风险、期限与流动性，其他项目依实际来源资料判断。随后用普通 `answer_reviewed.interaction` 提供来源选择，例如“本机演示规则”和“真实发行产品”；问题须自包含用户原本的比较动作与对象，保持下一轮普通UI选择仍能理解原任务，不只问“你指哪种来源”。问题和选项不携带工具、来源参数或授权字段，也不填写金融金额；有交互时 `followups` 为空。
+
+本阶段不检索、猜写公开query或读取目录来替用户决定来源。不列产品规则、收益、费用或本人资格，不把完成来源澄清写成已经完成产品比较。用户普通选择来源后，再以该轮选择加载对应方法继续原比较。
+
+## 本机演示规则
+
+调用 `simulation_product_catalog` 读取本轮实际公共演示目录，按真实返回的产品身份、风险标记、锁定期与目录到账时延比较；只选用户所问的对象。明确这是Navren虚构演示规则，不对应真实发行产品或真实到账保证。目录未列出的收益、费用、最低申购金额与当前可买资格保持未知，不用真实公开检索或本人画像、持仓补齐。
+
+用 `answer_reviewed` 引用同轮目录证据完成比较，保留原独立审核与最终发布链。名称不能唯一对应时再做必要普通澄清，不遍历无关产品、不准备申赎或转账。说明比较已覆盖哪些规则及哪些仍未知，不把本轮比较当作本人适当性判断。
+
 ## 触发与必要读取
 
-用户问产品是否适合、两者差异、费用退出、风险来源或资料新鲜度时使用。公开产品先 `public_products`；需要条款原文时加载 `knowledge-retrieval`，只查询已注册且允许云披露的公开 provider。历史净值/份额详情先 `wealth_versions` 再 `wealth_product`，保留真实 `portfolio` 与日期。`products` 仅是可执行业务规则的模拟产品，不能补充公开市场事实。
+用户问产品是否适合、两者差异、费用退出、风险来源或资料新鲜度时使用。先确认比较对象和来源：真实公开产品用 `public_products`；明确的 Navren 虚构演示产品公共规则用 `simulation_product_catalog`。后者不读取本人账户、持仓或画像，不给出本人适当性、可买资格或执行授权，不能替代真实发行方、公开在售资料或收益报价。裸产品名称未明确来源时，不默认已选择模拟目录；使用本轮宿主提供的来源选择，未提供选择时先澄清。需要条款原文时加载 `knowledge-retrieval`，只查询已注册且允许云披露的公开 provider。历史净值/份额详情先 `wealth_versions` 再 `wealth_product`，保留真实 `portfolio` 与日期。`products` 读取本人当前模拟规则及画像匹配，仅在本人资料范围已获宿主允许时使用，不能补充公开市场事实。
 
 ## 分析顺序
 
@@ -34,4 +50,4 @@ metadata:
 
 ## 按需参考
 
-比较两款产品或处理收益/费率口径时，调用 `load_skill(name="product-research", reference="product-evidence.md")`。
+研究真实发行产品、比较资料或处理收益/费率口径时，调用 `load_skill(name="product-research", source_scope="real_public", reference="product-evidence.md")`。

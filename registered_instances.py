@@ -326,6 +326,8 @@ class RegisteredExperienceProvider:
                 ORDER BY generation DESC LIMIT 1''', (owner, subject, self.bank.clock())).fetchone()
             if not _restore and (active['workspace_id'] if active else None) != expected_workspace_id:
                 raise BankError('WORKSPACE_CHANGED', '当前画像已变化，请重新核对后选择。', 409)
+            if getattr(self, 'materializer', None) is not None:
+                self.materializer.g._activate_selected_historical_source(instance['workspace_id'], db=db)
             return self._issue(db, owner, subject, expiry, instance)
 
     def _issue(self, db, owner, subject, expiry, instance):
@@ -359,7 +361,53 @@ class RegisteredExperienceProvider:
             current = self._validate(db, bank_session_token, workspace=expected_workspace_id)
             if type(expected_privacy_revision) is not int or privacy_revision(db, current['workspace_id']) != expected_privacy_revision:
                 raise BankError('PRIVACY_REVISION_CHANGED', '资料权限已变化，请重新读取。', 409)
+            if getattr(self, 'materializer', None) is not None:
+                self.materializer.g._activate_selected_historical_source(instance['workspace_id'], db=db)
             return self._issue(db, current['registered_user_id'], current['auth_subject'], current['auth_expires_at'], instance)
+
+    def recover_committed_selection(self, registered_user_id, auth_subject, *, auth_expires_at, bank_session_token):
+        """仅恢复同一有效欢迎授权中已提交、相邻代次且丢失响应头的切号。"""
+        owner, subject, expiry = self._auth(registered_user_id, auth_subject, auth_expires_at)
+        def reject():
+            raise BankError('SESSION_CHANGED', '旧会话不属于可恢复的已提交切换，请重新读取或登录。', 409)
+        if not isinstance(bank_session_token, str) or not 20 <= len(bank_session_token) <= 200:
+            reject()
+        with self.bank.transaction() as db:
+            authorization = self._subject(db, owner, subject, expiry)
+            fields = """SELECT s.*,d.revoked AS bank_revoked,d.expires_at AS bank_expires,
+                d.workspace_id AS bank_workspace,d.generation AS bank_generation,d.user_id AS bank_persona,
+                i.registered_user_id AS instance_owner,i.persona_id AS instance_persona,i.status AS instance_status
+                FROM registered_instance_sessions s JOIN demo_sessions d ON d.token_hash=s.token_hash
+                JOIN registered_user_instances i ON i.workspace_id=s.workspace_id """
+            old = db.execute(fields+'WHERE s.token_hash=?', (digest(bank_session_token),)).fetchone()
+            if (not old or old['registered_user_id'] != owner or old['auth_subject'] != subject
+                    or old['auth_expires_at'] != expiry or old['revoked'] != 1 or old['bank_revoked'] != 1
+                    or old['generation']+1 != authorization['generation']):
+                reject()
+            active = db.execute(fields+"""WHERE s.registered_user_id=? AND s.auth_subject=?
+                AND s.generation=? AND s.revoked=0 AND d.revoked=0""", (owner,subject,authorization['generation'])).fetchall()
+            if len(active) != 1:
+                reject()
+            current = active[0]
+            for record in (old, current):
+                if (record['auth_expires_at'] != expiry or not self.bank.clock() < record['expires_at'] <= expiry
+                        or record['bank_expires'] != record['expires_at']
+                        or record['bank_generation'] != record['generation']
+                        or record['instance_status'] != 'ready' or record['instance_owner'] != owner
+                        or record['bank_workspace'] != record['workspace_id']
+                        or record['instance_persona'] != record['persona_id'] or record['bank_persona'] != record['persona_id']):
+                    reject()
+            proof = db.execute("""SELECT COUNT(*) FROM audit WHERE workspace_id=? AND event='demo_session_created'
+                AND json_extract(details,'$.token_hash')=? AND json_extract(details,'$.parent_token_hash')=?
+                AND json_extract(details,'$.generation')=?""", (current['workspace_id'],current['token_hash'],old['token_hash'],current['generation'])).fetchone()[0]
+            if proof != 1:
+                reject()
+            instance = self.instances.owner_for_workspace(current['workspace_id'], db=db)
+            if instance['registered_user_id'] != owner or instance['persona_id'] != current['persona_id']:
+                reject()
+            if min(old['expires_at'],current['expires_at']) <= self.bank.clock():
+                reject()
+            return self._issue(db, owner, subject, expiry, instance)
 
     def validate(self, token, workspace=None):
         with closing(self.bank.connect()) as db:
@@ -495,6 +543,7 @@ class RegisteredTemplateMaterializer:
         seed_defaults(db,workspace,binding,self.bank.clock())
         db.execute('INSERT OR IGNORE INTO registered_template_sources VALUES(?,?,?,?,?)',
                    (self.template_hash, self.version, self.financial_path.name, self.financial_hash, self.service.dataset_version))
+        self.g._activate_historical_source(workspace, db=db)
         if db.execute('PRAGMA foreign_key_check').fetchone():
             raise BankError('REGISTERED_TEMPLATE_INVARIANT', '实例开账关联校验失败。', 409)
 

@@ -3,7 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 DATASET_VERSION = 'customer-bank-2026-10-06-v5'
 LEGACY_SEED = '50a2f1257e568c23b3fe2e8e28fad09c4de01c8b7cfa7dc82d2340e79f508839'
 

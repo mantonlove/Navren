@@ -13,16 +13,16 @@ import math
 import shutil
 import tempfile
 import wave
+import ctypes
 
 from simulated_bank import BankError
 
 # 同机最多一个识别子进程，避免8GiB演示机同时加载多个small模型。
 _LOCAL_SLOT = threading.BoundedSemaphore(1)
 _MODEL_PINS = {
-    74418182: ('whisper-tiny', 'd5a3b8671ac7aab11a2c9d0f16e7da94bad5500d785856f438c6bd44c3723944',
-               'aaff20ce8f69beddee3fe0cc1e08f4e92f58586cb9f12ba00a6f73cbfec1cb1c'),
-    481307592: ('whisper-small-mlx', '55b6674c9b339702d486e2b1573839a66f8ec8f821ed2886993ef717a86b09f5',
-               'e8f58e638208af66d5d5d67801259dc7a12d199e971967a9f9d33a8e3635668e'),
+    239233841: ('sensevoice-small-int8-20240717',
+                'c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51',
+                'f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc'),
 }
 
 
@@ -60,12 +60,12 @@ class LocalASRConfig:
             raise BankError('LOCAL_ASR_NOT_CONFIGURED', '本地语音识别运行环境尚未配置。', 503)
         runtime = python.parent.parent
         sites = list((runtime/'lib').glob('python*/site-packages'))
-        modules = ('mlx', 'mlx_whisper', 'numpy', 'numba', 'scipy', 'tiktoken', 'huggingface_hub', 'tqdm')
+        modules = ('sherpa_onnx', 'numpy')
         if not (runtime/'pyvenv.cfg').is_file() or not any(all((site/name).is_dir() for name in modules) for site in sites):
             raise ValueError('LOCAL_ASR_RUNTIME_MISSING')
         model = model.resolve(strict=True)
-        weight, config = model/'weights.npz', model/'config.json'
-        if not weight.is_file() or not config.is_file() or (model/'weights.safetensors').exists():
+        weight, config = model/'model.int8.onnx', model/'tokens.txt'
+        if not weight.is_file() or not config.is_file() or weight.is_symlink() or config.is_symlink() or config.stat().st_size != 315894:
             raise BankError('LOCAL_ASR_NOT_CONFIGURED', '本地语音识别模型不受支持。', 503)
         pin = _MODEL_PINS.get(weight.stat().st_size)
         if not pin or _sha256_file(weight) != pin[1] or _sha256_file(config) != pin[2]:
@@ -143,13 +143,64 @@ class LocalSpeechTask:
 
     def _run(self):
         process = None
+        monitor = None
+        monitor_done = threading.Event()
+        self.resource_peak_rss_bytes = 0
+        self.resource_observer_samples = 0
+        self.resource_limit_reason = None
         try:
+            # This is sampled RSS supervision, not a kernel allocation limit.
+            proc = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+            proc.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+            proc.proc_pidinfo.restype = ctypes.c_int
+            class TaskInfo(ctypes.Structure):
+                _fields_ = [('virtual_size', ctypes.c_uint64), ('resident_size', ctypes.c_uint64),
+                            ('counters', ctypes.c_uint64 * 4), ('stats', ctypes.c_int32 * 12)]
+            if ctypes.sizeof(TaskInfo) != 96:
+                raise RuntimeError('LOCAL_ASR_RSS_OBSERVER_UNAVAILABLE')
+            def watch_rss():
+                try:
+                    while not monitor_done.is_set():
+                        if process.poll() is not None:
+                            return
+                        info = TaskInfo()
+                        count = proc.proc_pidinfo(process.pid, 4, 0, ctypes.byref(info), ctypes.sizeof(info))
+                        if count != ctypes.sizeof(info):
+                            # A process can have left libproc before waitpid observes
+                            # its final status. Confirm exit over one sample period.
+                            try:
+                                process.wait(timeout=0.05)
+                                return
+                            except subprocess.TimeoutExpired:
+                                pass
+                            self.resource_limit_reason = 'RSS_OBSERVER_UNAVAILABLE'
+                            self._stop(process)
+                            return
+                        self.resource_observer_samples += 1
+                        self.resource_peak_rss_bytes = max(self.resource_peak_rss_bytes, info.resident_size)
+                        if info.resident_size > 1536 * 1024 * 1024:
+                            self.resource_limit_reason = 'RSS_LIMIT_EXCEEDED'
+                            self._stop(process)
+                            return
+                        monitor_done.wait(0.05)
+                except Exception:
+                    if process.poll() is not None:
+                        return
+                    self.resource_limit_reason = 'RSS_OBSERVER_FAILED'
+                    try:
+                        self._stop(process)
+                    except OSError:
+                        # Keep failure closed without an unhandled observer thread.
+                        self.resource_limit_reason = 'RSS_STOP_FAILED'
             env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'LANG': 'zh_CN.UTF-8',
                    'HF_HUB_OFFLINE': '1', 'TRANSFORMERS_OFFLINE': '1', 'HF_HUB_DISABLE_TELEMETRY': '1',
-                   'PYTHONDONTWRITEBYTECODE': '1', 'NUMBA_DISABLE_JIT': '1'}
+                   'PYTHONDONTWRITEBYTECODE': '1', 'NUMBA_DISABLE_JIT': '1',
+                   'OMP_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1', 'VECLIB_MAXIMUM_THREADS': '1'}
             process = subprocess.Popen([self.config.python, '-B', self.config.worker, self.config.model_dir],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 env=env, start_new_session=True)
+            monitor = threading.Thread(target=watch_rss, name='navren-local-asr-rss', daemon=True)
+            monitor.start()
             with self._lock:
                 self._process = process
                 raw = bytes(self._audio)
@@ -167,7 +218,7 @@ class LocalSpeechTask:
             self.native_exit_code = process.returncode
             if self._closed.is_set():
                 return
-            if process.returncode != 0 or len(output) > 40000:
+            if self.resource_limit_reason or process.returncode != 0 or len(output) > 40000:
                 raise BankError('LOCAL_ASR_FAILED', '本地语音识别失败，请重试或使用文字输入。', 503)
             result = json.loads(output)
             text = result.get('text')
@@ -182,6 +233,9 @@ class LocalSpeechTask:
                     'LOCAL_ASR_FAILED', '本地语音识别暂不可用，请使用文字输入。', 503))
         finally:
             self._stop(process)
+            monitor_done.set()
+            if monitor is not None:
+                monitor.join(0.5)
             if process is not None:
                 self.native_exit_code = process.returncode
             if process is not None:

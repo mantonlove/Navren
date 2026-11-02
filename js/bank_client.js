@@ -45,6 +45,14 @@ window.BankClient = (() => {
     window.dispatchEvent(new CustomEvent('navren:privacy-reset',{detail:{reason,persistent_history_deleted:false}}));
   }
   const registeredId=value=>typeof value==='string'&&/^[a-f0-9]{32}$/.test(value);
+  const smsVerificationReasons=new Set(['SMS_CODE_REJECTED','SMS_CODE_INVALID','SMS_CHALLENGE_INVALID','SMS_EXPIRED','SMS_TIMEOUT','SMS_VERIFY_UNAVAILABLE','FINANCIAL_WRITE_LOCKED']);
+  function smsVerificationFailure(data,path,method){
+    if(method!=='POST'||!/^\/operations\/[a-f0-9]{32}\/confirm$/.test(path)||data?.error?.code!=='SMS_VERIFICATION_FAILED')return null;
+    const meta=data.error.sms_verification;
+    if(!meta||typeof meta!=='object'||Array.isArray(meta)||Object.keys(meta).sort().join(',')!=='reason_code,same_challenge_retry'||
+      !smsVerificationReasons.has(meta.reason_code)||typeof meta.same_challenge_retry!=='boolean'||meta.same_challenge_retry&&meta.reason_code!=='SMS_CODE_REJECTED')return null;
+    return Object.freeze({reason_code:meta.reason_code,same_challenge_retry:meta.same_challenge_retry});
+  }
   const personaIds=new Set(['tycoon','grain_farmer','working_landlady','retired_entrepreneur']);
   const subjectId=value=>typeof value==='string'&&/^[A-Za-z0-9:_-]{16,192}$/.test(value);
   function leaseCurrent(data){
@@ -146,8 +154,9 @@ window.BankClient = (() => {
       const data = await response.json();
       assertRequestCurrent(requestGeneration,requestWorkspace,requestCsrf,requestOwner,requestSubject,requestServerGeneration,requestAuthExpiry,requestLeaseExpiry);
       if (!response.ok) {
-        const error = new Error(data.error?.message || '银行请求失败');
+        const error = new Error(data.error?.code==='SMS_VERIFICATION_FAILED'?'验证码未通过验证，请检查或重新获取。':data.error?.message || '银行请求失败');
         error.code = data.error?.code; error.status = response.status;
+        const smsFailure=smsVerificationFailure(data,path,method);if(smsFailure)error.sms_verification=smsFailure;
         if (['CSRF_DENIED','SESSION_CHANGED','WORKSPACE_CHANGED'].includes(error.code) || error.status === 401) {
           session = boot = null;clearHistory();
         }

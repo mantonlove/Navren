@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 import secrets
 import threading
@@ -40,13 +41,22 @@ _BINDING_FIELDS = {'registered_user_id', 'workspace_id', 'persona_id'}
 
 
 def fail(code='DIALOGUE_ARCHIVE_INVALID', status=409):
-    raise BankError(code, '聊天归档、当前实例或资料权限已变化，请重新读取。', status)
+    message = ('对话范围已失效或无法核验，请点击「新对话」后继续；历史记录仍保留。'
+               if code.startswith('CONVERSATION_SCOPE_') else '聊天归档、当前实例或资料权限已变化，请重新读取。')
+    raise BankError(code, message, status)
 
 
 @dataclass(frozen=True)
 class _Capture:
     reader: object
     nonce: str
+
+
+@dataclass(frozen=True)
+class HostConversationScope:
+    """Only this reader can restore an authenticated local conversation range."""
+    reader: object
+    token: str
 
 
 class DialogueArchiveReader:
@@ -66,6 +76,8 @@ class DialogueArchiveReader:
         self.sources = HistoricalSourceAttestor(gateway)
         self._captures = OrderedDict()
         self._capture_lock = threading.RLock()
+        self._request_quote_issuer = object()
+        self._request_quote_identity = secrets.token_hex(16)
 
     def _binding(self, w, db):
         if hashlib.sha256(Path(__file__).read_bytes()).hexdigest() != CODE:
@@ -84,7 +96,7 @@ class DialogueArchiveReader:
                 'session': deepcopy(session)}
 
     def archive_user_turn(self, w, request_id, text, *, expected_personal_revision, expected_privacy_revision,
-                          references=None, attachments=None, media_ids=None):
+                          references=None, attachments=None, media_ids=None, conversation_scope=None):
         """原银行锁内复验可信注册绑定，再交给私库唯一 writer；不写助手正文。"""
         writer = getattr(self.store, 'archive_user_turn_guarded', None)
         if not callable(writer):
@@ -96,13 +108,186 @@ class DialogueArchiveReader:
                     or bound['personal_revision'] != expected_personal_revision
                     or bound['privacy_revision'] != expected_privacy_revision):
                 fail('DIALOGUE_ARCHIVE_USER_VERSION_CHANGED')
+            validator = None
+            if conversation_scope is not None:
+                if type(conversation_scope) is not HostConversationScope or conversation_scope.reader is not self:
+                    fail('CONVERSATION_SCOPE_REQUIRED',403)
+                def validator(private):
+                    return self._conversation_body(conversation_scope.token,bound,private)['conversation_id']
             result = writer(w, request_id, text, bound['registered_user_id'], bank_db=db,
                             expected_revision=expected_personal_revision,
                             expected_privacy=expected_privacy_revision,
-                            references=references, attachments=attachments, media_ids=media_ids)
+                            references=references, attachments=attachments, media_ids=media_ids,
+                            conversation_scope_validator=validator)
             if result is False or result is None:
                 fail('DIALOGUE_ARCHIVE_USER_SAVE_FAILED')
             return result
+
+    def _current_request_quote_row(self, w, request_id, bank_db):
+        """Read a complete original under the existing bank publication lock."""
+        from agent_runtime.request_quotes import _error, _digest
+        if (type(w) is not str or not w or type(request_id) is not str
+                or len(request_id) != 32 or any(c not in '0123456789abcdef' for c in request_id)
+                or not self.store._guarded_bank_owner(w, bank_db)):
+            raise _error('REQUEST_QUOTE_SCOPE_MISMATCH', 403)
+        scope = self._binding(w, bank_db)
+        with self.store.connection(w) as private:
+            self._table_ready(private)
+            row = private.execute('SELECT * FROM agent_user_turn_archive WHERE workspace_id=? AND request_id=?',
+                                  (w, request_id)).fetchone()
+            if row is None:
+                raise _error('REQUEST_QUOTE_SOURCE_UNAVAILABLE', 409)
+            user = self._user(row, scope, bank_db)
+            # Include every original row field (including its ciphertext hash)
+            # in the private capability pin, not just an equal amount or text.
+            row_sha = _digest(dict(row))
+        binding = {**{k: scope[k] for k in sorted(_BINDING_FIELDS)},
+                   'request_id': request_id, 'archive_sequence': row['archive_sequence'],
+                   'archive_epoch': row['archive_epoch'], 'privacy_revision': row['privacy_revision'],
+                   'personal_revision': row['personal_revision'],
+                   'session_sha256': fingerprint(scope['session']),
+                   'issuer_identity': self._request_quote_identity, 'issuer_code': CODE}
+        return scope, binding, row_sha, user
+
+    def issue_current_request_quote(self, w, request_id, expected_text, *,
+                                    expected_personal_revision, expected_privacy_revision):
+        """Only the authenticated current complete user row can issue a cap.
+
+        Unsafe/redacted/incomplete text simply offers no quote.  The ordinary
+        answer remains available; no partial original or sensitive reason leaks.
+        """
+        from agent_runtime.request_quotes import _issue_source, safe_source_text, _error
+        if (type(expected_text) is not str
+                or type(expected_personal_revision) is not int or expected_personal_revision < 0
+                or type(expected_privacy_revision) is not int or expected_privacy_revision < 0):
+            raise _error()
+        with self.p._publication() as db:
+            scope, binding, row_sha, user = self._current_request_quote_row(w, request_id, db)
+            if (scope['personal_revision'] != expected_personal_revision
+                    or scope['privacy_revision'] != expected_privacy_revision
+                    or binding['personal_revision'] != expected_personal_revision
+                    or binding['privacy_revision'] != expected_privacy_revision):
+                raise _error('REQUEST_QUOTE_SOURCE_CHANGED', 409)
+            if (user['content'] != expected_text or user['references'] or user['attachments']
+                    or not safe_source_text(expected_text)):
+                return None
+            return _issue_source(self, binding, row_sha, expected_text)
+
+    def verify_current_request_quote(self, source, *, bank_db):
+        """Re-read the original with the caller's actual bank publication lock."""
+        from agent_runtime.request_quotes import assert_source, _packed, _error
+        assert_source(source, owner=self)
+        original = json.loads(source._binding_json)
+        scope, binding, row_sha, user = self._current_request_quote_row(
+            original['workspace_id'], original['request_id'], bank_db)
+        if (binding != original or row_sha != source._row_sha or user['content'] != source.text
+                or user['references'] or user['attachments']
+                or scope['privacy_revision'] != original['privacy_revision']
+                or scope['personal_revision'] != original['personal_revision']):
+            raise _error('REQUEST_QUOTE_SOURCE_CHANGED', 409)
+        return True
+
+    @staticmethod
+    def _conversation_binding(scope):
+        # Personal revision changes on normal append; identity/withdrawal do not.
+        return {k: scope[k] for k in (*sorted(_BINDING_FIELDS),
+                                    'archive_epoch', 'privacy_revision', 'session')}
+
+    def _conversation_body(self, token, scope, private):
+        if type(token) is not str or not 1 <= len(token) <= 4096 or not token.startswith('pd1:'):
+            fail('CONVERSATION_SCOPE_INVALID', 422)
+        try:
+            body = json.loads(self.store._decode(token))
+        except (BankError, TypeError, ValueError):
+            fail('CONVERSATION_SCOPE_INVALID', 422)
+        if type(body) is dict and body.get('contract') == 'navren.conversation-scope/1':
+            fail('CONVERSATION_SCOPE_UPGRADE_REQUIRED',409)
+        if (type(body) is not dict or set(body) != {'contract','code','binding','after_sequence','conversation_id'}
+                or body['contract'] != 'navren.conversation-scope/2' or body['code'] != CODE
+                or not strict_equal(body['binding'], self._conversation_binding(scope))
+                or type(body['after_sequence']) is not int or body['after_sequence'] < 0
+                or type(body['conversation_id']) is not str or re.fullmatch(r'[0-9a-f]{32}',body['conversation_id']) is None):
+            fail('CONVERSATION_SCOPE_STALE', 409)
+        self._table_ready(private)
+        if private.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_conversation_membership'").fetchone() is None:
+            fail('CONVERSATION_SCOPE_STORAGE_REQUIRED',503)
+        upper = private.execute('SELECT COALESCE(MAX(archive_sequence),0) FROM agent_user_turn_archive WHERE workspace_id=?',
+                                (scope['workspace_id'],)).fetchone()[0]
+        if body['after_sequence'] > upper:
+            fail('CONVERSATION_SCOPE_INVALID', 422)
+        return body
+
+    def new_conversation(self, w):
+        """Issue a range after existing rows; retain every archive and short history."""
+        with self.p._publication() as db:
+            scope = self._binding(w, db)
+            with self.store.connection(w) as private:
+                self._table_ready(private)
+                after = private.execute('SELECT COALESCE(MAX(archive_sequence),0) FROM agent_user_turn_archive WHERE workspace_id=?',
+                                        (w,)).fetchone()[0]
+            body = {'contract':'navren.conversation-scope/2','code':CODE,
+                    'binding':self._conversation_binding(scope),'after_sequence':after,
+                    'conversation_id':secrets.token_hex(16)}
+            token = self.store.protect(json.dumps(body,ensure_ascii=False,sort_keys=True,
+                                                 separators=(',',':'),allow_nan=False))
+        return {'contract':'navren.conversation-scope/1','conversation_scope':token,
+                'execution_authority':False}
+
+    def open_conversation_scope(self, w, token):
+        with self.p._publication() as db:
+            scope = self._binding(w, db)
+            with self.store.connection(w) as private:
+                self._conversation_body(token, scope, private)
+        return HostConversationScope(self, token)
+
+    def validate_conversation_scope(self, w, selected):
+        if type(selected) is not HostConversationScope or selected.reader is not self:
+            fail('CONVERSATION_SCOPE_REQUIRED', 403)
+        return self.open_conversation_scope(w, selected.token)
+
+    def _conversation_member(self, private, scope, row, conversation_id, bank_db):
+        member=private.execute('SELECT * FROM agent_conversation_membership WHERE workspace_id=? AND request_id=?',
+                               (scope['workspace_id'],row['request_id'])).fetchone()
+        if member is None or type(member['binding_cipher']) is not str or not member['binding_cipher'].startswith('pd1:'):
+            fail('CONVERSATION_SCOPE_MEMBERSHIP_INVALID',409)
+        try:binding=json.loads(self.store._decode(member['binding_cipher']))
+        except (BankError,TypeError,ValueError):fail('CONVERSATION_SCOPE_MEMBERSHIP_INVALID',409)
+        expected={'contract':'navren.conversation-membership/1','workspace_id':scope['workspace_id'],
+            'registered_user_id':scope['registered_user_id'],'request_id':row['request_id'],
+            'conversation_id':conversation_id,'archive_sequence':row['archive_sequence'],
+            'archive_epoch':row['archive_epoch'],'privacy_revision':row['privacy_revision']}
+        if (not strict_equal(binding,expected) or member['conversation_id'] != conversation_id
+                or member['archive_sequence'] != row['archive_sequence'] or member['archive_epoch'] != row['archive_epoch']):
+            fail('CONVERSATION_SCOPE_MEMBERSHIP_INVALID',409)
+        return self._user(row,scope,bank_db)
+
+    def conversation_history(self, w, selected, *, current_request_id):
+        """Only membership-authenticated turns of this exact conversation."""
+        if type(selected) is not HostConversationScope or selected.reader is not self:
+            fail('CONVERSATION_SCOPE_REQUIRED',403)
+        history=[]
+        with self.p._publication() as db:
+            scope=self._binding(w,db)
+            with self.store.connection(w) as private:
+                body=self._conversation_body(selected.token,scope,private)
+                current=private.execute('SELECT * FROM agent_user_turn_archive WHERE workspace_id=? AND request_id=?',
+                                        (w,current_request_id)).fetchone()
+                if current is None or current['archive_sequence'] <= body['after_sequence']:
+                    fail('CONVERSATION_SCOPE_CURRENT_TURN_REQUIRED',409)
+                self._conversation_member(private,scope,current,body['conversation_id'],db)
+                rows=private.execute('SELECT a.* FROM agent_conversation_membership m JOIN agent_user_turn_archive a '
+                    'ON a.workspace_id=m.workspace_id AND a.request_id=m.request_id '
+                    'WHERE m.workspace_id=? AND m.conversation_id=? AND m.archive_sequence<? '
+                    'ORDER BY m.archive_sequence DESC LIMIT ?',
+                    (w,body['conversation_id'],current['archive_sequence'],MODEL_CONTEXT_LIMIT)).fetchall()
+                for row in reversed(rows):
+                    user=self._conversation_member(private,scope,row,body['conversation_id'],db)
+                    history.append({'role':'user','content':user['content']})
+                    try:assistant,_=self._assistant(private,scope,row['request_id'],db)
+                    except BankError:assistant=None
+                    if assistant is not None and type(assistant.get('content')) is str:
+                        history.append({'role':'assistant','content':assistant['content']})
+        return history[-MODEL_CONTEXT_LIMIT:]
 
     def _cursor(self, scope, *, upper, before):
         body = {'contract': CURSOR_CONTRACT, 'code': CODE,

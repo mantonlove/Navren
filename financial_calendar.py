@@ -33,14 +33,24 @@ TOTALS=('recorded_inflow_minor','recorded_outflow_minor','recorded_net_minor','i
 
 
 def summation(items):
-    totals={}
+    totals={};realized_components={}
     for item in items:
         c=item.get('currency')
         if not c: continue
         t=totals.setdefault(c,{'currency':c,**{k:0 for k in TOTALS},'investment_redemption_cash_in_minor':0,
-                             'realized_return_minor':0,'unknown_direction_count':0,'pnl_available_count':0,'pnl_missing_count':0,'recorded_count':0})
+                             'realized_return_minor':None,'unknown_direction_count':0,'pnl_available_count':0,'pnl_missing_count':0,'recorded_count':0})
         delta=item.get('cash_delta_minor');amount=item.get('amount_minor');state=item['state']
         if state=='recorded' and item['kind']=='transaction':
+            category=item.get('transaction_kind')
+            if category in {'redeem','investment_redemption'} or (category=='investment' and not(type(delta)is int and delta<0)):
+                realized=item.get('realized_return_minor');principal=item.get('investment_principal_minor')
+                complete=(type(realized)is int and type(principal)is int and principal>=0
+                    and type(amount)is int and amount>0 and type(delta)is int and delta==amount
+                    and amount==principal+realized and not item.get('internal_transfer')
+                    and item.get('principal_basis') in {'source_journal_cost_recovery','settled_order_and_redeemed_lots'}
+                    and (item['principal_basis']!='settled_order_and_redeemed_lots' or realized==0)
+                    and type(item.get('source_ref'))is str and bool(item['source_ref']))
+                realized_components.setdefault(c,[]).append(realized if complete else None)
             t['recorded_count']+=1
             if delta is None: t['unknown_direction_count']+=1;continue
             if not item.get('internal_transfer'):
@@ -54,7 +64,7 @@ def summation(items):
                 t['investment_principal_in_minor' if delta>0 else 'investment_principal_out_minor']+=principal if type(principal) is int else amount
                 if delta>0:t['investment_redemption_cash_in_minor']+=amount
                 realized=item.get('realized_return_minor')
-                if type(realized) is int:t['realized_return_minor']+=realized;t['income_minor']+=realized
+                if type(realized) is int:t['income_minor']+=realized
         elif state=='planned' and type(delta) is int and delta<0:t['confirmed_due_minor']+=-delta
         elif state=='candidate' and type(delta) is int and delta<0:t['candidate_due_minor']+=-delta
         if item['source_type']=='user_calendar' and state=='planned' and type(item.get('budget_minor')) is int:t['user_budget_minor']+=item['budget_minor']
@@ -63,6 +73,8 @@ def summation(items):
         if item['kind']=='investment_pnl' and item.get('returns',{}).get('status')!='available':t['pnl_missing_count']+=1
         if item['kind']=='distribution' and state=='recorded' and type(amount) is int:t['settled_dividend_minor']+=amount
     for t in totals.values():
+        realized=realized_components.get(t['currency'],[])
+        t['realized_return_minor']=sum(realized) if realized and all(type(v)is int for v in realized) else None
         t['known_investment_pnl_minor']=t['investment_pnl_minor'] if t['pnl_available_count'] else None
         t['pnl_coverage']='partial' if t['pnl_missing_count'] else 'complete' if t['pnl_available_count'] else 'unknown'
         if not t['pnl_available_count'] or t['pnl_missing_count']:t['investment_pnl_minor']=None
@@ -229,7 +241,6 @@ class FinancialCalendar:
         basis=params.get('accounting_basis','holdings_only_v1' if portfolio=='current' else 'total_equity_v2')
         if portfolio=='current' and basis!='holdings_only_v1':raise BankError('CALENDAR_BASIS','旧账户组合仅支持 holdings_only_v1；权益法请指定历史组合。')
         if basis not in {'total_equity_v2','holdings_only_v1'}:raise BankError('CALENDAR_BASIS','核算口径无效。')
-        self.g.wealth.provision(w)
         normalized={'from':begin.isoformat(),'to':end.isoformat(),'view':view,'source':source,
                     'include_life_events':params.get('include_life_events',True),'simulation_overlay':params.get('simulation_overlay',False),'kinds':kinds,'portfolio':portfolio,'accounting_basis':basis}
         before=self.versions(w)
@@ -277,7 +288,7 @@ class FinancialCalendar:
             'range':{'from':begin.isoformat(),'to':end.isoformat()},'view':view,'summary_by_currency':totals_on(financial,coverage),
             'coverage_basis':'银行已封存完整期间，逐账户核对' if coverage=='complete' else '仅已记录流水，未证明完整覆盖',
             'simulation_overlay_summary':summation([i for i in items if i['source_type']=='simulation']) if source=='imported' and normalized['simulation_overlay'] else [],
-            'portfolio':portfolio_meta,'accounting_basis':normalized['accounting_basis'],'nav_asof':max((x['nav_asof'] for x in wealth_points),default=None),'holdings_pnl_minor':holding_returns.get('unrealized_pnl_minor'),'coverage':coverage,'days':days,'limitations':['仅汇总已记录流水；暂无记录不代表零支出。','理财本金口径缺少净值/数量时，每日收益不可计算。','用户预算仅展示计划，不扣款；提醒仅在应用打开时检查。']}
+            'portfolio':portfolio_meta,'accounting_basis':normalized['accounting_basis'],'nav_asof':max((x['nav_asof'] for x in wealth_points),default=None),'holdings_pnl_minor':holding_returns.get('unrealized_pnl_minor'),'coverage':coverage,'days':days,'limitations':['仅汇总已记录流水；暂无记录不代表零支出。','理财本金口径缺少净值/数量时，每日收益不可计算。','用户预算仅展示计划，不扣款；提醒仅在应用打开时检查。']+(['完整已实现收益未知：当前本金口径未证明本期间全部赎回及成本记录完整；仅列示有已核验来源的已记录赎回组件合计，本金或赎回到账款不等于收益。','未实现收益未知：当前本金口径缺少完整成本、份额及净值依据，不能由持仓本金推算；已实现组件不能替代未实现收益。'] if portfolio=='current' and basis=='holdings_only_v1' else [])}
         with self.bank.transaction() as db:
             db.execute('INSERT INTO calendar_views VALUES(?,?,?,?,?,?,?)',(vid,w,encoded(normalized),encoded(result),encoded(before),self.bank.clock(),self.bank.clock()+30*86400))
             for i in items:

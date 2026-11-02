@@ -7,6 +7,7 @@ import json
 import math
 import threading
 import time
+import unicodedata
 
 from financial_metrics import fingerprint
 from simulated_bank import BankError
@@ -151,6 +152,35 @@ def _restore_body_offsets(boundary, source, target, key, *, rows=False):
         new['occurrence_start'] = local_start
 
 
+def _canonical_amount_review_projection(boundary, raw_projection, local):
+    """原金额显示规范同时约束送审前草稿和别名逆投影；不改变签名或相等门。"""
+    raw_draft = raw_projection.get('draft') if type(raw_projection) is dict else None
+    if type(raw_draft) is not dict or not raw_draft.get('amount_claims'):
+        return local
+    original_draft = local.get('draft')
+    if type(original_draft) is not dict:
+        fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+    canonical = boundary.check_output(original_draft)
+    if not strict_equal(canonical, raw_draft):
+        fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+    contract = local.get('amount_contract')
+    if type(contract) is not dict or type(contract.get('amount_claims')) is not list:
+        fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+    # 仅重建typed正文claim的文字/位置；各metric/HMAC/来源成员原样保留。
+    body = boundary.check_output({'text': original_draft['text'],
+        'amount_claims': [row['claim'] for row in contract['amount_claims']]})
+    if body['text'] != canonical['text']:
+        fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+    normalized_contract = deepcopy(contract)
+    for row, claim in zip(normalized_contract['amount_claims'], body['amount_claims']):
+        row['claim'] = claim
+    if not strict_equal(normalized_contract, raw_projection.get('amount_contract')):
+        fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+    local['draft'] = canonical
+    local['amount_contract'] = normalized_contract
+    return local
+
+
 def restore_review_projection(boundary, projection, *, raw_projection=None,
                               historical_quote_market=None, historical_quote_session=None,
                               historical_quote_proof=None):
@@ -176,13 +206,33 @@ def restore_review_projection(boundary, projection, *, raw_projection=None,
     local = boundary._restore(full, strict=False)
     draft = full.get('draft', {})
     target = local.get('draft', {})
+    if (type(raw_projection)is dict and type(raw_projection.get('policy'))is dict
+            and raw_projection['policy'].get('goal_natural_clarification') is not None):
+        from .data_boundary import validate_goal_natural_clarification
+        original=validate_goal_natural_clarification(raw_projection,expected=boundary._goal_natural_clarification)
+        raw_text=raw_projection.get('draft',{}).get('text')
+        safe_text=draft.get('text') if type(draft)is dict else None
+        if original is None or type(raw_text)is not str or type(safe_text)is not str:
+            fail('AGENT_FINAL_REQUEST_QUOTE_BINDING_INVALID')
+        if raw_projection.get('user_request_quote_contract') is not None:
+            checked=boundary._user_request_quote_contract(raw_projection['user_request_quote_contract'],source_text=raw_text,target_text=safe_text)
+            if full.get('user_request_quote_contract')!=checked:
+                fail('AGENT_FINAL_REQUEST_QUOTE_BINDING_INVALID')
+        elif ('user_request_quote_contract' in full
+                or safe_text!=boundary._text(raw_text,public_source_refs=True)):
+            fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+        expected_marker={**original,'body_sha256':hashlib.sha256(unicodedata.normalize('NFKC',safe_text).encode()).hexdigest()}
+        if full.get('policy',{}).get('goal_natural_clarification')!=expected_marker:
+            fail('AGENT_FINAL_REQUEST_QUOTE_BINDING_INVALID')
+        local['policy']['goal_natural_clarification']=deepcopy(original)
     # Ordinary local glyph restoration is permitted only after its complete
     # normalized safe projection equals the actual reviewed text. No arbitrary
     # raw fields are copied; typed offsets and issued history keep their paths.
     if not quotes and type(raw_projection) is dict:
         raw_draft = raw_projection.get('draft')
-        if type(raw_draft) is dict and not any(k in raw_draft for k in ('amount_claims', 'ratio_claims')):
-            import unicodedata
+        if (type(raw_draft) is dict and all(k not in raw_draft
+                or (type(raw_draft[k]) is list and raw_draft[k] == [])
+                for k in ('amount_claims', 'ratio_claims'))):
             if (type(draft) is not dict or type(target) is not dict
                     or type(raw_draft.get('text')) is not str):
                 fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
@@ -198,6 +248,8 @@ def restore_review_projection(boundary, projection, *, raw_projection=None,
                 source_body = {'text': draft.get('text'), field: full[key][field]}
                 local_body = {'text': target.get('text'), field: local[key][field]}
                 _restore_body_offsets(boundary, source_body, local_body, field, rows=True)
+    if not quotes:
+        local = _canonical_amount_review_projection(boundary, raw_projection, local)
     if 'presentation_review' in full and 'text' in full['presentation_review']:
         _restore_body_offsets(boundary, full['presentation_review'], local['presentation_review'],
                               'body_amount_contract', rows=True)
@@ -226,11 +278,24 @@ def expected_review_projection(boundary, raw, *, historical_quote_market=None,
         fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
     allowed = {'question','history','server_context','evidence','draft','monetary_evidence',
         'amount_contract','ratio_contract','operations','calendar_widgets','policy',
-        'financial_evidence_transport','presentation_review','provider_review','public_evidence_limits','catalog_information'}
+        'financial_evidence_transport','presentation_review','provider_review','public_evidence_limits','catalog_information',
+        'saved_payee_record_basis','user_request_quote_contract'}
     if set(raw) - allowed:
         fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
     b = deepcopy(boundary)  # local expected aliases/counts cannot mutate the real turn
     out = {}
+    # The independent composer consumes the exact new host contract too. It
+    # must never copy the reviewed result or call the reviewed review_packet.
+    from .payment_completion import validate_saved_payee_review_basis
+    payee_basis = None
+    query_ref = None
+    if 'saved_payee_record_basis' in raw:
+        try:
+            payee_basis = validate_saved_payee_review_basis(raw)
+        except (ValueError, TypeError, KeyError):
+            fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+        if payee_basis['query_name'] is not None:
+            query_ref = b._alias(payee_basis['query_name'], 'person')
     if 'financial_evidence_transport' in raw:
         if raw['financial_evidence_transport'] != 'catalog-v1': fail()
         out['financial_evidence_transport'] = 'catalog-v1'
@@ -258,6 +323,36 @@ def expected_review_projection(boundary, raw, *, historical_quote_market=None,
                 projected['data'].update(b._cashflow_scenario_sources(row['data'], assessment_days))
         out['evidence'].append({'id': projected['evidence_id'], 'tool': row['tool'],
             'data': projected['data'], 'source': b._text(row['source'], maximum=100)})
+    if payee_basis is not None:
+        source_id = b._alias(payee_basis['evidence_id'])
+        source = next((e for e in out['evidence'] if e['id'] == source_id), None)
+        rows = source.get('data', {}).get('beneficiaries') if source else None
+        if type(rows) is not list:
+            fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+        by_record = {}
+        for row in rows:
+            if type(row) is not dict or 'id' not in row:
+                fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+            if row['id'] in by_record and not strict_equal(by_record[row['id']], row):
+                fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+            by_record[row['id']] = row
+        source_ids = [b._alias(i) for i in payee_basis['source_record_ids']]
+        matched_ids = [b._alias(i) for i in payee_basis['matched_record_ids']]
+        if set(source_ids) != set(by_record) or len(set(source_ids)) != len(source_ids):
+            fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+        facts = []
+        for row in payee_basis['row_facts']:
+            identifier = b._alias(row['record_id'])
+            if any(not strict_equal(by_record[identifier].get(k), row[k]) for k in ('verified', 'status')):
+                fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+            facts.append({**row, 'record_id': identifier})
+        out['saved_payee_record_basis'] = {
+            'contract': payee_basis['contract'], 'evidence_id': source_id,
+            'query_ref': query_ref, 'query_scope': payee_basis['query_scope'],
+            'source_record_ids': source_ids, 'matched_record_ids': matched_ids,
+            'source_record_count': len(source_ids), 'matched_record_count': len(matched_ids),
+            'row_facts': facts, 'record_identity_key': 'id',
+            'local_current_query_binding': True, 'execution_authority': False}
     out['operations'] = b._project(raw.get('operations', []), 'operations') if 'operations' in _TASK_DOMAINS[b.task] else []
     out['calendar_widgets'] = b._project(raw.get('calendar_widgets', []), 'calendar') if 'calendar' in _TASK_DOMAINS[b.task] else []
     if 'presentation_review' in raw:
@@ -269,13 +364,19 @@ def expected_review_projection(boundary, raw, *, historical_quote_market=None,
     draft = raw.get('draft', {})
     draft_fields = {'text','claims','draft_ids','widget_ids','followups','amount_claims','ratio_claims','interaction'}
     if type(draft) is not dict or set(draft) - draft_fields: fail()
-    out['draft'] = {k: b._text(v) if k == 'text' else b._project(v, 'profile', key=k)
+    plain_source_display = all(k not in draft or (type(draft[k]) is list and draft[k] == [])
+                               for k in ('amount_claims', 'ratio_claims'))
+    out['draft'] = {k: b._text(v, public_source_refs=plain_source_display) if k == 'text' else b._project(v, 'profile', key=k)
                     for k,v in draft.items() if k not in ('amount_claims','ratio_claims','interaction')}
     if 'interaction' in draft:
         out['draft']['interaction']=b._reply_interaction(draft['interaction'],project=True)
     for key, method in (('amount_claims', b._amount_claims), ('ratio_claims', b._ratio_claims)):
         if key in draft:
             out['draft'][key] = method(draft[key], source_text=draft.get('text'), target_text=out['draft'].get('text'))
+    if 'user_request_quote_contract' in raw:
+        out['user_request_quote_contract']=b._user_request_quote_contract(
+            raw['user_request_quote_contract'],source_text=draft.get('text'),
+            target_text=out['draft'].get('text'))
     for key, method in (('amount_contract', b._amount_contract), ('ratio_contract', b._ratio_contract)):
         if key in raw:
             out[key] = method(raw[key], source_text=draft.get('text'), target_text=out['draft'].get('text'))
@@ -300,6 +401,8 @@ def expected_review_projection(boundary, raw, *, historical_quote_market=None,
     policy = raw.get('policy', {})
     if type(policy) is not dict: fail()
     out['policy'] = b._project(policy, 'general')
+    if type(raw.get('policy'))is dict and raw['policy'].get('goal_natural_clarification') is not None:
+        b._project_goal_natural_marker(raw,out)
     if historical_quote_session is not None or historical_quote_proof is not None:
         from .historical_quotes import finalize_review_projection
         out = finalize_review_projection(b, raw, out, historical_quote_market,
@@ -337,7 +440,7 @@ def validate_review_projection(boundary, raw, actual, *, review_wire, reviewer_m
                                review_carrier_version=CARRIER_LITERAL,
                                review_carrier_witness=None, transport=None,
                                historical_quote_market=None, historical_quote_session=None,
-                               historical_quote_proof=None):
+                               historical_quote_proof=None, request_id=None, round_number=None, privacy_revision=None):
     """实际标准适配器Request.data→lossless包→独立预期，逐键逐成员比对。"""
     if type(review_wire) is not bytes:
         fail('AGENT_FINAL_REVIEW_WIRE_REQUIRED', 503)
@@ -350,8 +453,25 @@ def validate_review_projection(boundary, raw, actual, *, review_wire, reviewer_m
                 or type(wire['messages'][1].get('content')) is not str):
             fail('AGENT_FINAL_REVIEW_WIRE_INVALID', 503)
         sent = json.loads(wire['messages'][1]['content'], object_pairs_hook=_unique_json)
+        # Only actual wire table slots are decoded. The logical packet, Base
+        # originals and both independent complete comparisons below stay intact.
         from .primary_tool_transport import restore_review_data_tables
         sent = restore_review_data_tables(sent, wire['messages'][0].get('content'))
+        # This derived transport table is low-trust data. Independently rebuild
+        # it from the actual projected draft and trusted current turn, then
+        # remove only that validated table before both original full compares.
+        from .data_boundary import validate_goal_natural_clarification
+        marker=validate_goal_natural_clarification(actual)
+        if marker is not None:
+            from .goal_review_segments import build_goal_review_segments
+            expected_segments=build_goal_review_segments(actual,request_id,round_number,privacy_revision)
+            if type(sent) is not dict or 'goal_review_segments' not in sent:
+                fail('AGENT_FINAL_PARTIAL_PROJECTION',503)
+            if not strict_equal(sent['goal_review_segments'],expected_segments):
+                fail('AGENT_FINAL_PARTIAL_PROJECTION',503)
+            sent=dict(sent);del sent['goal_review_segments']
+        elif type(sent) is dict and 'goal_review_segments' in sent:
+            fail('AGENT_FINAL_PARTIAL_PROJECTION',503)
         expanded = _expand_review(boundary, actual, review_carrier_version=review_carrier_version,
             review_carrier_witness=review_carrier_witness)
         if not strict_equal(_expand_review(boundary, sent, review_carrier_version=review_carrier_version,
@@ -414,7 +534,8 @@ class FinalResponseProofs:
                  publication_sources, deadline, boundary, review_wire, reviewer=None,
                  review_carrier_version=CARRIER_LITERAL, review_carrier_witness=None,
                  private_context_disabled=False, generated_code_session=None, operation_tools=None,
-                 historical_quote_session=None, historical_quote_proof=None):
+                 historical_quote_session=None, historical_quote_proof=None,
+                 goal_source_receipt=None, goal_bound_receipt=None):
         language_value(language)
         operation_bindings=None
         if operation_tools is not None:
@@ -424,6 +545,22 @@ class FinalResponseProofs:
                     or operation_tools.w != workspace or operation_tools.request_id != request_id):
                 fail('AGENT_FINAL_OPERATION_BINDING_INVALID')
             operation_bindings=validate_operation_wording(raw_projection['draft'],operation_tools)
+        request_quote_source=request_quote_proof=None
+        if operation_tools is not None:
+            request_quote_source=getattr(operation_tools,'request_quote_source',None)
+            request_quote_proof=getattr(operation_tools,'request_quote_proof',None)
+        if request_quote_source is not None or request_quote_proof is not None:
+            from .request_quotes import assert_source, assert_display
+            if request_quote_source is None or request_quote_proof is None:
+                fail('AGENT_FINAL_REQUEST_QUOTE_BINDING_INVALID')
+            assert_source(request_quote_source,owner=gateway.dialogue_archive,
+                workspace=workspace,request_id=request_id)
+            assert_display(request_quote_proof,raw_projection['draft']['text'],source=request_quote_source)
+            operation_tools.validated_request_quote_spans(raw_projection['draft'])
+            if raw_projection.get('user_request_quote_contract')!=request_quote_proof.snapshot():
+                fail('AGENT_FINAL_REQUEST_QUOTE_BINDING_INVALID')
+        elif 'user_request_quote_contract' in raw_projection:
+            fail('AGENT_FINAL_REQUEST_QUOTE_BINDING_INVALID')
         quote_market=None
         if historical_quote_session is not None or historical_quote_proof is not None:
             from .bank_tools import BankTools
@@ -459,6 +596,8 @@ class FinalResponseProofs:
         if private_context_disabled and (metric_batches or observer_batches
                 or (publication_sources is not None and publication_sources.get('financial_metric_snapshot') is not None)):
             fail('AGENT_FINAL_SOURCE_CHANGED')
+        if (type(raw_projection)is dict and any(e.get('tool')=='simulation_product_catalog' for e in raw_projection.get('evidence',[]) if isinstance(e,dict))
+                and operation_tools is None):fail('AGENT_FINAL_SOURCE_CHANGED')
         if type(verdict) is not dict or verdict.get('verdict') != 'approve':
             fail()
         if (type(round_number) is not int or round_number < 1 or type(reviewer_model) is not str
@@ -472,13 +611,42 @@ class FinalResponseProofs:
             review_wire=review_wire, reviewer_model=reviewer_model, reviewer=reviewer,
             review_carrier_version=review_carrier_version,review_carrier_witness=review_carrier_witness,
             transport=review_transport,historical_quote_market=quote_market,
-            historical_quote_session=historical_quote_session,historical_quote_proof=historical_quote_proof)
+            historical_quote_session=historical_quote_session,historical_quote_proof=historical_quote_proof,
+            request_id=request_id,round_number=round_number,
+            privacy_revision=getattr(operation_tools,'privacy_revision',None))
         if not strict_equal(projection, restored):
             fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+        # Preserve the already independently verified projected segment table
+        # within the original per-response encrypted proof, never as plaintext
+        # output. It remains host-derived metadata, not part of model judgment.
+        from .data_boundary import validate_goal_natural_clarification
+        goal_segment_seal=None
+        if validate_goal_natural_clarification(actual_projection) is not None:
+            from .goal_review_segments import build_goal_review_segments
+            if operation_tools is None or '_host_goal_review_evidence' in verdict:
+                fail('AGENT_FINAL_PARTIAL_PROJECTION',503)
+            catalog=build_goal_review_segments(actual_projection,request_id,round_number,operation_tools.privacy_revision)
+            if type(goal_source_receipt) is not dict or type(goal_bound_receipt) is not dict:
+                fail('AGENT_FINAL_PARTIAL_PROJECTION',503)
+            receipt_sha=lambda value:hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+            marker=actual_projection['policy']['goal_natural_clarification']
+            if receipt_sha(goal_bound_receipt)!=marker['receipt_sha256']:
+                fail('AGENT_FINAL_PARTIAL_PROJECTION',503)
+            if goal_bound_receipt!=goal_source_receipt and goal_bound_receipt.get('source_receipt_sha256')!=receipt_sha(goal_source_receipt):
+                fail('AGENT_FINAL_PARTIAL_PROJECTION',503)
+            inner={'contract':'navren.goal-review-segment-evidence/1','workspace_id':workspace,
+                   'review_wire_sha256':hashlib.sha256(review_wire).hexdigest(),'catalog':catalog,
+                   'source_receipt':goal_source_receipt,'bound_receipt':goal_bound_receipt}
+            goal_segment_seal=gateway.personal_data.protect(json.dumps(inner,ensure_ascii=False,sort_keys=True,separators=(',',':')))
+            if type(goal_segment_seal) is not str or not goal_segment_seal.startswith('pd1:'):
+                fail('AGENT_FINAL_PARTIAL_PROJECTION',503)
+        elif goal_source_receipt is not None or goal_bound_receipt is not None:
+            fail('AGENT_FINAL_PARTIAL_PROJECTION',503)
         provider_batch = observed_provider_batch(raw_projection, restored, metric_batches)
         token = object()
         entry = dict(gateway=gateway, workspace=workspace, request_id=request_id, language=language,
             round_number=round_number, reviewer_model=reviewer_model, verdict=deepcopy(verdict),
+            goal_segment_seal=goal_segment_seal,
             projection=deepcopy(projection), raw_projection=deepcopy(raw_projection),
             actual_projection=deepcopy(actual_projection), actual_projection_hash=fingerprint(actual_projection),
             review_wire_hash=hashlib.sha256(review_wire).hexdigest(),
@@ -490,6 +658,7 @@ class FinalResponseProofs:
             response=None, response_hash=None, used=False, speech_check=None,
             generated_code_session=generated_code_session,
             historical_quote_session=historical_quote_session, historical_quote_proof=historical_quote_proof,
+            request_quote_source=request_quote_source,request_quote_proof=request_quote_proof,
             operation_tools=operation_tools, operation_bindings=deepcopy(operation_bindings))
         with self._lock:
             self._expire()
@@ -548,12 +717,31 @@ class FinalResponseProofs:
     def _operations(self, entry, bank_db):
         tools=entry.get('operation_tools')
         if tools is None:return
+        from simulated_bank.service import assert_public_simulation_catalog_current
+        for item in tools.evidence.values():
+            if item.get('tool')=='simulation_product_catalog':
+                if bank_db is None:fail('AGENT_FINAL_GUARD_DB_REQUIRED',503)
+                assert_public_simulation_catalog_current(tools.g.bank.database,item['data'],connection=bank_db)
         if entry['operation_bindings']['bindings'] and bank_db is None:
             fail('AGENT_FINAL_GUARD_DB_REQUIRED',503)
         from .operation_claims import validate_operation_wording
         current=validate_operation_wording(entry['raw_projection']['draft'],tools,bank_db=bank_db)
         if not strict_equal(current,entry['operation_bindings']):
             fail('AGENT_FINAL_OPERATION_SOURCE_CHANGED')
+
+    def _request_quotes(self, entry, bank_db):
+        source,proof=entry.get('request_quote_source'),entry.get('request_quote_proof')
+        if source is None and proof is None:return
+        tools=entry['operation_tools']
+        if (bank_db is None or tools is None or tools.request_quote_source is not source
+                or tools.request_quote_proof is not proof):
+            fail('AGENT_FINAL_REQUEST_QUOTE_BINDING_INVALID')
+        spans=tools.validated_request_quote_spans(entry['raw_projection']['draft'],bank_db=bank_db)
+        snapshot=proof.snapshot()
+        if (spans!=proof.quote_spans(entry['raw_projection']['draft']['text'])
+                or entry['raw_projection'].get('user_request_quote_contract')!=snapshot
+                or entry['projection'].get('user_request_quote_contract')!=snapshot):
+            fail('AGENT_FINAL_REQUEST_QUOTE_CHANGED')
 
     def _history_quotes(self, entry, bank_db):
         session,proof=entry.get('historical_quote_session'),entry.get('historical_quote_proof')
@@ -578,6 +766,7 @@ class FinalResponseProofs:
                 if fingerprint(response) != entry['response_hash']:
                     fail('AGENT_FINAL_RESPONSE_CHANGED')
                 return True
+            self._request_quotes(entry,bank_db)
             self._history_quotes(entry,bank_db)
             self._operations(entry,bank_db)
             sandbox=entry['generated_code_session']
@@ -681,6 +870,7 @@ class FinalResponseProofs:
             self._identity(entry, response, language)
             if fingerprint(response) != entry['response_hash']:fail('AGENT_FINAL_RESPONSE_CHANGED')
             gateway = entry.get('validation_gateway', entry['gateway'])
+            self._request_quotes(entry,bank_db)
             self._history_quotes(entry,bank_db)
             self._operations(entry,bank_db)
             sandbox=entry['generated_code_session']
@@ -692,7 +882,14 @@ class FinalResponseProofs:
                     or response.get('personal_revision') != gateway.personal_data.revision(workspace)):
                 fail('AGENT_FINAL_SOURCE_CHANGED')
             if entry['speech_check'] is not None:entry['speech_check'](bank_db)
-            body = len(monetary_occurrences(response['reply']))
+            request_quote=entry.get('request_quote_proof')
+            if request_quote is None:
+                body = len(monetary_occurrences(response['reply']))
+            else:
+                from .metric_claims import request_quote_financial_view
+                request_quote.validate_display(response['reply'])
+                money_view=request_quote_financial_view(response['reply'],request_quote.quote_spans(response['reply']))
+                body=len(monetary_occurrences(money_view))+request_quote.snapshot()['source_quote_money_lexeme_count']
             total = body
             for q in response.get('follow_up_questions', []):
                 text = q if type(q) is str else q.get('text', '')
@@ -720,5 +917,9 @@ class FinalResponseProofs:
                 'review_id':entry['request_id'],'verdict':deepcopy(entry['verdict']),
                 'body_amount_occurrence_count':body,'total_amount_occurrence_count':total,
                 'original_provider_receipt':deepcopy(receipt)}
+            if entry['goal_segment_seal'] is not None:
+                proof['verdict']['_host_goal_review_evidence']={
+                    'contract':'navren.goal-review-segment-evidence/1',
+                    'sealed_original':entry['goal_segment_seal']}
             entry['used'] = True
             return proof

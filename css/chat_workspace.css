@@ -1,0 +1,78 @@
+/* 对话工作面：保持导航不变，消息、组件和输入共用阅读轴。 */
+body[data-page="chat"] {
+  --chat-reading-width: 1130px;
+  --chat-composer-width: 980px;
+  --chat-bubble-width: 980px;
+  --chat-canvas: #f2f6f9;
+  --chat-canvas-glow: rgba(132, 177, 196, .16);
+  --chat-card: rgba(255, 255, 255, .72);
+  --chat-user-card: #e4eef5;
+  --chat-rule: rgba(95, 125, 146, .18);
+}
+html[data-theme="dark"] body[data-page="chat"] {
+  --chat-canvas: #0d1924;
+  --chat-canvas-glow: rgba(62, 121, 150, .14);
+  --chat-card: rgba(25, 42, 57, .76);
+  --chat-user-card: #203c50;
+  --chat-rule: rgba(158, 185, 203, .18);
+}
+body[data-page="chat"] .main {
+  background: radial-gradient(ellipse at 15% 2%, var(--chat-canvas-glow), transparent 48%),
+    linear-gradient(150deg, var(--chat-canvas), color-mix(in srgb, var(--chat-canvas) 94%, var(--surface-card)));
+}
+body[data-page="chat"] .header::after {
+  content: ""; position: absolute; inset: 100% 0 auto; height: 22px; z-index: -1;
+  pointer-events: none; background: linear-gradient(to bottom, color-mix(in srgb, var(--chat-canvas) 52%, transparent), transparent);
+  -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
+  mask-image: linear-gradient(to bottom, black, transparent);
+}
+body[data-page="chat"] .chat-messages {
+  background: transparent;
+  padding-block: 34px 28px;
+  gap: 24px;
+  scrollbar-gutter: stable;
+}
+body[data-page="chat"] .chat-messages .message:is(.ai,.assistant),
+body[data-page="chat"] .chat-messages .message.user {
+  max-width: var(--chat-composer-width);
+}
+body[data-page="chat"] .chat-messages .message:is(.ai,.assistant) > .avatar {
+  width: 30px; height: 30px; top: 4px;
+  background: transparent; border: 0; box-shadow: none;
+}
+body[data-page="chat"] .chat-messages .message:is(.ai,.assistant) .bubble {
+  padding: 19px 24px 13px;
+  background: var(--chat-card);
+  border: 1px solid var(--chat-rule);
+  border-radius: 7px 18px 18px 18px;
+  box-shadow: 0 4px 18px rgba(36, 64, 83, .035);
+  line-height: 1.8;
+}
+html[data-theme="dark"] body[data-page="chat"] .chat-messages .message:is(.ai,.assistant) .bubble {
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .1);
+}
+body[data-page="chat"] .chat-messages .message.user > .bubble {
+  max-width: min(78%, 650px); padding: 11px 17px;
+  background: var(--chat-user-card); color: var(--ink);
+  border: 1px solid var(--chat-rule); border-radius: 17px 17px 5px 17px;
+  box-shadow: none; line-height: 1.65;
+}
+body[data-page="chat"] .message-body.message-prose { line-height: 1.8; letter-spacing: .005em; }
+body[data-page="chat"] .message-body.message-prose p { margin-bottom: .8em; }
+body[data-page="chat"] .message-body.message-prose .reply-inline-value {
+  font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+body[data-page="chat"] .chat-messages .message-tools { margin-top: 8px; padding-top: 2px; }
+body[data-page="chat"] .chat-messages .message-suggestions { gap: 7px; }
+body[data-page="chat"] .chat-messages .message-suggestions .follow-up-label { color: var(--ink-50); font-size: 13px; }
+body[data-page="chat"] .chat-messages .message-suggestions :is(.follow-up-chip,.preset-chip) {
+  min-height: 38px; padding: 7px 12px; border: 1px solid var(--chat-rule);
+  border-radius: 10px; background: color-mix(in srgb, var(--chat-card) 76%, transparent);
+  color: var(--primary-deep); font-size: var(--font-size-sm, 14px); font-weight: 500;
+}
+body[data-page="chat"] .chat-input-area { background: transparent; }
+@media (max-width: 760px) {
+  body[data-page="chat"] .chat-messages { padding: 24px 16px; gap: 20px; }
+  body[data-page="chat"] .chat-messages .message:is(.ai,.assistant) .bubble { padding: 16px 17px 11px; }
+  body[data-page="chat"] .chat-messages .message.user > .bubble { max-width: 88%; }
+}

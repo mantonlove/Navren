@@ -10,13 +10,14 @@
 .navren-reply-component {
   --nrc-accent: var(--primary-deep, #285b96);
   min-width: 0;
+  width: min(100%, 720px);
   margin: 14px 0 0;
   overflow: hidden;
   border: 1px solid var(--primary-border, #cfdef0);
-  border-radius: 14px;
+  border-radius: 12px;
   color: var(--ink, #1c2637);
   background: var(--surface-card, #f8fafe);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   font-size: 14px;
   line-height: 1.5;
   text-align: start;
@@ -28,19 +29,19 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 4px 16px;
-  padding: 13px 16px 11px;
-  background: var(--primary-soft, #e1edfa);
-  border-bottom: 1px solid var(--primary-border, #cfdef0);
+  padding: 12px 16px 10px;
+  background: transparent;
+  border-bottom: 1px solid var(--border, #d3deeb);
 }
-.navren-reply-component .nrc-title { margin: 0; font-size: 14px; font-weight: 650; line-height: 1.5; color: var(--nrc-accent); }
+.navren-reply-component .nrc-title { margin: 0; font-size: 14px; font-weight: 650; line-height: 1.5; color: var(--ink, #1c2637); }
 .navren-reply-component .nrc-period { font-size: 12px; color: var(--ink-50, #627084); overflow-wrap: anywhere; }
-.navren-reply-component .nrc-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px 16px; gap: 16px 24px; }
+.navren-reply-component .nrc-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 16px; gap: 12px 20px; }
 .navren-reply-component .nrc-metric:only-child { grid-column: 1 / -1; }
 .navren-reply-component .nrc-metric { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .navren-reply-component .nrc-metric-label { color: var(--ink-50, #627084); font-size: 12px; }
-.navren-reply-component .nrc-metric-value { color: var(--nrc-accent); font-size: clamp(17px, 2.4vw, 21px); font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.navren-reply-component .nrc-metric-value { color: var(--ink, #1c2637); font-size: clamp(16px, 2.1vw, 19px); font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .navren-reply-component .nrc-metric-primary { grid-column: 1 / -1; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-.navren-reply-component .nrc-metric-primary .nrc-metric-value { font-size: 24px; }
+.navren-reply-component .nrc-metric-primary .nrc-metric-value { font-size: 21px; }
 .navren-reply-component .nrc-coverage { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; padding: 10px 16px 0; color: var(--ink-50); font-size: 11px; }
 .navren-reply-component .nrc-coverage dt, .navren-reply-component .nrc-coverage dd { margin: 0; overflow-wrap: anywhere; }
 .navren-reply-component .nrc-funding-metrics { border-bottom: 1px solid var(--border); }
@@ -61,7 +62,7 @@
   grid-template-columns: minmax(0, 1fr) auto 20px;
   align-items: center;
   gap: 5px 12px;
-  min-height: 52px;
+  min-height: 48px;
   margin: 0 -8px;
   padding: 10px 8px;
   border-radius: 8px;
@@ -106,7 +107,7 @@
 }
 .navren-reply-component .nrc-origin { min-width: 0; overflow-wrap: anywhere; }
 .navren-reply-component .nrc-state { flex-shrink: 0; color: var(--ink-40); }
-.navren-reply-component .nrc-category-rows .nrc-row-summary { min-height: 60px; }
+.navren-reply-component .nrc-category-rows .nrc-row-summary { min-height: 54px; }
 .navren-reply-component .nrc-bar-track { grid-column: 1 / -1; height: 4px; margin: 2px 32px 1px 0; overflow: hidden; border-radius: 3px; background: var(--surface-raised); }
 .navren-reply-component .nrc-bar-fill { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
 .navren-reply-component .nrc-detail-action { display: inline-flex; justify-content: center; align-items: center; min-height: 44px; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--primary-border); border-radius: 9px; background: var(--primary-soft); color: var(--primary-deep); font: inherit; font-size: 12px; }
@@ -150,15 +151,15 @@ body.mode-senior .navren-reply-component .nrc-detail-fields { font-size: 14px; }
   --ni-series-d: color-mix(in srgb, var(--primary) 30%, var(--surface-card));
   --ni-methods-width: 7em;
   width: 100%;
-  max-width: 650px;
+  max-width: 720px;
   min-width: 0;
-  margin: 14px auto 0;
-  padding: 24px;
+  margin: 14px 0 0;
+  padding: 18px 20px;
   border: 1px solid var(--ni-line);
-  border-radius: 18px;
+  border-radius: 12px;
   background: var(--ni-paper);
   color: var(--ni-ink);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   font: inherit;
   line-height: 1.5;
   text-align: start;
@@ -174,10 +175,10 @@ body.mode-senior .navren-reply-component .nrc-detail-fields { font-size: 14px; }
 .navren-reply-component.nrc-income .ni-view-switch > button[aria-pressed="true"] { border-color: var(--primary-border); background: var(--ni-paper); color: var(--ni-blue); box-shadow: var(--shadow-xs); }
 .navren-reply-component.nrc-income .ni-view-switch > button:hover { color: var(--ni-blue); }
 .navren-reply-component.nrc-income .ni-view-switch > button:disabled { opacity: .5; cursor: not-allowed; }
-.navren-reply-component.nrc-income .ni-total { min-width: 0; margin: 24px 0 18px; }
+.navren-reply-component.nrc-income .ni-total { min-width: 0; margin: 18px 0 14px; }
 .navren-reply-component.nrc-income .ni-eyebrow { color: var(--ni-muted); font-size: .75em; overflow-wrap: anywhere; }
 .navren-reply-component.nrc-income .ni-amount { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 6px; min-width: 0; margin-top: 5px; font-variant-numeric: tabular-nums; }
-.navren-reply-component.nrc-income .ni-number { max-width: 100%; min-width: 0; font-size: 2.125em; font-weight: 600; letter-spacing: -.035em; line-height: 1.2; overflow-wrap: anywhere; }
+.navren-reply-component.nrc-income .ni-number { max-width: 100%; min-width: 0; font-size: 1.75em; font-weight: 650; letter-spacing: -.025em; line-height: 1.2; overflow-wrap: anywhere; }
 .navren-reply-component.nrc-income .ni-unit { max-width: 100%; color: var(--ni-muted); font-size: .8125em; font-weight: 400; overflow-wrap: anywhere; }
 .navren-reply-component.nrc-income .ni-distribution { display: flex; gap: 2px; width: 100%; height: 7px; margin-bottom: 17px; overflow: hidden; border-radius: 4px; }
 .navren-reply-component.nrc-income .ni-segment { width: calc(var(--ni-share, 0) * 1%); height: 100%; min-width: 0; flex-shrink: 1; background: var(--ni-color, var(--ni-series-a)); }

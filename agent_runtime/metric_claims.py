@@ -91,17 +91,20 @@ _CURRENCIES = {"人民币": "CNY", "元": "CNY", "圆": "CNY", "RMB": "CNY",
 _CN_DIGITS = "零〇一二两三四五六七八九十百千万亿兆壹贰叁肆伍陆柒捌玖拾佰仟萬億"
 _NUMBER_TOKEN = rf"[-+−＋－]?(?:\d+(?:[.,，]\d+)*|[{_CN_DIGITS}]+)(?:\s*(?:万亿|亿|万|萬億|億|萬))?"
 _CN_MONEY = re.compile(rf"[{_CN_DIGITS}]+(?:点[{_CN_DIGITS}]+)?\s*"
-                       r"(?:人民币|美元|欧元|英镑|日元|元|圆|圓|块|塊)")
+                       r"(?:人民币|美元|欧元|英镑|日元|元|圆|圓|(?:块|塊)(?:\s*[钱錢])?)")
 _BARE_SCALE = re.compile(rf"[-+−＋－]?(?:[\d.,，]+|[{_CN_DIGITS}]+)\s*(?:万亿|亿|万|萬億|億|萬)")
+_ARABIC_BLOCK_MONEY = re.compile(r'[-+−＋－]?\d+(?:[.,，]\d+)*\s*[块塊](?:\s*[钱錢])?')
 _FINANCIAL_TERM = (
     r"(?:账户余额|余额|现金|金额|资金|本金|净资产|净值|资产|预算|房租|应急金|"
     r"应急保留|应急底线|留款|退款|补助|到账|收入|支出|损益|盈利|亏损|费用|"
     r"手续费|总额|余量|可安排|可用|可花|能花|可投|能投|贷款|付款|还款|收益)")
-_FINANCIAL_NUMBER = re.compile(
-    _FINANCIAL_TERM +
+_FINANCIAL_NUMBER_LINK = (
     r"(?:\s*(?:为|是|有|达|达到|约|大约|共|合计|预计|预测|至少|最多|仅|只剩|"
-    r"剩|了|增加|减少|已|已经|：|:|=))*\s*"
-    rf"(?P<number>{_NUMBER_TOKEN})")
+    r"剩|了|增加|减少|已|已经|：|:|=))*\s*")
+_FINANCIAL_NUMBER = re.compile(
+    _FINANCIAL_TERM + _FINANCIAL_NUMBER_LINK + rf"(?P<number>{_NUMBER_TOKEN})")
+_CONDITIONAL_FINANCIAL_TAIL = re.compile(
+    _FINANCIAL_NUMBER_LINK + rf"(?P<number>{_NUMBER_TOKEN})")
 _NUMBER_FINANCIAL = re.compile(
     rf"(?P<number>{_NUMBER_TOKEN})\s*(?:(?:为|是|的|你|我|本人|当前|本期|总)\s*)*" +
     _FINANCIAL_TERM)
@@ -116,16 +119,180 @@ _DATE_TOKEN = re.compile(r"(?<![0-9A-Za-z_])\d{4}-\d{2}-\d{2}(?![0-9A-Za-z_])")
 
 
 class MetricClaimError(ValueError):
-    def __init__(self, code, field=None):
+    def __init__(self, code, field=None, *, money_span=None):
         self.code, self.field = code, field
+        # Local diagnostic only; as_dict and all rejection decisions stay unchanged.
+        self._money_span = money_span
         super().__init__(code + (":" + field if field else ""))
+
+    @property
+    def money_span(self):
+        return self._money_span
 
     def as_dict(self):
         return {"code": self.code, **({"field": self.field} if self.field else {})}
 
 
-def _fail(code, field=None):
-    raise MetricClaimError(code, field)
+def _fail(code, field=None, *, money_span=None):
+    raise MetricClaimError(code, field, money_span=money_span)
+
+
+
+class UnsafeCurrencyComponent(ValueError):
+    pass
+
+ISO = {'CNY': {'CNY'}, 'RMB': {'CNY'}, 'USD': {'USD'}, 'EUR': {'EUR'},
+       'GBP': {'GBP'}, 'JPY': {'JPY'}}
+WORDS = {'人民币': {'CNY'}, '美元': {'USD'}, '欧元': {'EUR'}, '英镑': {'GBP'},
+         '日元': {'JPY'}, '元': {'CNY'}, '圆': {'CNY'}}
+SYMBOLS = {'¥': {'CNY', 'JPY'}, '$': {'USD'}, '€': {'EUR'}, '£': {'GBP'}}
+NUMBER = re.compile(r'[-+−]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?')
+WORD_KEYS = sorted(WORDS, key=len, reverse=True)
+
+def _shadow(text):
+    result, positions = [], []
+    for i, char in enumerate(text):
+        if unicodedata.category(char) in ('Cf', 'Mn', 'Mc', 'Me'):
+            continue
+        for x in unicodedata.normalize('NFKC', char):
+            result.append(x)
+            positions.append(i)
+    return ''.join(result), positions
+
+def _cjk(char):
+    return '\u3400' <= char <= '\u9fff'
+
+def _tokens(text):
+    view, positions = _shadow(text)
+    tokens = []
+    i = 0
+    while i < len(view):
+        c = view[i]
+        start = i
+        word = next((w for w in WORD_KEYS if view.startswith(w, i)), None)
+        if word:
+            i += len(word); kind = 'currency'; value = WORDS[word]
+        elif c in '万亿':
+            i += 1
+            if c == '万' and i < len(view) and view[i] == '亿':
+                i += 1
+            kind = 'scale'; value = view[start:i]
+        elif unicodedata.category(c) == 'Sc':
+            i += 1; kind = 'symbol'; value = SYMBOLS.get(c)
+        elif c.isdigit() or (c in '+-−' and i + 1 < len(view) and view[i + 1].isdigit()):
+            match = NUMBER.match(view, i)
+            if not match:
+                i += 1; continue
+            i = match.end(); kind = 'number'; value = match.group()
+        elif c.isalpha() and not _cjk(c):
+            i += 1
+            while i < len(view) and view[i].isalpha() and not _cjk(view[i]):
+                i += 1
+            code = view[start:i].upper()
+            kind = 'currency' if code in ISO else 'alpha'
+            value = ISO.get(code, code)
+        elif c in ' \t\r':
+            i += 1
+            while i < len(view) and view[i] in ' \t\r':
+                i += 1
+            kind = 'space'; value = None
+        else:
+            i += 1; kind = 'boundary'; value = None
+        tokens.append((kind, value, positions[start], positions[i - 1] + 1))
+    return tokens
+
+def components(text):
+    """Return currency-bearing components with offsets into the input text."""
+    if type(text) is not str:
+        raise TypeError('text required')
+    out, pending, numbers = [], [], 0
+    def finish():
+        nonlocal pending, numbers
+        while pending and pending[0][0] == 'space': pending.pop(0)
+        while pending and pending[-1][0] == 'space': pending.pop()
+        if pending and numbers and any(t[0] in ('currency', 'symbol') or
+                (t[0] == 'alpha' and any(t[1].startswith(code) for code in ISO)) for t in pending):
+            out.append({'start': pending[0][2], 'end': pending[-1][3], 'tokens': tuple(pending)})
+        pending, numbers = [], 0
+    for tok in _tokens(text):
+        kind = tok[0]
+        if kind == 'boundary': finish(); continue
+        if (kind == 'alpha' and pending and pending[-1][0] == 'space'
+                and not any(tok[1].startswith(code) for code in ISO)):
+            finish()
+        if kind == 'number':
+            if (pending and pending[-1][0] == 'space'
+                    and any(t[0] == 'alpha' and not any(t[1].startswith(code) for code in ISO) for t in pending)):
+                finish()
+            if numbers: finish()
+            numbers += 1
+        pending.append(tok)
+    finish()
+    return tuple(out)
+
+def validate_components(text):
+    result = components(text)
+    for component in result:
+        start, end, toks = component['start'], component['end'], component['tokens']
+        if toks[-1][0] == 'currency' and end < len(text):
+            following = text[end]
+            if following == '_' or (following.isalnum() and not _cjk(following)):
+                raise UnsafeCurrencyComponent('CURRENCY_IDENTIFIER_CONTINUATION')
+        # A removed codepoint at either currency edge can hide a continuation.
+        left = start - 1 if start and unicodedata.category(text[start - 1]) in ('Cf', 'Mn', 'Mc', 'Me') else start
+        right = end + 1 if end < len(text) and unicodedata.category(text[end]) in ('Cf', 'Mn', 'Mc', 'Me') else end
+        if any(unicodedata.category(c) in ('Cf', 'Mn', 'Mc', 'Me') for c in text[left:right]):
+            raise UnsafeCurrencyComponent('FORMAT_OR_COMBINING')
+        markers = [(i, tok[0]) for i, tok in enumerate(toks) if tok[0] in ('currency', 'symbol')]
+        number_index = next(i for i, tok in enumerate(toks) if tok[0] == 'number')
+        if len(markers) > 1:
+            # Two explicit currency spellings may describe the same amount;
+            # preserve the whole component and require currency intersection
+            # below. Symbol prefixes must remain before the number.
+            supported_pair = (len(markers) == 2 and markers[1][1] == 'currency'
+                and markers[1][0] > number_index and
+                ((markers[0][1] == 'symbol' and markers[0][0] < number_index)
+                 or markers[0][1] == 'currency'))
+            if not supported_pair:
+                raise UnsafeCurrencyComponent('MULTIPLE_CURRENCY_MARKERS')
+        possible = None
+        for kind, value, _, _ in toks:
+            if kind == 'alpha': raise UnsafeCurrencyComponent('UNKNOWN_ALPHA_WITH_CURRENCY')
+            if kind == 'symbol' and value is None: raise UnsafeCurrencyComponent('UNKNOWN_CURRENCY_SYMBOL')
+            if kind in ('currency', 'symbol'):
+                possible = set(value) if possible is None else possible.intersection(value)
+        if not possible:
+            raise UnsafeCurrencyComponent('CONFLICTING_CURRENCY')
+    return result
+
+def _reject_hidden_chinese_amounts(text):
+    """Use normalized shadow only to reject obscured unsupported money lexemes."""
+    shadow, offsets = _shadow(text)
+    for pattern in (_CN_MONEY, _BARE_SCALE, _ARABIC_BLOCK_MONEY):
+        for match in pattern.finditer(shadow):
+            if pattern is _BARE_SCALE and _NON_MONEY_UNIT.match(shadow, match.end()):
+                continue
+            start, end = offsets[match.start()], offsets[match.end() - 1] + 1
+            if any(unicodedata.category(char) in ('Cf', 'Mn', 'Mc', 'Me') for char in text[start:end]):
+                _fail('METRIC_MONEY_SYNTAX_REQUIRED', money_span=(start, end))
+
+
+def validate_mask_boundaries(text, masks):
+    """Reject partial overlap; a complete mask still needs separate provenance."""
+    for a, b in masks:
+        if type(a) is not int or type(b) is not int or not 0 <= a < b <= len(text):
+            raise UnsafeCurrencyComponent('INVALID_MASK')
+    protected = [(row['start'], row['end']) for row in components(text)]
+    # Existing unsupported Chinese amounts and bare scales must remain whole
+    # when request-quote masking removes text before monetary parsing.
+    protected.extend(match.span() for match in _CN_MONEY.finditer(text))
+    protected.extend(match.span() for match in _ARABIC_BLOCK_MONEY.finditer(text))
+    protected.extend(match.span() for match in _BARE_SCALE.finditer(text)
+                     if not _NON_MONEY_UNIT.match(text, match.end()))
+    for start, end in protected:
+        for a, b in masks:
+            if max(a, start) < min(b, end) and not (a <= start and end <= b):
+                raise UnsafeCurrencyComponent('MASK_CROSSES_COMPONENT')
 
 
 def _json_copy(value):
@@ -193,10 +360,33 @@ def _metric_snapshot(metric):
     return m
 
 
+def request_quote_financial_view(text, spans):
+    """Only caller-verified typed request-quote nodes; keep all other offsets.
+
+    This validates coordinates, not provenance. BankTools must first verify the
+    immutable source/proof. It is distinct from public/historical quote lanes.
+    """
+    if type(text) is not str or type(spans) is not tuple or len(spans) > 1:
+        _fail('REQUEST_QUOTE_SPAN_INVALID')
+    _reject_hidden_chinese_amounts(text)
+    out=[];last=0
+    for span in spans:
+        if (type(span) is not tuple or len(span)!=2 or any(type(x)is not int for x in span)
+                or not last<=span[0]<span[1]<=len(text)):
+            _fail('REQUEST_QUOTE_SPAN_INVALID')
+        try: validate_mask_boundaries(text, (span,))
+        except UnsafeCurrencyComponent: _fail('REQUEST_QUOTE_SPAN_INVALID')
+        out.extend((text[last:span[0]],' '*(span[1]-span[0])));last=span[1]
+    out.append(text[last:]);return ''.join(out)
+
+
 def monetary_occurrences(text):
     """解析标准数字+币种；中文金额/无币种金额保守拒绝，不补金额。"""
     if not isinstance(text, str):
         _fail("METRIC_INVALID_TEXT")
+    _reject_hidden_chinese_amounts(text)
+    try: component_rows = validate_components(text)
+    except UnsafeCurrencyComponent: _fail('INVALID_MONEY_TEXT')
     result = []
     for match in _MONEY.finditer(text):
         number, scale, unit = match.groups()
@@ -225,10 +415,212 @@ def monetary_occurrences(text):
         result.append({"start": match.start(), "end": match.end(),
                        "value_minor": int(value), "currency": _CURRENCIES.get(unit.upper(), unit.upper())})
     _reject_unsupported_money(text, result)
+    for component in component_rows:
+        if not any(component['start'] <= row['start'] and row['end'] <= component['end'] for row in result):
+            _fail('INVALID_MONEY_TEXT')
+    for row in result:
+        enclosing = [c for c in component_rows if c['start'] <= row['start'] and row['end'] <= c['end']]
+        if len(enclosing) != 1: _fail('INVALID_MONEY_TEXT')
+        row['start'], row['end'] = enclosing[0]['start'], enclosing[0]['end']
     return result
 
 
-def _reject_unsupported_money(text, canonical):
+def _enumerated_heading_ordinals(text):
+    """Recognize a consecutive list of complete sentence-start headings.
+
+    Ordinals grant no money authority. Any ambiguous number in the heading's
+    first sentence disables this exemption; normal monetary checks still run.
+    """
+    heading = re.compile(r'(?:^|(?<=[。！？!?\n]))\s*(?P<n>[一二三四五六七八九])是(?P<title>[\u4e00-\u9fff]{2,24})\s*[:：]')
+    found = list(heading.finditer(text))
+    if len(found) < 2:
+        return set()
+    digits = '一二三四五六七八九'
+    allowed = set()
+    for i in range(len(found) - 1):
+        if found[i].group('n') != '一' or found[i + 1].group('n') != '二':
+            continue
+        sequence = [found[i], found[i + 1]]
+        for following in found[i + 2:]:
+            if len(sequence) >= len(digits) or following.group('n') != digits[len(sequence)]:
+                break
+            sequence.append(following)
+        for item in sequence:
+            if any(ch in _CN_DIGITS for ch in item.group('title')):
+                continue
+            tail = re.split(r'[。！？!?\n]', text[item.end():], maxsplit=1)[0]
+            if any(not _NON_MONEY_UNIT.match(tail, m.end())
+                   for m in re.finditer(_NUMBER_TOKEN, tail)):
+                continue
+            allowed.add(item.span('n'))
+    return allowed
+
+
+def _additional_heading_ordinals(text):
+    """Recognize bounded standalone and comma-enumerated narrative headings.
+
+    A single heading must begin a sentence, contain a financial term plus a
+    descriptive suffix, and end at a punctuation boundary. A comma heading
+    must follow the previous consecutive list item without other prose between.
+    Any unclear number elsewhere in the sentence disables the exemption.
+    """
+    pattern = re.compile(r'(?:^|(?<=[。！？!?；;，,:：\n]))\s*(?P<n>[一二三四五六七八九])是(?P<title>[\u4e00-\u9fff]{2,24})(?=\s*(?:$|[：:，,。！？!?；;\n]))')
+    headings = list(pattern.finditer(text))
+    numerals = '一二三四五六七八九'
+    ordinal_spans = {item.span('n') for item in headings}
+    complete = set()
+    for first in range(len(headings) - 2):
+        trio = headings[first:first + 3]
+        if ([item.group('n') for item in trio] == ['一', '二', '三']
+                and all(not any(ch in _CN_DIGITS for ch in item.group('title')) for item in trio)
+                and all(re.fullmatch(r'\s*[，,]\s*', text[left.end():right.start('n')])
+                        for left, right in zip(trio, trio[1:]))):
+            complete.update(item.span('n') for item in trio)
+    accepted = set()
+    for i, item in enumerate(headings):
+        title = item.group('title')
+        if any(ch in _CN_DIGITS for ch in title):
+            continue
+        financial = re.match(_FINANCIAL_TERM, title)
+        if financial is None:
+            continue
+        suffix = title[financial.end():]
+        if (len(suffix) < 2 or re.search(_FINANCIAL_TERM, suffix)) and not (not suffix and item.span('n') in complete):
+            continue
+        before = text[:item.start('n')].rstrip(' \t\r')
+        if before and before[-1] in '，,':
+            if i == 0:
+                continue
+            previous = headings[i - 1]
+            number_index = numerals.index(item.group('n'))
+            if (number_index < 1 or previous.group('n') != numerals[number_index - 1]
+                    or re.fullmatch(r'\s*[，,]\s*', text[previous.end():item.start('n')]) is None):
+                continue
+        elif before and before[-1] in ':：':
+            if re.search(r'(?:例如|比如|举例|如下|包括|分为)\s*[:：]\s*$', before) is None:
+                continue
+        elif before and before[-1] not in '。！？!?；;\n':
+            continue
+        end = re.search(r'[。！？!?\n]', text[item.end():])
+        end_offset = item.end() + end.start() if end else len(text)
+        uncertain = False
+        for match in re.finditer(_NUMBER_TOKEN, text[item.end():end_offset]):
+            start = item.end() + match.start()
+            finish = item.end() + match.end()
+            if (start, finish) in ordinal_spans or _NON_MONEY_UNIT.match(text, finish):
+                continue
+            uncertain = True
+            break
+        if not uncertain:
+            accepted.add(item.span('n'))
+    return accepted
+
+
+def _financial_prose_qualifier_spans(text):
+    """Return numeral offsets only for complete known nonnumeric qualifiers."""
+    return {m.span('number') for m in _FINANCIAL_NUMBER.finditer(text)
+            if m.group('number') == '一' and any(text.startswith(word, m.start('number'))
+            for word in ('一定程度', '一部分', '一步步', '一点点'))}
+
+
+def _paired_narrative_ordinals(text, canonical):
+    """Recognize list ordinals without granting authority to surrounding numbers.
+
+    Examine whole numeral tokens only inside the bounded pair. Canonical money
+    still requires normal downstream binding; ambiguous tokens keep rejection.
+    """
+    pattern = re.compile(
+        r'(?:^|(?<=[：:。！？!?；;\n]))\s*'
+        r'(?P<first>一)是(?P<left>[^。！？!?；;\n]{1,120}?)'
+        r'[，,]\s*(?P<second>二)是(?P<right>[^。！？!?；;\n]{1,120})'
+        r'(?=[。！？!?；;\n]|$)')
+    dates = []
+    for token in _DATE_TOKEN.finditer(text):
+        try:
+            date.fromisoformat(token.group(0))
+        except ValueError:
+            continue
+        dates.append(token.span())
+    comparisons = [m.span() for m in _COMPARISON_WORDS.finditer(text)]
+    qualifiers = _financial_prose_qualifier_spans(text)
+    accepted = set()
+    for pair in pattern.finditer(text):
+        safe = True
+        for part in ('left', 'right'):
+            start, end = pair.span(part)
+            for number in re.finditer(_NUMBER_TOKEN, text[start:end]):
+                n_start, n_end = start + number.start(), start + number.end()
+                if ((n_start, n_end) in qualifiers
+                        or any(row['start'] <= n_start and n_end <= row['end'] for row in canonical)
+                        or _NON_MONEY_UNIT.match(text, n_end)
+                        or any(left <= n_start < n_end <= right for left, right in dates + comparisons)
+                        or (n_start > 0 and text[n_start - 1] in 'Rr' and text[n_start:n_end].isdigit())
+                        or (text[n_start:n_end] == '一' and text.startswith('一旦', n_start))):
+                    continue
+                if (n_start > 0 and text[n_start - 1] == 'T'
+                        and re.fullmatch(r'\+(?:0|[1-9][0-9]*)', text[n_start:n_end])
+                        and re.match(r'\s*到账', text[n_end:])):
+                    before_t = text[n_start - 2] if n_start > 1 else ''
+                    if (not before_t or before_t.isspace()
+                            or ('\u4e00' <= before_t <= '\u9fff' and before_t not in _CN_DIGITS)
+                            or (unicodedata.category(before_t).startswith('P')
+                                and before_t not in '_+.-−＋－')):
+                        continue
+                safe = False
+                break
+            if not safe:
+                break
+        if safe:
+            accepted.update((pair.span('first'), pair.span('second')))
+    return accepted
+
+
+def _qualifier_has_no_unbound_numerals(text, qualifier_span, canonical, ordinals):
+    """The qualifier alone grants no monetary authority; inspect its sentence."""
+    start, end = qualifier_span
+    left = max((text.rfind(p, 0, start) for p in '。！？!?；;\n'), default=-1) + 1
+    endings = [pos for p in '。！？!?；;\n' if (pos := text.find(p, end)) >= 0]
+    right = min(endings, default=len(text))
+    dates = []
+    for token in _DATE_TOKEN.finditer(text, left, right):
+        try:
+            date.fromisoformat(token.group(0))
+        except ValueError:
+            continue
+        dates.append(token.span())
+    comparisons = [m.span() for m in _COMPARISON_WORDS.finditer(text, left, right)]
+    qualifiers = _financial_prose_qualifier_spans(text)
+    for number in re.finditer(_NUMBER_TOKEN, text[left:right]):
+        n_start, n_end = left + number.start(), left + number.end()
+        if ((n_start, n_end) == qualifier_span or (n_start, n_end) in ordinals or (n_start, n_end) in qualifiers
+                or any(row['start'] <= n_start and n_end <= row['end'] for row in canonical)
+                or _NON_MONEY_UNIT.match(text, n_end)
+                or any(a <= n_start < n_end <= b for a, b in dates + comparisons)
+                or (n_start > 0 and text[n_start - 1] in 'Rr' and text[n_start:n_end].isdigit())
+                or (text[n_start:n_end] == '一' and text.startswith('一旦', n_start))):
+            continue
+        if text[n_start:n_end] == '两':
+            intro = re.match(r'(?:点|层|方面|部分)\s*[:：]\s*(?P<first>一)是', text[n_end:])
+            if intro is not None and (n_end + intro.start('first'), n_end + intro.end('first')) in ordinals:
+                continue
+        if (n_start > 0 and text[n_start - 1] == 'T'
+                and re.fullmatch(r'\+(?:0|[1-9][0-9]*)', text[n_start:n_end])
+                and re.match(r'\s*到账', text[n_end:])):
+            before_t = text[n_start - 2] if n_start > 1 else ''
+            if (not before_t or before_t.isspace()
+                    or ('\u4e00' <= before_t <= '\u9fff' and before_t not in _CN_DIGITS)
+                    or (unicodedata.category(before_t).startswith('P')
+                        and before_t not in '_+.-−＋－')):
+                continue
+        return False
+    return True
+
+
+def _reject_unsupported_money(text, canonical, *, collect_span=None):
+    def reject(span):
+        if collect_span is None:
+            _fail("METRIC_MONEY_SYNTAX_REQUIRED", money_span=span)
+        collect_span(span)
     def covered(start, end):
         return any(row["start"] <= start and end <= row["end"] for row in canonical)
     dates = []
@@ -239,15 +631,36 @@ def _reject_unsupported_money(text, canonical):
             continue
         dates.append(token.span())
 
-    for match in _CN_MONEY.finditer(text):
-        if not covered(*match.span()):
-            _fail("METRIC_MONEY_SYNTAX_REQUIRED")
+    for pattern in (_CN_MONEY, _ARABIC_BLOCK_MONEY):
+        for match in pattern.finditer(text):
+            if not covered(*match.span()):
+                reject(match.span())
     for match in _BARE_SCALE.finditer(text):
         if not covered(*match.span()) and not _NON_MONEY_UNIT.match(text, match.end()):
-            _fail("METRIC_MONEY_SYNTAX_REQUIRED")
+            reject(match.span())
+    heading_ordinals = (_enumerated_heading_ordinals(text) | _additional_heading_ordinals(text)
+                        | _paired_narrative_ordinals(text, canonical))
     for pattern in (_FINANCIAL_NUMBER, _NUMBER_FINANCIAL, _PREFIX_MONEY):
         for match in pattern.finditer(text):
             start, end = match.span("number")
+            if pattern is _NUMBER_FINANCIAL and (start, end) in heading_ordinals:
+                continue
+            # A complete, explicitly recognized prose qualifier is not itself
+            # a number. No currency/value is exempted from its ordinary gate.
+            if (pattern is _FINANCIAL_NUMBER and text[start:end] == '一'
+                    and any(text.startswith(word, start) for word in
+                            ('一定程度', '一部分', '一步步', '一点点'))
+                    and _qualifier_has_no_unbound_numerals(text, (start, end), canonical, heading_ordinals)):
+                continue
+            # “一旦” is a conditional word, not an amount. Reuse the same
+            # financial link after it so a later bare amount is still rejected
+            # at its actual span by the original checks below.
+            if (pattern is _FINANCIAL_NUMBER and text[start:end] == "一"
+                    and text.startswith("一旦", start)):
+                tail = _CONDITIONAL_FINANCIAL_TAIL.match(text, end + 1)
+                if tail is None:
+                    continue
+                start, end = tail.span("number")
             # Numeral characters inside a complete comparison word are not
             # amounts. Explicit currencies/scales still ran above; all other
             # numbers, including a later number in this clause, remain checked.
@@ -268,10 +681,17 @@ def _reject_unsupported_money(text, canonical):
                     clause = re.split(r"[，,。；;!?！？\n]", text[:negation.start()])[-1]
                     if not re.search(r"不|非|未|没|无|否认", clause):
                         continue
-            # Only the relational “同一” is nonnumeric here; amounts such as
-            # “同一万元” retain the earlier currency/scale guards unchanged.
+            # The complete relational modifiers “同一” and “单一” are
+            # nonnumeric here. Currency/scale amounts such as “单一万元”
+            # still pass through the earlier strict money guards first.
             if (pattern is _NUMBER_FINANCIAL and text[start:end] == "一"
-                    and start > 0 and text[start - 1] == "同"):
+                    and start > 0 and text[start - 1] in ("同", "单")):
+                continue
+            # A complete “一半” fraction may end here or at an explicit
+            # clause boundary. Attached units (including unknown currency or
+            # parenthesized units) stay in the original money rejection path.
+            if (pattern is _FINANCIAL_NUMBER and text[start:end] == "一"
+                    and re.match(r"\s*半\s*(?=$|[，,。；;!?！？])", text[end:])):
                 continue
             # R4等正式等级不是“4元”，即便其后紧接“资金配置”。
             if start and text[start - 1] in "Rr" and text[start:end].isdigit():
@@ -288,7 +708,32 @@ def _reject_unsupported_money(text, canonical):
                             and before_t not in "_+.-−＋－")):
                     continue
             if not covered(start, end) and not _NON_MONEY_UNIT.match(text, end):
-                _fail("METRIC_MONEY_SYNTAX_REQUIRED")
+                reject((start, end))
+
+
+def monetary_lexeme_spans(text):
+    """Recognize original monetary lexical spans without issuing values or authority.
+
+    Shared rejection classifications are identical to the normal money parser;
+    source quotations use spans only, while financial text still uses the full
+    monetary_occurrences validator including syntax and currency checks.
+    """
+    if type(text) is not str:
+        _fail("METRIC_INVALID_TEXT")
+    _reject_hidden_chinese_amounts(text)
+    try: component_rows = validate_components(text)
+    except UnsafeCurrencyComponent: _fail('INVALID_MONEY_TEXT')
+    canonical = [{"start": m.start(), "end": m.end()} for m in _MONEY.finditer(text)]
+    spans = []
+    for component in component_rows:
+        if not any(component['start'] <= row['start'] and row['end'] <= component['end'] for row in canonical):
+            _fail('INVALID_MONEY_TEXT')
+    for row in canonical:
+        enclosing = [c for c in component_rows if c['start'] <= row['start'] and row['end'] <= c['end']]
+        if len(enclosing) != 1: _fail('INVALID_MONEY_TEXT')
+        spans.append((enclosing[0]['start'], enclosing[0]['end']))
+    _reject_unsupported_money(text, canonical, collect_span=spans.append)
+    return tuple(spans)
 
 
 def merge_source_versions(metrics, *, base_versions=None):
@@ -431,14 +876,20 @@ class MetricRegistry:
         return validated
 
     def validate_answer(self, text, amount_claims, *, current_source_versions, public_quote_spans=(),
-                        scenario_metric_ids=None, scenario_context=False):
+                        scenario_metric_ids=None, scenario_context=False,
+                        request_quote_spans=(), request_quote_money_lexeme_count=0):
         """每个金额出现位置都须被准确片段覆盖，同数别处不自动获准。
 
         public_quote_spans只可由本地独立原文验证器产生，不能直接采用模型
         声称的public范围；本层不判断个人资格。无正式指标时金融金额失败，
         调用方可明确缺失，或改用既有只读answer_facts，不注册伪指标。
         """
-        occurrences = monetary_occurrences(text)
+        if (type(request_quote_money_lexeme_count)is not int or request_quote_money_lexeme_count<0
+                or request_quote_money_lexeme_count>24
+                or (not request_quote_spans and request_quote_money_lexeme_count)):
+            _fail('REQUEST_QUOTE_SPAN_INVALID')
+        financial_view=request_quote_financial_view(text,request_quote_spans)
+        occurrences = monetary_occurrences(financial_view)
         validated = self.validate_claims(amount_claims, current_source_versions=current_source_versions)
         covered = set()
         bound_amounts = {}
@@ -473,4 +924,4 @@ class MetricRegistry:
         _require_joint_scenario_scope(text, occurrences, bound_amounts,
                                      public_quote_spans, scenario_metric_ids, scenario_context)
         return {"status": "validated", "amount_claims": validated,
-                "amount_occurrence_count": len(occurrences), "independent_review_required": True}
+                "amount_occurrence_count": len(occurrences)+request_quote_money_lexeme_count, "independent_review_required": True}

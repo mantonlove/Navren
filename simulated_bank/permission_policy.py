@@ -12,6 +12,7 @@ import secrets
 import uuid
 from contextlib import closing
 from .sms_mfa import SmsBinding, SmsVerified
+from sms_aliyun import SmsFailure, SMS_VERIFICATION_REASONS
 
 POLICY_VERSION = 'navren.permission.sms/1'
 THRESHOLD_MINOR = 100000
@@ -243,8 +244,14 @@ class BankPermissions:
             challenge = SmsBinding(**json.loads(c['binding']))
             if challenge.summary_sha256 != binding['summary_hash']:
                 self.deny(db, workspace, operation, 'SMS_CHALLENGE_INVALID', suspicious=True)
+        failure_reason, retry_allowed = 'SMS_VERIFY_UNAVAILABLE', False
         try:
             proof = self.provider.verify(challenge, payload['verification_code'], deadline=min(now + 10, challenge.expires_at))
+        except SmsFailure as error:
+            proof = None
+            if isinstance(error.code, str) and error.code in SMS_VERIFICATION_REASONS:
+                failure_reason = error.code
+            retry_allowed = failure_reason == 'SMS_CODE_REJECTED' and error.same_challenge_retry is True
         except Exception:
             proof = None
         with self.bank.transaction() as db:
@@ -259,7 +266,21 @@ class BankPermissions:
                 and type(proof.expires_at) in (int, float) and math.isfinite(proof.expires_at)
                 and challenge.issued_at <= proof.verified_at <= current < proof.expires_at <= challenge.expires_at)
             if not valid or current < now or current >= min(now + 10, challenge.expires_at) or not c or c['state'] != 'sent':
-                self.deny(db, workspace, operation, 'SMS_VERIFICATION_FAILED', suspicious=True)
+                from .service import BankError
+                retry_allowed = (retry_allowed is True and proof is None
+                    and now <= current < min(now + 10, challenge.expires_at)
+                    and c is not None and c['state'] == 'sent')
+                try:
+                    # Keep the exact canonical event and its original three-failure lock.
+                    self.deny(db, workspace, operation, 'SMS_VERIFICATION_FAILED', suspicious=True)
+                except BankError as error:
+                    locked = db.execute('SELECT locked FROM permission_security WHERE workspace_id=?',
+                                        (workspace,)).fetchone()
+                    if locked and locked['locked']:
+                        failure_reason, retry_allowed = 'FINANCIAL_WRITE_LOCKED', False
+                    error.sms_verification = {'reason_code': failure_reason,
+                        'same_challenge_retry': retry_allowed is True}
+                    raise
             reference_hash = sha([proof.provider_id, proof.proof_reference])
             if db.execute('SELECT 1 FROM permission_sms_proofs WHERE provider_reference_hash=?', (reference_hash,)).fetchone():
                 self.deny(db, workspace, operation, 'SMS_PROOF_REPLAY', suspicious=True)

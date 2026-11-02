@@ -149,7 +149,7 @@ def main():
         'registered_experience_mode': True,
         'existing_registered_instance_count':metadata['existing_registered_instance_count'],
         'legacy_workspace_count':metadata['legacy_workspace_count'],
-        'existing_personal_key_verified': True, 'model_provider': 'aiping',
+        'existing_personal_key_verified': True, 'model_provider': 'unverified',
         'model_checks': 0, 'source_static_files': True,
         'runtime_python': sys.executable, 'runtime_prefix': sys.prefix,
         'stream_events_ready': True,
@@ -170,7 +170,8 @@ def main():
     os.chdir(ROOT)
     from local_knowledge.store import LocalKnowledgeProvider
     from local_knowledge.runtime import EvidenceRuntime
-    from voice_gateway import VoiceGateway
+    from voice_gateway import VoiceGateway, load_key
+    from local_speech_task import LocalTTSConfig
     from server import create_server
     from welcome_auth import create_welcome_server
     from sms_aliyun import load_sms_transport
@@ -185,7 +186,7 @@ def main():
 
     provider = LocalKnowledgeProvider(paths['knowledge'])
     evidence = EvidenceRuntime(provider, background=False)
-    voice = VoiceGateway(allow_cloud_asr=False)
+    voice = VoiceGateway(key=load_key() if LocalTTSConfig.from_environment() is None else '', allow_cloud_asr=False)
     stopped = threading.Event()
     instances, threads = [], []
     try:
@@ -193,6 +194,15 @@ def main():
             voice=voice, evidence_runtime=evidence, market_database=paths['market'],
             agent_route_provider=args.agent_route_provider, **gateway_options)
         instances.append(business)
+        # Metadata is bound to the same actual Agent used by this business server.
+        binding = business.finance.capabilities()['conversation_runtime']
+        base['model_route'] = ('official' if binding.get('binding_status') == 'official_transport_bound'
+                               else 'unverified')
+        base['model_provider'] = base['model_route']
+        base['configured_models'] = {
+            'primary': {'provider': binding.get('primary_provider'), 'model_id': binding.get('primary')},
+            'reviewer': {'provider': binding.get('reviewer_provider'), 'model_id': binding.get('reviewer')}}
+        base['runtime_model_binding'] = binding.get('binding_status', 'unbound')
         experience_provider=business.finance.experience_provider
         if experience_provider is None:
             raise RuntimeError('REGISTERED_EXPERIENCE_PROVIDER_REQUIRED')
@@ -207,9 +217,13 @@ def main():
             threads.append(thread)
         for signum in (signal.SIGTERM, signal.SIGINT):
             signal.signal(signum, lambda *_: stopped.set())
+        speech_status = voice.status()
         receipt = {**base, 'pid': os.getpid(), 'runtime_enabled': True,
             'server_deployed': False, 'app_release': business.app_release,
-            'speech_configured': voice.status().get('configured',False),
+            'speech_configured': speech_status.get('configured',False),
+            'speech_status': {key:speech_status.get(key) for key in (
+                'asr_model','asr_available','tts_model','tts_available','cloud_provider',
+                'asr_privacy_mode','asr_sample_rate','tts_sample_rate')},
             'sms_configured': welcome.auth.sms.configured,
             'message_worker': business.finance.messages.status(),
             'started_at': datetime.now(timezone.utc).isoformat()}

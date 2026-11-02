@@ -31,7 +31,11 @@
 <link rel="stylesheet" href="css/reply_interactions.css?dq=51143333bf16">
   <link rel="stylesheet" href="css/navigation_gestures.css?ui=dc4db77b8cb5">
 <link rel="stylesheet" href="css/form_controls.css?dq=546db5bc506d">
-  <link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
+<link rel="stylesheet" href="css/chat_composer.css?v=20261030-1">
+<link rel="stylesheet" href="css/chat_workspace.css?v=20261030-1">
+<link rel="stylesheet" href="css/chat_redesign_v2.css?v=20261030-2">
+  <link rel="stylesheet" href="css/chat_attachments.css?v=protocol-20261030">
+<link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
 <link rel="stylesheet" href="css/page_load.css?v=chat-ready-20261027">
 <link rel="stylesheet" href="css/chat_history.css?v=history-entry-20261027">
 </head>
@@ -50,7 +54,7 @@
   <main class="main" id="mainContent" tabindex="-1">
     <header class="header">
       <div class="header-identity"><a class="brand" href="chat.html" aria-label="Navren首页"><img class="brand-wordmark" src="assets/brand/navren-wordmark.png" width="2172" height="724" alt=""></a><h1 class="header-location">银行与生活助手</h1></div>
-
+      <button id="newConversationBtn" class="btn btn-ghost" type="button" onclick="startNewConversation()" title="开始新对话，历史记录仍保留">新对话</button>
     </header>
     <section id="accountSwitcher" aria-label="演示账户" class="account-switcher" hidden></section>
 
@@ -78,25 +82,18 @@
       <div class="privacy-actions"><button onclick="acceptPrivacy()">我知道了</button></div>
     </div>
 
-    <div class="image-preview-row hidden" id="imagePreview">
-      <img id="previewImg" src="" alt="">
-      <button class="remove-img" onclick="removeImage()">✕</button>
-    </div>
-
     <div class="chat-input-area">
+      <div class="chat-attachment-preview" id="chatAttachmentPreview" hidden aria-label="待发送附件"></div>
       <div class="input-row">
-        <input type="file" id="imageInput" accept="image/*" capture="environment" onchange="handleImageUpload(event)" style="display:none;">
-        <button class="ib-btn" onclick="triggerUpload()" title="上传图片或拍照">
+        <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif,.pdf,.docx,.xlsx,.pptx,.txt,.md,.csv" multiple onchange="handleImageUpload(event)" style="display:none;">
+        <button class="ib-btn" type="button" onclick="triggerUpload()" title="添加图片或文档" aria-label="添加图片或文档">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
-        <textarea id="userInput" rows="1" placeholder="查账单、安排转账、管理卡片或聊聊你的计划…" onkeydown="handleKeyDown(event)"></textarea>
-        <button class="ib-btn" id="voiceBtn" onclick="toggleVoice()" title="语音输入（说出您的问题）">
+        <textarea id="userInput" rows="1" aria-label="输入消息" placeholder="输入问题，或聊聊你的计划…" onkeydown="handleKeyDown(event)"></textarea>
+        <button class="ib-btn" type="button" id="voiceBtn" onclick="toggleVoice()" title="语音输入（说出您的问题）" aria-label="语音输入">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         </button>
-        <button class="ib-btn" onclick="triggerHandoff('用户主动请求人工')" title="转接人工理财顾问">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-        </button>
-        <button class="ib-btn send-btn" onclick="sendMessage()" id="sendBtn" disabled title="发送消息">
+        <button class="ib-btn send-btn" type="button" onclick="sendMessage()" id="sendBtn" disabled title="发送消息" aria-label="发送消息">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </button>
       </div>
@@ -128,7 +125,7 @@
 <script src="js/bank_ui.js?dq=ada03283af4a"></script>
 <script src="js/money_input.js?dq=c78b0b27c459"></script>
 <script src="js/aa_payments.js?dq=c6fa7e32f5b4"></script>
-<script src="js/api.js?dq=uss-20261016"></script>
+<script src="js/api.js?v=conversation-scope-20261031"></script>
 <script src="js/voice_messages.js?v=uss-20261016"></script>
 <script src="assets/vendor/chat-markdown/marked.umd.js"></script>
 <script src="assets/vendor/chat-markdown/purify.min.js"></script>
@@ -136,7 +133,8 @@
 <script src="js/reply_components.js?dq=e9d7aa06afd1"></script>
 <script src="js/reply_interactions.js?dq=9aa29f5f6bdb"></script>
 <script src="js/chat_history_view.js?v=history-entry-20261027"></script>
-<script src="js/chat.js?v=history-entry-20261027"></script>
+<script src="js/chat_attachments.js?v=protocol-20261030"></script>
+<script src="js/chat.js?v=conversation-scope-20261031"></script>
   <script src="js/navigation_gestures.js?ui=acce6603cf27"></script>
 <script src="js/form_controls.js?dq=b4539a70b618"></script>
 </body>

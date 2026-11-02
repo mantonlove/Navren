@@ -3,7 +3,7 @@ name: wealth
 description: 用户比较理财产品、安排投资资金、制定配置或回看收益时，作为兼容入口选择产品研究、目标规划、配置或投后复核流程。
 metadata:
   role: advisor
-  tools: [load_skill, public_products, products, account_summary, budget, wealth_versions, wealth_product, business_records, prepare_operation, operation_status, answer_facts, answer_reviewed]
+  tools: [load_skill, public_products, simulation_product_catalog, products, account_summary, budget, wealth_versions, wealth_product, business_records, prepare_operation, operation_status, answer_facts, answer_reviewed]
   delivery: native
 ---
 
@@ -15,8 +15,8 @@ metadata:
 
 ## 共同数据与办理约束
 
-1. 真实公开资料先查 `public_products`。逐项标明产品身份、份额、资料日期、风险来源、期限、赎回限制、费用和渠道状态；过期资料不可称为最新在售，缺失收益/净值保持未知，不补默认评级。
-2. 本人的当前模拟账面持仓本金和模拟产品规则直接读取 `account_summary` 与 `products`；宿主已读取时直接使用本轮结果，不重复加载本方法，不转到独立历史组合。查询独立历史组合、净值和收益才先 `wealth_versions`，按实际组合、份额和日期用 `wealth_product`；它们不代表用户真实持仓，不能与当前现金/旧本金合并。缺少成本、交易、数量、净值或完整估值时保留缺项，不用七日年化除365生成日收益。
+1. 先确认产品来源。真实公开资料查 `public_products`；明确的 Navren 虚构演示产品公共规则查 `simulation_product_catalog`，只解释原登记规则，不读取本人画像、持仓或账户，不据此判断本人适当性、可买资格或准备交易。裸名称未明确来源时，不默认其为模拟产品；使用本轮宿主提供的来源选择，未提供选择时先澄清。两类目录不能互相补事实。逐项标明产品身份、份额、资料日期、风险来源、期限、赎回限制、费用和渠道状态；过期资料不可称为最新在售，缺失收益/净值保持未知，不补默认评级。
+2. 在宿主允许的本人资料范围内，本人的当前模拟账面持仓本金和模拟产品规则直接读取 `account_summary` 与 `products`；宿主已读取时直接使用本轮结果，不重复加载本方法，不转到独立历史组合。查询独立历史组合、净值和收益才先 `wealth_versions`，按实际组合、份额和日期用 `wealth_product`；它们不代表用户真实持仓，不能与当前现金/旧本金合并。缺少成本、交易、数量、净值或完整估值时保留缺项，不用七日年化除365生成日收益。
 3. 仅模拟 `products` 可准备模拟申购。先 `account_summary` 核对正式画像，再 `budget` 核对资金、最低金额和留款；产品风险/期限匹配不等于适合买入。赎回先查 `business_records(kind='investments')` 的持仓批次、锁定及到账规则。
 4. 模拟单笔申赎草案只填 `action`、本轮 `account_id`、`product_id` 和必填整数 `amount_minor`（单位分）；不能用 `requested_limit_minor` 或转账备注代替本金金额。只有用户明确要求且参数充分才准备一项 `prepare_operation`，`answer_reviewed` 核验后等本人确认；回执用 `operation_status` 查询。没有当前渠道或交易工具的真实产品保持研究只读，不套用同名模拟产品办理。
 

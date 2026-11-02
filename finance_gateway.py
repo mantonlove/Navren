@@ -109,6 +109,7 @@ class FinanceGateway:
         self._product_performance_lock = threading.Lock()
         self.service_negotiations = ServiceNegotiationService(self)
         self.wealth = WealthPortfolio(self)
+        self.statements.on_source_activated = self._activate_historical_source
         self.calendar = FinancialCalendar(self)
         self.financial_graph = FinancialGraph(self)
         self.goals = GoalService(self.bank)
@@ -305,6 +306,67 @@ class FinanceGateway:
             result['independent_financial_data'] = self.demo_accounts.independent_reading_status()
         return result
 
+    def _activate_historical_source(self, workspace, *, db):
+        """Trusted write lifecycle only: one already-authorized workspace, same transaction."""
+        revision = self.wealth.source_revision()
+        self.bank._workspace(db, workspace)
+        self.bank.permissions.write_allowed(db, workspace)
+        self.wealth.provision(workspace, db=db)
+        if self.wealth.source_revision() != revision:
+            raise BankError('PORTFOLIO_SOURCE_CHANGED', '公开来源已变化，请重新刷新。', 409)
+        row = db.execute("SELECT id,payload FROM portfolio_versions WHERE workspace_id=? AND kind='historical' AND active=1",
+                         (workspace,)).fetchone()
+        if row is not None:
+            payload = json.loads(row['payload'])
+            if (row['id'] != 'history-'+revision[:16]
+                    or payload.get('source_revision') != revision[:16]):
+                raise BankError('PORTFOLIO_SOURCE_CHANGED', '历史组合未绑定本次公开来源，请重新刷新。', 409)
+        return {'environment':'simulation', 'workspace_id':workspace,
+                'source_revision':revision, 'historical_version':row['id'] if row else None,
+                'activation_status':'historical_revision_bound' if row else 'unavailable_or_needs_initialization',
+                'scope':'historical_simulation_only'}
+
+    def historical_source_status(self, workspace):
+        value = self.wealth.versions(workspace)
+        revision = self.wealth.source_revision()
+        active = [row for row in value['versions'] if row['kind']=='historical' and row['active']]
+        bound = active[0].get('metadata',{}).get('source_revision') if len(active)==1 else None
+        state = ('needs_initialization' if not active else
+                 'current_revision' if len(active)==1 and bound==revision[:16] else 'stale_or_ambiguous')
+        return {**value, 'source_revision':revision,
+                'historical_source':{'status':state, 'active_source_revision':bound,
+                    'scope':'historical_simulation_only', 'current_holdings_valuation_proven':False}}
+
+    def _activate_selected_historical_source(self, workspace, *, db):
+        """Selecting a readable locked persona must not require a new cache write."""
+        self.bank._workspace(db, workspace)
+        locked = db.execute('SELECT locked FROM permission_security WHERE workspace_id=?',
+                            (workspace,)).fetchone()
+        if locked and locked['locked']:
+            return {'activation_status':'financial_write_locked',
+                    'scope':'historical_simulation_only'}
+        return self._activate_historical_source(workspace, db=db)
+
+    def refresh_historical_source(self, workspace, payload):
+        strict_fields(payload, ['expected_source_revision'], ['expected_source_revision'])
+        expected = payload['expected_source_revision']
+        if type(expected) is not str or not re.fullmatch('[a-f0-9]{64}', expected):
+            raise BankError('INVALID_FIELDS', '公开来源版本无效。')
+        with self.bank.transaction() as db:
+            if self.wealth.source_revision() != expected:
+                raise BankError('PORTFOLIO_SOURCE_CHANGED', '公开来源已变化，请重新读取。', 409)
+            result = self._activate_historical_source(workspace, db=db)
+            if result['source_revision'] != expected:
+                raise BankError('PORTFOLIO_SOURCE_CHANGED', '公开来源已变化，请重新读取。', 409)
+            event = ('historical_portfolio_source_activated'
+                     if result['activation_status']=='historical_revision_bound'
+                     else 'historical_portfolio_source_unavailable')
+            self.bank._audit(db,workspace,event,
+                             {'source_revision':expected,'scope':'historical_simulation_only',
+                              'activation_status':result['activation_status'],
+                              'historical_version':result['historical_version']})
+            return result
+
     def set_source(self, workspace, payload):
         return self.statements.set_source(workspace, payload)
 
@@ -326,12 +388,41 @@ class FinanceGateway:
     def annual_analysis(self, workspace, year):
         return self.statements.annual_analysis(workspace, year) if self.source(workspace)['active_source']=='imported' else self.bank.annual_analysis(workspace, year)
 
+    def _bind_conversation_runtime(self, agent):
+        """Report the exact trusted factory binding without loading keys or making calls."""
+        primary = getattr(agent, 'primary', None)
+        reviewer = getattr(agent, 'reviewer', None)
+        client = getattr(reviewer, 'client', None)
+        value = {'architecture': 'native_tool_agent', 'primary': None,
+                 'primary_provider': None, 'reviewer': None, 'reviewer_provider': None,
+                 'identity_source': 'trusted_server_factory', 'binding_status': 'unverified',
+                 'user_confirmation_required': True, 'semantic_keyword_router': False}
+        if any(getattr(item, 'billing_mode', None) == 'unpaid_fixture'
+               for item in (primary, reviewer, client)):
+            value['binding_status'] = 'unpaid_fixture'
+        elif primary is not None and reviewer is not None and client is not None:
+            from agent_runtime.model_adapters import _validate_official_transport, ModelAdapterError
+            try:
+                _validate_official_transport(provider=primary.provider, model_id=primary.model_id,
+                    url=primary.endpoint, env_name=primary.env_name,
+                    keychain_service=primary.keychain_service)
+                _validate_official_transport(provider=client.provider, model_id=client.model_id,
+                    url=client.url, env_name=client.env_name, keychain_service=client.keychain_service)
+                if reviewer.model_id != client.model_id:
+                    raise ValueError('reviewer_identity_mismatch')
+                value.update(primary=primary.model_id, primary_provider=primary.provider,
+                    reviewer=client.model_id, reviewer_provider=client.provider,
+                    binding_status='official_transport_bound')
+            except (AttributeError, TypeError, ValueError, ModelAdapterError):
+                pass
+        self._conversation_runtime = value
+
     def capabilities(self):
         return {**self.bank.capabilities(),
-                'conversation_runtime': {'architecture':'native_tool_agent',
-                    'primary':'DeepSeek-V4-Flash','primary_provider':'ai_ping',
-                    'reviewer':'GLM-5.3-Flash','reviewer_provider':'ai_ping',
-                    'user_confirmation_required':True,'semantic_keyword_router':False},
+                'conversation_runtime': dict(getattr(self, '_conversation_runtime', {
+                    'architecture':'native_tool_agent','primary':None,'primary_provider':None,
+                    'reviewer':None,'reviewer_provider':None,'binding_status':'unbound',
+                    'user_confirmation_required':True,'semantic_keyword_router':False})),
                 'enabled': self.bank.capabilities()['enabled'] + ['cashflow_timeline','statement_csv_preview','statement_csv_import','statement_source_switch',
                     'simulated_transfer','scheduled_transfer','split_bill_requests','split_bill_receipts',
                     'merchant_subscription_cancellation','fund_reservations','service_booking','simulation_clock'],
@@ -360,6 +451,7 @@ class FinanceGateway:
         workspace,role = self.bank.session(token)
         if role!='human': raise BankError('HUMAN_REQUIRED','当前会话不能确认操作。',403)
         if self.experience_provider is not None:self.experience_provider.validate(token,workspace)
+        self.security_events.bind(workspace,capture_before=True)
         handler._navren_session_token = token
         return workspace,token
 
@@ -787,6 +879,7 @@ class FinanceGateway:
             if not isinstance(core[key],str) or not 1<=len(core[key])<=128:
                 raise BankError('INVALID_FIELDS','操作、账户和幂等键必须为字符串。')
         floor = integer(payload.get('liquidity_floor_minor',0),'保留资金')
+        self.security_events.prepare_checkpoint(workspace,'basic_fields_validated')
         with closing(self.bank.connect()) as db:
             if core['action']=='aa_create':
                 from simulated_bank.aa_payments import canonical
@@ -798,14 +891,17 @@ class FinanceGateway:
         if not existing or existing['state'] not in TERMINAL:
             if core['action']=='purchase':
                 budget = self.budget(workspace,core['account_id'],floor)
+                self.security_events.prepare_checkpoint(workspace,'budget_account_observed',account_id=core['account_id'])
                 if integer(core.get('amount_minor'),'申购金额',1)>budget['investable_minor']:
                     raise BankError('LIQUIDITY_GUARD','申购金额超过扣除保留资金及近期到期款后的可投资额度。',422)
             elif core['action']=='reserve_funds':
                 budget=self.budget(workspace,core['account_id'])
+                self.security_events.prepare_checkpoint(workspace,'budget_account_observed',account_id=core['account_id'])
                 if integer(core.get('amount_minor'),'操作金额',1)>budget['investable_minor']:
                     raise BankError('LIQUIDITY_GUARD','金额超过扣除应急金、到期款和已预留资金后的可用额度。',422)
             elif core['action']=='book_services':
                 budget=self.budget(workspace,core['account_id'],exclude_hold_id=core.get('hold_id'))
+                self.security_events.prepare_checkpoint(workspace,'budget_account_observed',account_id=core['account_id'])
                 archive=self.bank.customer_archive(workspace)['records']
                 quote_ids=core.get('quote_ids')
                 quote_total=sum(q['price_minor'] for q in archive['service_quotes'] if quote_ids and q['id'] in quote_ids)
@@ -813,6 +909,7 @@ class FinanceGateway:
                     raise BankError('LIQUIDITY_GUARD','预约金额超过扣除其他保留款和到期款后的可用额度。',422)
         metrics = self.financial_metrics.snapshot(workspace,60)
         op = self.financial_metrics.prepare_bank_operation(workspace,core,agent_origin=agent_origin,metric_required=True)
+        self.security_events.prepare_checkpoint(workspace,'bank_prepare_returned',operation_id=op['id'])
         with self.bank.transaction() as db:
             policies = db.execute("SELECT details FROM audit WHERE workspace_id=? AND operation_id=? AND event='liquidity_policy' ORDER BY id LIMIT 1",(workspace,op['id'])).fetchone()
             if policies:
@@ -1208,7 +1305,7 @@ class FinanceGateway:
                     handler._finance_json(200,self.financial_query(workspace,operation,arguments))
                     return True
                 if path=='/api/finance/wealth/versions':
-                    handler._finance_json(200,self.wealth.versions(workspace));return True
+                    handler._finance_json(200,self.historical_source_status(workspace));return True
                 if path=='/api/finance/wealth/product':
                     p={k:v[0] for k,v in query.items()}
                     handler._finance_json(200,self.wealth.detail(workspace,p.get('fund_id',''),p.get('on',self.calendar.clock(workspace)[0]),p.get('portfolio','historical')));return True
@@ -1327,6 +1424,8 @@ class FinanceGateway:
                     result = self.statements.preview(workspace,request_text(handler))
                 else:
                     payload = request_json(handler)
+                    if path=='/api/finance/operations/prepare':
+                        self.security_events.capture_prepare_request(workspace,payload)
                     if path.startswith('/api/finance/account-connections') and parsed.query:
                         raise BankError('INVALID_QUERY','平台关联写入不接受查询参数。',400)
                     if path=='/api/finance/card-bindings' and parsed.query:
@@ -1341,12 +1440,21 @@ class FinanceGateway:
                     observation_match = re.fullmatch(r'/api/finance/profile-observations/([a-f0-9]{32})',path)
                     calendar_confirm=re.fullmatch(r'/api/finance/calendar/events/([a-f0-9]{32})/confirm',path)
                     calendar_read=re.fullmatch(r'/api/finance/calendar/reminders/([a-f0-9]{64})/read',path)
-                    if path=='/api/finance/demo/select':
+                    if path=='/api/finance/dialogue/new-conversation':
+                        if parsed.query:raise BankError('INVALID_QUERY','新对话不接受查询参数。',400)
+                        strict_fields(payload,[])
+                        reader=getattr(self,'dialogue_archive',None)
+                        if reader is None:raise BankError('CONVERSATION_SCOPE_UNAVAILABLE','当前对话范围尚未接入。',503)
+                        result=reader.new_conversation(workspace)
+                    elif path=='/api/finance/demo/select':
                         strict_fields(payload,['user_id','expected_workspace_id','expected_privacy_revision'],['user_id','expected_workspace_id'])
                         if 'expected_privacy_revision' in payload and type(payload['expected_privacy_revision']) is not int:
                             raise BankError('PRIVACY_REVISION_CHANGED','账户权限版本无效。',409)
                         workspace,token=self.demo_sessions.select(token,payload['user_id'],payload['expected_workspace_id'],
                             payload.get('expected_privacy_revision'))
+                        request_guard.__exit__(None,None,None)
+                        request_guard=self.demo_sessions.request(token,workspace)
+                        request_guard.__enter__()
                         handler._navren_workspace=workspace;handler._navren_session_token=token
                         from user_memory import privacy_revision
                         with closing(self.bank.connect()) as db:handler._navren_start_revision=privacy_revision(db,workspace)
@@ -1394,6 +1502,9 @@ class FinanceGateway:
                     elif path=='/api/finance/service-negotiations/preview': result = self.service_negotiations.preview(workspace,payload)
                     elif service_accept: result = self.service_negotiations.accept(workspace,service_accept[1],payload)
                     elif path=='/api/finance/source': result = self.set_source(workspace,payload)
+                    elif path=='/api/finance/wealth/refresh':
+                        if parsed.query:raise BankError('INVALID_QUERY','历史模拟来源刷新不接受查询参数。',400)
+                        result = self.refresh_historical_source(workspace,payload)
                     elif path=='/api/finance/memories':
                         result=self._committed_personal_result(handler,workspace,self.memories.create,payload)
                     elif path=='/api/finance/personal-profile':result=self.personal_profile.save(workspace,payload,
@@ -1421,6 +1532,10 @@ class FinanceGateway:
                             raise BankError('CONFIRMATION_REQUIRED','推进模拟日期需要明确确认。')
                         result=self.bank.advance_days(workspace,payload['days'])
                     elif path=='/api/finance/operations/prepare': result = self.prepare(workspace,payload)
+                    elif path=='/api/finance/subscriptions/manual-simulation':
+                        if parsed.query:raise BankError('INVALID_QUERY','模拟订阅登记不接受查询参数。',400)
+                        from simulated_bank.manual_subscriptions import register
+                        result=register(self.bank,workspace,payload)
                     elif path=='/api/finance/security/password-drafts':
                         from simulated_bank.security_credentials import prepare as prepare_password
                         result=prepare_password(self.bank,workspace,payload)

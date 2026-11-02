@@ -399,11 +399,11 @@ window.NavrenAccountHome = (() => {
     const active=()=>current===captured&&captured.isCurrent()&&guard.valid()&&dialog.isConnected&&dialog.open;
     const title=n('h2',preview?'核对汇款信息':'查看汇款回执'),content=n('div'),status=n('p','正在准备汇款…','ah-form-note'),error=n('p','', 'ah-form-error'),actions=n('div',null,'ah-form-buttons');
     title.id='remittanceReviewHeading';dialog.setAttribute('aria-labelledby',title.id);status.setAttribute('role','status');error.setAttribute('role','alert');dialog.append(title,content,status,error,actions);
-    let view=attempt.view,record=null,busy=false,unknown=false,rejected=false,verification=null;
+    let view=attempt.view,record=null,busy=false,unknown=false,rejected=false,verification=null,preserveVerification=true;
     dialog.disposeVerification=()=>verification?.dispose();
     const confirm=n('button','确认汇款','ah-action-button is-primary'),cancel=n('button','取消汇款','ah-action-button'),query=n('button','查询汇款状态','ah-action-button'),edit=n('button',preview?'返回修改':'关闭','ah-action-button');
     for(const button of [confirm,cancel,query,edit])button.type='button';confirm.disabled=cancel.disabled=true;query.hidden=true;actions.append(edit,cancel,query,confirm);
-    function setBusy(value){busy=value;for(const button of [confirm,cancel,query,edit])button.disabled=value;confirm.disabled=value||!!verification&&!verification.canConfirm();confirm.textContent=t(value?'处理中…':'确认汇款');}
+    function setBusy(value){busy=value;for(const button of [confirm,cancel,query,edit])button.disabled=value;confirm.disabled=value||!!verification&&!verification.canConfirm();confirm.textContent=t(value?'处理中…':'确认汇款');verification?.refresh();}
     function rows(entries){const fields=n('dl',null,'ah-review-fields');for(const [label,text]of entries){const row=n('div');row.append(n('dt',label),n('dd',text));fields.append(row);}content.append(fields);}
     function paintPreview(){
       content.replaceChildren();if(!preview){const op=view?.operation,r=record||op?.payload?.remittance;if(!r)return;const card=captured.state?.cards?.find(item=>item.id===r.card_id),account=captured.connected?.data.accounts?.find(item=>item.account_id===(record?.account_id||op?.payload?.account_id));const bank=account?NavrenFinancialUI.institution(captured.connected.data,account):t('关联账户尚未取得');rows([['付款银行卡',bank+' · '+t('尾号')+' '+(card?.last_four||t('未知'))],['汇款人姓名',r.sender_name],['联系电话',r.sender_phone||t('未提供')],['收款人姓名',r.recipient_name],['收款账号',r.recipient_account],['开户银行',r.recipient_bank],['开户支行',r.recipient_branch],['汇款金额（元）',money(record?.amount_minor||op?.payload?.amount_minor,'CNY')],['汇款方式',t(r.mode==='realtime'?'实时汇款':r.mode==='next_day'?'次日汇款':'普通汇款')],['汇款用途',r.purpose],['附言（选填）',r.message||t('尚未填写')]]);return;}
@@ -412,17 +412,19 @@ window.NavrenAccountHome = (() => {
       rows([['付款银行卡',payer.bank+' · '+t('尾号')+' '+payer.tail],...(sender?[['汇款人姓名',sender.sender_name],['联系电话',sender.sender_phone||t('未提供')]]:[]),['收款人姓名',fields.recipient_name],['收款账号',fields.recipient_account.replace(/\s/g,'')],['开户银行',fields.bank_name],['开户支行',fields.bank_branch],['汇款方式',t(fields.method==='realtime'?'实时汇款':fields.method==='next_day'?'次日汇款':'普通汇款')],['汇款用途',t(fields.purpose)],['附言（选填）',fields.message||t('尚未填写')]]);
     }
     function paint(){
-      verification?.dispose();verification=null;
-      if(rejected){dialog.dataset.operationState='failed';status.textContent=t('汇款未受理');confirm.hidden=cancel.hidden=query.hidden=true;edit.textContent=t('返回修改');return;}
+      const previous=verification;verification=null;
+      if(rejected){previous?.dispose();dialog.dataset.operationState='failed';status.textContent=t('汇款未受理');confirm.hidden=cancel.hidden=query.hidden=true;edit.textContent=t('返回修改');return;}
       const op=view?.operation;if(!op)return;
       const state=record?.status||op.result?.remittance?.status||op.state;dialog.dataset.operationState=state;
       const pending=op.state==='pending_confirmation'&&!unknown;status.textContent=t(unknown?'尚未取得汇款状态，请查询原操作，勿重复提交。':remittanceStatuses[state]||'尚未取得汇款状态，请查询原操作，勿重复提交。');
       confirm.hidden=cancel.hidden=!pending;confirm.disabled=cancel.disabled=busy||!pending;query.hidden=op.state==='pending_confirmation'&&!unknown;edit.textContent=t(pending&&preview?'返回修改':'关闭');
       if(pending){
         paintPreview();
-        verification=BankUI.operationVerification(content,view,{isCurrent:()=>active()&&!busy,onError:failure=>{error.textContent=failure.message;},onChange:()=>{confirm.disabled=busy||!verification?.canConfirm();}});
+        if(previous){try{previous.update(view,{preserveChallenge:preserveVerification});verification=previous;verification.mount(content);}catch(failure){previous.dispose();verification=previous;unknown=attempt.unknown=true;error.textContent=failure.message;status.textContent=t('汇款资料已变化，请查询原操作，勿重复提交。');confirm.hidden=cancel.hidden=true;query.hidden=false;return;}}
+        else verification=BankUI.operationVerification(content,view,{isCurrent:active,isBusy:()=>busy||unknown,onError:failure=>{error.textContent=BankUI.operationVerificationError(failure).message;},onChange:()=>{confirm.disabled=busy||unknown||!verification?.canConfirm();}});
         confirm.disabled=busy||!verification.canConfirm();
-      }else if(record){
+        verification.refresh();
+      }else{if(previous&&op.state==='pending_confirmation'&&unknown){previous.clear();verification=previous;verification.mount(content);}else previous?.dispose();if(record){
         content.replaceChildren();const banner=n('div',null,'ah-review-amount');banner.append(n('strong',money(record.amount_minor,'CNY')));content.append(banner);
         const entries=[['收款人姓名',record.recipient_name],['收款账号',record.recipient_account],['开户银行',record.recipient_bank]];
         if(record.mode)entries.push(['汇款方式',t(record.mode==='realtime'?'实时汇款':record.mode==='next_day'?'次日汇款':'普通汇款')]);
@@ -447,7 +449,7 @@ window.NavrenAccountHome = (() => {
             advanceConfirm.append(no,yes);
           };content.append(advance,advanceConfirm);
         }
-      }
+      }}
     }
     async function refresh(){
       if(!active())return;
@@ -481,14 +483,14 @@ window.NavrenAccountHome = (() => {
       if(!attempt.operationId&&!attempt.unknown&&[400,403,404,405,413,415,422].includes(failure.status)&&typeof failure.code==='string'&&failure.code){
         rejected=true;unknown=false;attempt.unknown=false;if(remittanceAttempt===attempt)remittanceAttempt=null;error.textContent=failure.message;paint();return;
       }
-      unknown=true;attempt.unknown=true;confirm.disabled=cancel.disabled=true;query.hidden=false;status.textContent=t('尚未取得汇款状态，请查询原操作，勿重复提交。');error.textContent=failure.message;
+      unknown=true;attempt.unknown=true;confirm.disabled=cancel.disabled=true;query.hidden=false;status.textContent=t('尚未取得汇款状态，请查询原操作，勿重复提交。');error.textContent=BankUI.operationVerificationError(failure).message;
       if(attempt.operationId)try{await readStatus();await refresh();}catch(_){if(active()){unknown=true;confirm.hidden=cancel.hidden=true;query.hidden=false;status.textContent=t('尚未取得汇款状态，请查询原操作，勿重复提交。');}}
     }
     confirm.onclick=async()=>{
       if(busy||unknown||!active()||view?.operation?.state!=='pending_confirmation')return;
       if(!verification?.canConfirm()){error.textContent=verification?.reason()||'请先完成短信验证。';return;}
-      const payload={confirmed:true,confirmation_digest:view.operation.confirmation_digest,...verification.payload()};setBusy(true);
-      try{const result=await BankClient.post('/operations/'+encodeURIComponent(attempt.operationId)+'/confirm',payload);if(!active())return;const op=result.operation||result;if(op.id!==attempt.operationId)throw Error('确认回执编号不一致，已停止展示。');view=attempt.view={...view,operation:op};await readStatus();await refresh();}catch(failure){await recover(failure);}finally{delete payload.verification_code;delete payload.challenge_id;verification?.clear();if(active()){setBusy(false);paint();}}
+      let payload=null;preserveVerification=false;
+      try{payload={confirmed:true,confirmation_digest:view.operation.confirmation_digest,...verification.payload()};setBusy(true);const result=await BankClient.post('/operations/'+encodeURIComponent(attempt.operationId)+'/confirm',payload);if(!active())return;const op=result.operation||result;if(op.id!==attempt.operationId)throw Error('确认回执编号不一致，已停止展示。');view=attempt.view={...view,operation:op};await readStatus();await refresh();}catch(failure){preserveVerification=BankUI.operationVerificationError(failure).retryChallenge;await recover(failure);}finally{if(payload){delete payload.verification_code;delete payload.challenge_id;}verification?.clearCode();if(active()){setBusy(false);paint();}}
     };
     cancel.onclick=async()=>{if(busy||unknown||!active()||view?.operation?.state!=='pending_confirmation')return;setBusy(true);try{const result=await BankClient.post('/operations/'+encodeURIComponent(attempt.operationId)+'/cancel',{});if(!active())return;const op=result.operation||result;if(op.id!==attempt.operationId||op.state!=='cancelled')throw Error('尚未取得原汇款的取消回执。');view=attempt.view={...view,operation:op};await readStatus();await refresh();}catch(failure){await recover(failure);}finally{if(active()){setBusy(false);paint();}}};
     query.onclick=async()=>{if(busy||rejected||!active())return;setBusy(true);try{if(!attempt.operationId){const prepared=await BankClient.post('/remittances/prepare',attempt.payload);if(!active())return;preparedView(prepared);}await readStatus();await refresh();error.textContent='';}catch(failure){await recover(failure);}finally{if(active()){setBusy(false);paint();}}};

@@ -1016,6 +1016,59 @@ class LocalKnowledgeProvider:
                 for match in matches:
                     if len(selected)>=limit:break
                     if match[1] not in selected:selected.append(match[1]);covered.update(match[2])
+            # Payment horizons require their same-version counting original.
+            # This recalls already eligible source rows; it grants no answer proof.
+            if 'liquidity' in facets:
+                from .payment_time_requirements import payment_time_requirements
+                time_requirements=payment_time_requirements(selected,eligible_rows,
+                    release_id=release_id,as_of=as_of)
+                if time_requirements['active']:
+                    time_requirements['baseline_citation_ids']=list(selected)
+                    time_requirements['complete']=False
+                    retrieval['payment_time_requirements']=time_requirements
+                    if time_requirements['coverage_gaps']:
+                        gaps.extend(time_requirements['coverage_gaps']);selected=[]
+                    else:
+                        from .evidence_group_selection import plan_evidence_groups
+                        original_seeds=seed_ids if structure['used'] else []
+                        time_seeds=list(dict.fromkeys([*original_seeds,*time_requirements['pair_seed_ids']]))
+                        if len(time_seeds)>8 or len(set(time_seeds))>limit:
+                            issue={'code':'payment_time_pair_budget_exceeded','role':'time_definition'}
+                            gaps.append(issue);time_requirements['coverage_gaps'].append(issue);selected=[]
+                        else:
+                            pair_matches=list(matches);ranked_ids={m[1] for m in pair_matches}
+                            for cid in time_seeds:
+                                if cid not in ranked_ids:
+                                    pair_matches.append((0.0,cid,eligible[cid]));ranked_ids.add(cid)
+                            selected,time_budget=plan_evidence_groups(pair_matches,
+                                structure.get('evidence_groups',[])if structure['used']else [],
+                                eligible_ids=set(eligible),limit=limit,facets=facets,seed_ids=time_seeds,
+                                canonical_rows=eligible_rows,
+                                context_groups=context_groups if structure['used']else [],
+                                ranking_ids=ranking_ids if structure['used']else [],
+                                seed_group_ids=seed_group_ids if structure['used']else [],
+                                preferred_group_ids=preferred_group_ids if structure['used']else [])
+                            time_requirements['context_budget']=time_budget
+                            # Replanning may recall another deadline. Do not emit
+                            # any new isolated horizon or silently infer its unit.
+                            final_requirements=payment_time_requirements(selected,eligible_rows,
+                                release_id=release_id,as_of=as_of)
+                            final_seeds=set(final_requirements['pair_seed_ids'])
+                            if (not set(time_seeds)<=set(selected)
+                                    or time_budget['incomplete_accepted_groups']
+                                    or time_budget.get('uncovered_seed_group_ids')
+                                    or final_requirements['coverage_gaps']
+                                    or not final_seeds<=set(selected)):
+                                issues=final_requirements['coverage_gaps']or[
+                                    {'code':'payment_time_pair_selection_incomplete','role':'time_definition'}]
+                                gaps.extend(issues);time_requirements['coverage_gaps'].extend(issues);selected=[]
+                            else:
+                                time_requirements['pairs']=final_requirements['pairs']
+                                time_requirements['pair_seed_ids']=final_requirements['pair_seed_ids']
+                                time_requirements['complete']=True
+                    time_requirements['selected_citation_ids']=list(selected)
+                    covered=set()
+                    for cid in selected:covered.update(eligible[cid])
             from .field_semantics import assess_semantic_coverage
             semantic_coverage=assess_semantic_coverage(request['query'],eligible_rows,intent['objects'],selected_ids=selected)
             retrieval['semantic_coverage']=semantic_coverage

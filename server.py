@@ -351,7 +351,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         try:
             data = request_json(self)
             allowed_fields={'text','mode','profile','history','followup_memory','holdings','image',
-                            'page_context_id','market_context','graph_context','language','media_ids'}
+                            'page_context_id','market_context','graph_context','language','media_ids','conversation_scope'}
             if not isinstance(data,dict) or set(data)-allowed_fields:
                 raise BankError('AGENT_REQUEST_FIELDS_INVALID','请求包含不受支持的Agent配置字段。',422)
 
@@ -402,6 +402,12 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 stream.start()
             # 客户端画像/历史不能覆盖银行正式状态或注入伪造工具消息。
             options={'mode':mode,'has_attachment':has_attachment,'request_id':request_id}
+            if 'conversation_scope' not in data:
+                raise BankError('CONVERSATION_SCOPE_REQUIRED','请开启新对话后再发送；历史记录仍可查看。',409)
+            if 'conversation_scope' in data:
+                reader=getattr(gateway,'dialogue_archive',None)
+                if reader is None:raise BankError('CONVERSATION_SCOPE_UNAVAILABLE','当前对话范围尚未接入。',503)
+                options['conversation_scope']=reader.open_conversation_scope(workspace,data['conversation_scope'])
             response_language=data.get('language','zh')
             if response_language not in ('zh','en'):raise BankError('INVALID_LANGUAGE','答复语言须为zh或en。',422)
             if getattr(gateway,'approved_responses',None) is not None:
@@ -419,7 +425,8 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                     ('page_context_id','market_context','graph_context')))
             if social_match is not None:
                 self._archive_user_request(gateway,workspace,request_id,text,request_personal,
-                    request_privacy,[],has_image=bool(data.get('image')),media_ids=media_ids)
+                    request_privacy,[],has_image=bool(data.get('image')),media_ids=media_ids,
+                    conversation_scope=options['conversation_scope'])
                 self._publish_local_social_reply(gateway,workspace,token,text,social_match,
                     request_id,request_privacy,request_personal,stream)
                 return
@@ -491,7 +498,8 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             # 不伪造用户问题；原件由受信媒体ID在同一私库事务内绑定。
             archived_user = self._archive_user_request(gateway,workspace,request_id,text,request_personal,
                 request_privacy,[page_context,options.get('market_context'),selected_graph],
-                has_image=bool(data.get('image')),media_ids=media_ids)
+                has_image=bool(data.get('image')),media_ids=media_ids,
+                conversation_scope=options['conversation_scope'])
             if not text.strip() and media_ids and not any((page_context, options.get('market_context'), selected_graph)):
                 # 接收原始图片/无转写录音不等于识别内容，也不触发模型或伪造助手审核。
                 result = {'bank': True, 'bank_response_id': request_id, 'workspace_id': workspace,
@@ -505,13 +513,16 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                     if stream: stream.finish(result)
                     else: self._finance_json(200, result)
                 return
+            if text.strip() and any(item.get('kind') == 'document' for item in archived_user.get('attachments', [])):
+                # 仅宿主消费本轮已绑定的用户原件；HTTP不能提交正文、信任级别或权限。
+                options['document_context'] = self._read_document_attachments(
+                    gateway, workspace, request_id, archived_user['attachments'])
             # 同一现有研究组合服务先完成只读投影缓存，再固定输入版本。
             # BankTools同样会调用provision；不能把首次缓存创建误判成用户资料变更。
             if request_policy.private_context_disabled:
                 request_metrics=None
                 memory_enabled=False
             else:
-                gateway.wealth.provision(workspace)
                 request_metrics=gateway.financial_metrics.snapshot(workspace,60)
                 memory_enabled=gateway.memories.state(workspace)['enabled']
             if memory_enabled and text.strip():
@@ -542,6 +553,9 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             request_gateway.financial_metrics=metric_observer
             request_agent=copy(self.server.conversation_agent)
             statement_history=[] if request_policy.private_context_disabled else gateway.personal_data.read_history(workspace)
+            if not request_policy.private_context_disabled and options.get('conversation_scope') is not None:
+                statement_history=gateway.dialogue_archive.conversation_history(workspace,options['conversation_scope'],
+                    current_request_id=request_id)
             tool_scope=request_policy.allowed_tools if request_policy.private_context_disabled else statement_tool_scope(text,has_attachment=has_attachment,
                 has_context=any(value is not None for value in
                     (page_context,data.get('market_context'),data.get('graph_context'))),
@@ -736,7 +750,35 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         _host_security_rejection(self.server.finance,workspace,error,
             request_id=request_id,event_id=event_id,phase='http')
 
-    def _archive_user_request(self,gateway,workspace,request_id,text,personal,privacy,contexts,*,has_image,media_ids=None):
+    @staticmethod
+    def _read_document_attachments(gateway, workspace, request_id, attachments):
+        service = getattr(gateway, 'chat_media', None)
+        if service is None or not callable(getattr(service, 'read_document_text', None)):
+            raise BankError('CHAT_DOCUMENT_READER_UNAVAILABLE', '文档读取暂不可用。', 503)
+        documents = []
+        remaining = 24000
+        for index, attachment in enumerate(attachments, 1):
+            if attachment.get('kind') != 'document':
+                continue
+            with gateway.bank.transaction() as bank_db:
+                value = service.read_document_text(workspace, attachment['media_id'],
+                                                  request_id=request_id, bank_db=bank_db)
+            media, original = value['media'], value['extracted_text']
+            if media != attachment or type(original) is not str or len(original) != media['text_chars']:
+                raise BankError('CHAT_MEDIA_CHANGED', '文档原件或绑定已变化。', 409)
+            selected = original[:remaining]
+            remaining -= len(selected)
+            documents.append({'attachment_index': index, 'file_name': media['file_name'],
+                'document_format': media['document_format'], 'text_chars': media['text_chars'],
+                'extraction_status': media['extraction_status'], 'extraction_warning': media['extraction_warning'],
+                'text': selected, 'truncated': len(selected) < len(original)})
+        return {'contract': 'navren.user-document-context/1', 'source_scope': 'user_uploaded_document',
+                'verified': False, 'current_fact_eligible': False, 'execution_authority': False,
+                'documents': documents,
+                'unread_media_kinds': sorted({item['kind'] for item in attachments if item['kind'] in ('image', 'audio')})}
+
+
+    def _archive_user_request(self,gateway,workspace,request_id,text,personal,privacy,contexts,*,has_image,media_ids=None,conversation_scope=None):
         archive=getattr(gateway,'dialogue_archive',None)
         if archive is None:
             if media_ids: raise BankError('DIALOGUE_ARCHIVE_STORAGE_REQUIRED','当前会话尚未接入原件归档。',503)
@@ -758,7 +800,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             if reference not in references:references.append(reference)
         return archive.archive_user_turn(workspace,request_id,text,references=references,media_ids=media_ids,
             attachments=[{'kind':'image','storage_status':'not_archived'}] if has_image else [],
-            expected_personal_revision=personal,expected_privacy_revision=privacy)
+            expected_personal_revision=personal,expected_privacy_revision=privacy,conversation_scope=conversation_scope)
 
     def _publish_local_social_reply(self, gateway, workspace, token, text, match,
                                     request_id, request_privacy, request_personal, stream):
@@ -891,6 +933,9 @@ def create_server(port=PORT, database=None, voice=None, model_agents=None, conve
         server.voice=voice or VoiceGateway()
         server.agent_models=model_agents  # 仅旧行为对照测试可注入；生产对话不使用。
         server.conversation_agent=selected_agent
+        bind_runtime = getattr(server.finance, '_bind_conversation_runtime', None)
+        if callable(bind_runtime):
+            bind_runtime(selected_agent)
         approved=getattr(server.finance,'approved_responses',None)
         if approved is not None and callable(getattr(selected_agent,'validate_final_response',None)):
             approved.validator=selected_agent.validate_final_response

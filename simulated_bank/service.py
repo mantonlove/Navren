@@ -28,7 +28,17 @@ class BankError(Exception):
         self.code, self.message, self.status, self.persist = code, message, status, persist
 
     def as_dict(self):
-        return {'code': self.code, 'message': self.message, 'environment': 'simulation'}
+        value = {'code': self.code, 'message': self.message, 'environment': 'simulation'}
+        meta = getattr(self, 'sms_verification', None)
+        if self.code == 'SMS_VERIFICATION_FAILED' and isinstance(meta, dict):
+            from sms_aliyun import SMS_VERIFICATION_REASONS
+            if (set(meta) == {'reason_code', 'same_challenge_retry'}
+                    and isinstance(meta['reason_code'], str) and meta['reason_code'] in SMS_VERIFICATION_REASONS
+                    and type(meta['same_challenge_retry']) is bool
+                    and (not meta['same_challenge_retry'] or meta['reason_code'] == 'SMS_CODE_REJECTED')):
+                value['sms_verification'] = {'reason_code': meta['reason_code'],
+                    'same_challenge_retry': meta['same_challenge_retry']}
+        return value
 
 
 def encoded(value):
@@ -53,6 +63,81 @@ def strict_fields(payload, allowed, required=()):
 def add_month(day):
     year, month = day.year+(day.month == 12), day.month % 12+1
     return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
+
+
+_PUBLIC_SIMULATION_PRODUCT_IDS = frozenset((
+    'SIM-CASH-01','SIM-BOND-30','SIM-BOND-90','SIM-FLEX-03','SIM-EQUITY-04','SIM-LONG-05'))
+_PUBLIC_SIMULATION_CATALOG_SCHEMA = 'navren.public-simulation-product-catalog/1'
+_PUBLIC_SIMULATION_CATALOG_NOTICE = ('仅为Navren虚构演示目录的公共规则，不对应真实发行方；'
+    '未读取本人画像或判断本人适当性，不提供收益、费用、最低申购金额或交易执行权限。')
+_PUBLIC_SIMULATION_PRODUCT_FIELDS = ('id','name','risk_level','term_days','redemption_delay_days','currency','version','source')
+
+
+def validate_public_simulation_catalog(data):
+    """Closed public non-monetary snapshot; no model/public source can add fields."""
+    def invalid():
+        raise BankError('PUBLIC_SIMULATION_CATALOG_INVALID','模拟公共目录来源或字段无效，未使用该目录。',503)
+    if (type(data)is not dict or set(data)!={'schema','source','catalog_version','products','notice','executable','suitability_assessed'}
+            or data['schema']!=_PUBLIC_SIMULATION_CATALOG_SCHEMA or data['source']!='public_simulation_catalog'
+            or data['notice']!=_PUBLIC_SIMULATION_CATALOG_NOTICE or data['executable']is not False
+            or data['suitability_assessed']is not False or type(data['products'])is not list
+            or not 1<=len(data['products'])<=len(_PUBLIC_SIMULATION_PRODUCT_IDS)):
+        invalid()
+    seen=set()
+    for row in data['products']:
+        if (type(row)is not dict or set(row)!=set(_PUBLIC_SIMULATION_PRODUCT_FIELDS)
+                or type(row['id'])is not str or row['id']not in _PUBLIC_SIMULATION_PRODUCT_IDS or row['id']in seen
+                or type(row['name'])is not str or not 1<=len(row['name'])<=120
+                or row['source']!='simulation' or type(row['risk_level'])is not int or not 1<=row['risk_level']<=5
+                or any(type(row[k])is not int or not 0<=row[k]<=100000 for k in ('term_days','redemption_delay_days'))
+                or type(row['currency'])is not str or not re.fullmatch(r'[A-Z]{3}',row['currency'])
+                or type(row['version'])is not int or row['version']<1):
+            invalid()
+        seen.add(row['id'])
+    if (data['products']!=sorted(data['products'],key=lambda row:row['id'])
+            or data['catalog_version']!=hashlib.sha256(encoded(data['products']).encode()).hexdigest()):
+        invalid()
+    return data
+
+
+def read_public_simulation_catalog(database, *, connection=None):
+    """Select public demo rows/columns in SQL before any Python receives data.
+
+    No workspace, profile, suitability, account or holding method is called.
+    A supplied publication connection stays owned by its existing transaction.
+    """
+    path=Path(database).resolve(strict=True)
+    own=connection is None
+    db=sqlite3.connect(path.as_uri()+'?mode=ro',uri=True) if own else connection
+    try:
+        if own:db.execute('PRAGMA query_only=ON')
+        main=next((row[2] for row in db.execute('PRAGMA database_list')if row[1]=='main'),None)
+        if main is None or Path(main).resolve()!=path:
+            raise BankError('PUBLIC_SIMULATION_CATALOG_INVALID','目录连接与当前服务来源不一致。',503)
+        ids=sorted(_PUBLIC_SIMULATION_PRODUCT_IDS)
+        # Private/historical rows are excluded by SQL, never fetched then filtered.
+        sql=('SELECT id,'+','.join("json_extract(data,'$."+field+"') AS "+field for field in _PUBLIC_SIMULATION_PRODUCT_FIELDS[1:])
+             +' FROM main.products WHERE id IN ('+','.join('?'for _ in ids)+')'
+             +" AND json_valid(data) AND json_type(data,'$.workspace_id') IS NULL"
+             +" AND coalesce(json_extract(data,'$.historical_synthetic_position'),0)=0"
+             +" AND json_extract(data,'$.source')='simulation'"
+             +"".join(" AND json_type(data,'$."+field+"')='integer'" for field in ('risk_level','term_days','redemption_delay_days','version'))
+             +"".join(" AND json_type(data,'$."+field+"')='text'" for field in ('name','currency','source'))
+             +" ORDER BY id")
+        rows=[dict(zip(_PUBLIC_SIMULATION_PRODUCT_FIELDS,tuple(row)))for row in db.execute(sql,ids)]
+        result={'schema':_PUBLIC_SIMULATION_CATALOG_SCHEMA,'source':'public_simulation_catalog',
+                'products':rows,'catalog_version':hashlib.sha256(encoded(rows).encode()).hexdigest(),
+                'notice':_PUBLIC_SIMULATION_CATALOG_NOTICE,'executable':False,'suitability_assessed':False}
+        return validate_public_simulation_catalog(result)
+    finally:
+        if own:db.close()
+
+
+def assert_public_simulation_catalog_current(database, expected, *, connection=None):
+    validate_public_simulation_catalog(expected)
+    if read_public_simulation_catalog(database,connection=connection)!=expected:
+        raise BankError('STALE_EVIDENCE','公共模拟目录规则已变化，旧目录答复没有发布。',409)
+    return True
 
 
 class SimulatedBank:

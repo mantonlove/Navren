@@ -1,7 +1,7 @@
 """可信宿主的脱敏安全事件接口；不是模型工具或HTTP上报入口。"""
 from contextlib import closing,contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass,field
 import hashlib,json,re,uuid
 
 CONTRACT='navren.security-event/1'
@@ -26,6 +26,47 @@ NORMAL_CODES=frozenset({'TOOL_ALLOWED','HTTP_ALLOWED','TOOL_NOT_ALLOWED','TOOL_A
  'RUNTIME_FAILURE','SECURITY_RECOVERY_NOT_CONFIGURED','PERMISSION_PREPARED'})
 _scope=ContextVar('navren_security_event_scope',default=None)
 
+# A parsed HTTP body is still unverified input. Never hash arbitrary body keys,
+# credentials, challenge/proof values, headers or raw nested objects.
+PREPARE_FIELDS=frozenset({'action','account_id','product_id','amount_minor','mandate_id',
+ 'card_id','control_type','enabled','limit_minor','requested_type','requested_limit_minor',
+ 'idempotency_key','liquidity_floor_minor','beneficiary_id','reference','frequency',
+ 'next_due_on','end_on','scheduled_payment_id','split_id','participant_id','subscription_id',
+ 'task_id','expires_on','hold_id','quote_ids','remittance','aa_bill','aa_share_id',
+ 'aa_bill_id','replacement_id','purpose'})
+PREPARE_OBJECT_FIELDS=frozenset({'account_id','product_id','mandate_id','card_id',
+ 'beneficiary_id','scheduled_payment_id','split_id','participant_id','subscription_id',
+ 'task_id','hold_id','aa_share_id','aa_bill_id','replacement_id'})
+PREPARE_NESTED_FIELDS={
+ 'remittance':frozenset({'card_id','sender_name','sender_phone','recipient_name',
+   'recipient_account','recipient_bank','recipient_branch','purpose','message','mode'}),
+ 'aa_bill':frozenset({'title','total_minor','split_mode','participants','due_at',
+   'source_transaction_id','receiver_card_id','source_consumption_id','attachment_ids',
+   'consumption_snapshot','attachment_snapshots','consumption_fingerprint'}),
+ 'participants':frozenset({'user_id','share_minor'})}
+
+def prepare_parameter_binding(payload):
+    """Allowlisted field fingerprints only; this does not validate arguments."""
+    def field(name,value):
+        kind={str:'string',int:'integer',float:'number',bool:'boolean',type(None):'null',
+              list:'array',dict:'object'}.get(type(value),'unsupported')
+        row={'type':kind,'validation_status':'unvalidated'}
+        if type(value) in (str,int,float,bool,type(None)):
+            row['sha256']=digest(['navren.prepare-field/1',name,value])
+        elif type(value) is dict and name in PREPARE_NESTED_FIELDS:
+            row['fields']={k:field(k,value[k]) for k in sorted(PREPARE_NESTED_FIELDS[name]&value.keys())}
+        elif type(value) is list and name in ('quote_ids','attachment_ids') and all(type(x)is str for x in value):
+            row['sha256']=digest(['navren.prepare-field/1',name,value])
+        elif type(value) is list and name=='participants':
+            row['items']=[field('participants',x) for x in value[:64]]
+            row['complete']=len(value)<=64
+        else:row['binding_status']='structure_only_value_not_bound'
+        return row
+    fields={k:field(k,payload[k]) for k in sorted(PREPARE_FIELDS&payload.keys())}
+    return {'contract':'navren.prepare-parameters/1','fields':fields,
+            'parameters_sha256':digest(fields),'binding_scope':'allowlisted_fields_not_raw_body',
+            'input_validation_status':'unvalidated','ignored_field_count':len(payload.keys()-PREPARE_FIELDS)}
+
 def packed(v):return json.dumps(v,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False)
 def digest(v):return hashlib.sha256(packed(v).encode()).hexdigest()
 def fail(code='SECURITY_EVENT_INVALID',status=422):
@@ -47,6 +88,10 @@ class Scope:
     phase:str
     operation_id:object=None
     before_state:object=None
+    before_states:dict=field(default_factory=dict)
+    requested_operation_id:object=None
+    prepare_request:object=None
+    prepare_operation_id:object=None
 
 class SecurityEvents:
     def __init__(self,bank):self.bank=bank
@@ -67,19 +112,110 @@ class SecurityEvents:
         # event_ref是事件幂等引用，绝不替代或伪造原request_id；缺原ID明确保留null。
         ref=parent.event_ref if parent and parent.bank is self.bank and event_id is None else digest([request_id,event_id if event_id is not None else uuid.uuid4().hex])
         item=Scope(self.bank,workspace,request_id,ref,phase,operation_id)
-        if operation_id and workspace:
-            with closing(self.bank.connect()) as db:
-                row=db.execute('SELECT state FROM operations WHERE workspace_id=? AND id=?',(workspace,operation_id)).fetchone()
-                item.before_state=row['state'] if row else None
         token=_scope.set(item)
-        try:yield item
+        try:
+            if operation_id and workspace:
+                with closing(self.bank.connect()) as db:self.capture_before(db,workspace,operation_id)
+            yield item
         finally:_scope.reset(token)
 
-    def bind(self,workspace):
+    def bind(self,workspace,*,capture_before=False):
         item=_scope.get()
         if item and item.bank is self.bank:
             if item.workspace is not None and item.workspace!=workspace:fail('SECURITY_EVENT_WORKSPACE_MISMATCH',403)
             item.workspace=workspace
+            # Only the successful identity boundary opts in. The response hook
+            # binds without this flag and cannot relabel an after-state as before.
+            target=item.operation_id or item.requested_operation_id
+            if capture_before and target:
+                with closing(self.bank.connect()) as db:self.capture_before(db,workspace,target)
+
+    def _prepare_audit_only(self,workspace,callback):
+        try:callback()
+        except Exception:
+            # New observation failures never replace the original business
+            # decision. No exception message, payload or credential is recorded.
+            item=_scope.get()
+            if item is not None and item.bank is self.bank and item.workspace==workspace:
+                item.prepare_request={'contract':'navren.prepare-observation/1',
+                    'audit_status':'observation_unavailable','parameters':None,
+                    'input_parameters_remain_unverified':True,'checkpoints':[],
+                    'resolved_targets':{},'before_state_status':'not_observed'}
+
+    def capture_prepare_request(self,workspace,payload):
+        self._prepare_audit_only(workspace,lambda:self._capture_prepare_request(workspace,payload))
+
+    def prepare_checkpoint(self,workspace,stage,*,account_id=None,operation_id=None):
+        self._prepare_audit_only(workspace,lambda:self._prepare_checkpoint(workspace,stage,
+            account_id=account_id,operation_id=operation_id))
+
+    def _capture_prepare_request(self,workspace,payload):
+        """Trusted gateway after identity/CSRF/JSON only; no business validation."""
+        item=_scope.get()
+        if item is None or item.bank is not self.bank or item.phase!='http':return
+        if item.workspace!=workspace:fail('SECURITY_EVENT_WORKSPACE_MISMATCH',403)
+        if item.prepare_request is not None:fail('SECURITY_EVENT_CONFLICT',409)
+        item.prepare_request={'contract':'navren.prepare-observation/1',
+            'input_source':'authenticated_csrf_checked_json_object',
+            'parameters':prepare_parameter_binding(payload),
+            'checkpoints':[],'resolved_targets':{},
+            'before_state_status':'operation_not_identified_at_input_capture'}
+
+    def _prepare_checkpoint(self,workspace,stage,*,account_id=None,operation_id=None):
+        """Record only the original gateway checkpoint which actually returned."""
+        item=_scope.get()
+        if item is None or item.bank is not self.bank or item.prepare_request is None:return
+        if item.workspace!=workspace:fail('SECURITY_EVENT_WORKSPACE_MISMATCH',403)
+        if stage not in ('basic_fields_validated','budget_account_observed','bank_prepare_returned'):fail()
+        if stage not in item.prepare_request['checkpoints']:item.prepare_request['checkpoints'].append(stage)
+        if stage=='budget_account_observed':
+            item.prepare_request['resolved_targets']['account_id']={
+                'ref':digest(['account_id',workspace,account_id]),
+                'status':'membership_observed_by_original_budget_read',
+                'authorization_status':'preparation_policy_not_observed'}
+        if stage=='bank_prepare_returned':
+            identifier(operation_id);item.prepare_operation_id=operation_id
+
+    def _prepare_observation(self,db,item,workspace,operation,op):
+        if item.prepare_request is None:return None
+        value=json.loads(packed(item.prepare_request))
+        value['operation_id']=operation if op else None
+        value['after_state_status']='operation_record_observed'if op else'no_operation_record_bound'
+        value['after_state']=op['state']if op else None
+        value['authorization_status']='preparation_policy_not_observed'
+        value['input_parameters_remain_unverified']=True
+        if op:
+            binding=db.execute('SELECT policy,grade,summary_hash FROM permission_bindings '
+                'WHERE workspace_id=? AND operation_id=?',(workspace,operation)).fetchone()
+            from simulated_bank.permission_policy import POLICY_VERSION
+            valid=(binding is not None and binding['policy']==POLICY_VERSION
+                and binding['grade']==op['permission']and binding['summary_hash']==op['confirmation_digest'])
+            value['authorization_status']=('original_preparation_policy_binding_observed'
+                if valid else'operation_without_matching_preparation_policy_binding')
+            if valid:
+                payload=json.loads(op['payload'])
+                value['prepared_parameters']=prepare_parameter_binding(payload)
+                value['prepared_parameters']['input_validation_status']='original_bank_prepare_record'
+                value['resolved_targets']={k:{'ref':digest([k,workspace,payload[k]]),
+                    'status':'recorded_in_original_validated_operation',
+                    'authorization_status':'preparation_only_not_confirmation_or_execution'}
+                    for k in sorted(PREPARE_OBJECT_FIELDS&payload.keys())if type(payload[k])is str}
+        return value
+
+    def capture_before(self,db,workspace,operation_id):
+        """Trusted host only, before its restricted call; never a model/HTTP tool."""
+        identifier(operation_id)
+        item=_scope.get()
+        if item is None or item.bank is not self.bank:return
+        if item.workspace!=workspace:fail('SECURITY_EVENT_WORKSPACE_MISMATCH',403)
+        if item.operation_id is not None and item.operation_id!=operation_id:fail('SECURITY_EVENT_OPERATION_MISMATCH',409)
+        if operation_id in item.before_states:return
+        if len(item.before_states)>=32:fail()
+        self.bank._workspace(db,workspace)
+        row=db.execute('SELECT state FROM operations WHERE workspace_id=? AND id=?',(workspace,operation_id)).fetchone()
+        item.before_states[operation_id]={'value':row['state']if row else None,
+            'status':'observed_before_call'if row else'not_observed_in_bound_workspace'}
+        if item.operation_id==operation_id:item.before_state=row['state']if row else None
 
     def _context(self,workspace):
         item=_scope.get()
@@ -98,7 +234,7 @@ class SecurityEvents:
         op=None
         operation_ref=digest(operation) if type(operation) is str and len(operation)<=512 else None
         if type(operation) is str and re.fullmatch('[a-f0-9]{32}',operation):
-            op=db.execute('SELECT state,permission,confirmation_digest FROM operations WHERE workspace_id=? AND id=?',(workspace,operation)).fetchone()
+            op=db.execute('SELECT state,permission,confirmation_digest,payload FROM operations WHERE workspace_id=? AND id=?',(workspace,operation)).fetchone()
         eid=digest([workspace,item.event_ref,phase,outcome,reason,operation_ref])
         old=db.execute('SELECT details FROM permission_security_events WHERE id=? AND workspace_id=?',(eid,workspace)).fetchone()
         if old:
@@ -118,16 +254,38 @@ class SecurityEvents:
             proof=db.execute('SELECT provider_reference_hash FROM permission_sms_proofs WHERE workspace_id=? AND operation_id=? ORDER BY issued_at DESC LIMIT 1',(workspace,operation)).fetchone()
             authentication_ref=proof[0] if proof else None
         security=db.execute('SELECT failures,locked FROM permission_security WHERE workspace_id=?',(workspace,)).fetchone()
+        before=item.before_states.get(operation)
+        if before is None:
+            before={'value':None,'status':('operation_identified_after_call_start'if op else'no_bound_operation')}
+        recorded_at=self.bank.clock()
         value={'contract':CONTRACT,'event_id':eid,'request_id':item.request_id,'workspace_id':workspace,
             'operation_id':operation if op else None,'requested_object_ref':operation_ref if operation and not op else None,
             'phase':phase,'outcome':outcome,'reason_code':reason,'policy':POLICY_VERSION,
             'risk':op['permission'] if op else None,'evidence_sha256':list(evidence_sha256),
             'confirmation_ref':op['confirmation_digest'] if op else None,'authentication_ref':authentication_ref,
-            'before_state':item.before_state,'after_state':op['state'] if op else None,
+            'before_state':before['value'],'after_state':op['state'] if op else None,
+            'recorded_at':recorded_at,
+            'decision_summary':{'contract':'navren.security-decision-summary/1',
+                'source':'trusted_host_policy_observation','policy_version':POLICY_VERSION,
+                'reason_code':reason,'outcome':outcome,'subject_ref':digest(['workspace',workspace]),
+                'object_ref':operation_ref,'risk_source':'operation_record'if op else'no_bound_operation',
+                'before_state_status':before['status'],
+                'after_state_status':'operation_record_observed'if op else'no_bound_operation',
+                'evidence_status':'trusted_digest_supplied'if evidence_sha256 else'not_supplied_for_this_stage',
+                'confirmation_status':'operation_summary_reference_only'if op else'no_bound_operation',
+                'authentication_status':('proof_reference_observed_not_validated_by_audit'if authentication_ref else
+                    'not_required_by_recorded_yellow_grade'if op and op['permission']=='yellow'else
+                    'not_observed_for_recorded_red_grade'if op and op['permission']=='red'else'no_bound_operation'),
+                'audit_is_not_execution_authority':True},
             'suspicious':bool(suspicious),'security_failure_recorded':counted,
             'failures':security['failures'] if security else 0,'financial_write_locked':bool(security and security['locked'])}
+        try:preparation=self._prepare_observation(db,item,workspace,operation,op)
+        except Exception:
+            preparation={'contract':'navren.prepare-observation/1',
+                'audit_status':'observation_unavailable','input_parameters_remain_unverified':True}
+        if preparation is not None:value['prepare_observation']=preparation
         db.execute('INSERT INTO permission_security_events VALUES(?,?,?,?,?,?,?,?,?)',
-            (eid,workspace,item.request_id,item.event_ref,phase,outcome,reason,packed(value),self.bank.clock()))
+            (eid,workspace,item.request_id,item.event_ref,phase,outcome,reason,packed(value),recorded_at))
         self.bank._audit(db,workspace,'security_event',value,operation if op else None)
         return value
 
@@ -184,15 +342,20 @@ class SecurityEvents:
             workspace=getattr(handler,'_navren_workspace',None)
             if workspace:
                 self.bind(workspace)
+                item=_scope.get()
+                bound_operation=operation or (item.prepare_operation_id if item is not None else None)
                 if status>=500:
-                    self.observe(workspace,'RUNTIME_FAILURE',operation_id=operation,outcome='fault')
+                    self.observe(workspace,'RUNTIME_FAILURE',operation_id=bound_operation,outcome='fault')
                 elif status>=400:
                     reason=data.get('error',{}).get('code') if isinstance(data,dict) else None
-                    self.rejected(workspace,BankError(code(reason),'',status),operation_id=operation)
-                else:self.observe(workspace,'HTTP_ALLOWED',operation_id=operation,outcome='allowed')
+                    self.rejected(workspace,BankError(code(reason),'',status),operation_id=bound_operation)
+                else:self.observe(workspace,'HTTP_ALLOWED',operation_id=bound_operation,outcome='allowed')
             return original(status,data,cookie)
         handler._finance_json=send
         try:
-            with self.request(request_id=getattr(handler,'_navren_request_id',None),phase='http'):
+            with self.request(request_id=getattr(handler,'_navren_request_id',None),phase='http') as item:
+                # A route target guides an observation; it must not turn this
+                # multi-operation HTTP scope into an explicit single-op lock.
+                item.requested_operation_id=operation
                 return dispatch(handler)
         finally:handler._finance_json=original

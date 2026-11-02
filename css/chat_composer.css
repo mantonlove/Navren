@@ -1,0 +1,110 @@
+/* 对话输入区：工具、文字与发送共用一条轻盈的操作轴。 */
+body[data-page="chat"] .chat-input-area {
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+  padding-top: 12px;
+  padding-bottom: max(22px, env(safe-area-inset-bottom));
+}
+body[data-page="chat"] .chat-input-area .input-row {
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 5px;
+  min-height: 64px;
+  padding: 8px;
+  border: 1px solid var(--border-emphasis);
+  border-radius: 20px;
+  background: var(--surface-card);
+  box-shadow: 0 5px 18px rgba(26, 49, 74, .07);
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+body[data-page="chat"] .chat-input-area .input-row:focus-within {
+  border-color: var(--ink-40);
+  box-shadow: 0 5px 18px rgba(26, 49, 74, .09);
+}
+body[data-page="chat"] .input-row textarea {
+  box-sizing: border-box;
+  order: 0;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 46px;
+  max-height: 120px;
+  margin: 0;
+  padding: 11px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--font-size-base);
+  line-height: 24px;
+  resize: none;
+  box-shadow: none;
+}
+body[data-page="chat"] .input-row textarea::placeholder { color: var(--ink-40); opacity: 1; }
+body[data-page="chat"] .input-row .ib-btn {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--ink-50);
+  transition: color .16s ease, background-color .16s ease;
+}
+body[data-page="chat"] .input-row .ib-btn:hover:enabled {
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+body[data-page="chat"] .input-row .ib-btn svg { width: 20px; height: 20px; }
+body[data-page="chat"] .input-row .send-btn {
+  margin: 0;
+  background: var(--primary-deep);
+  color: var(--on-primary);
+}
+body[data-page="chat"] .input-row .send-btn:hover:enabled { background: var(--primary); color: var(--on-primary); }
+body[data-page="chat"] .input-row .send-btn:disabled {
+  background: var(--surface-raised);
+  color: var(--ink-30);
+  opacity: 1;
+}
+body[data-page="chat"] .chat-input-area .image-preview-row:not(.hidden) {
+  position: relative;
+  width: min(100%, var(--chat-composer-width, 760px));
+  box-sizing: border-box;
+  margin: 0 auto 8px;
+  padding: 0;
+  gap: 8px;
+}
+body[data-page="chat"] .chat-input-area .image-preview-row img {
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  object-fit: cover;
+}
+body[data-page="chat"] .chat-input-area .remove-img {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-card);
+  color: var(--ink-70);
+  font-size: 15px;
+}
+html[data-theme="dark"] body[data-page="chat"] .chat-input-area .input-row {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .2);
+}
+@media (max-width: 480px) {
+  body[data-page="chat"] .chat-input-area { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  body[data-page="chat"] .chat-input-area .input-row { min-height: 58px; padding: 6px; gap: 2px; border-radius: 18px; }
+  body[data-page="chat"] .input-row .ib-btn { flex-basis: 40px; width: 40px; height: 40px; }
+  body[data-page="chat"] .input-row textarea { min-height: 42px; padding-inline: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="chat"] .chat-input-area .input-row,
+  body[data-page="chat"] .input-row .ib-btn { transition: none; }
+}

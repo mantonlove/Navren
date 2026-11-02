@@ -139,11 +139,23 @@ class SmsChallenges:
         deadline = min(deadline if deadline is not None else now+10, now+10, expires)
         try:
             reference = self.transport.verify(phone, purpose, identifier, code, deadline=deadline)
-        except Exception:
+        except Exception as error:
             with self.auth.connect() as db:
                 db.execute("UPDATE sms_challenges SET state='failed' WHERE id=? AND state='verifying'", (identifier,))
+            # Preserve only fixed safe reasons; provider text never crosses this boundary.
+            safe = {
+                'SMS_TIMEOUT': ('验证码核验已超时，请重新发送。', 504),
+                'SMS_EXPIRED': ('验证已失效，请重新发送。', 400),
+                'SMS_CODE_REJECTED': ('验证码核验失败，请重新发送。', 401),
+                'SMS_CODE_INVALID': ('请输入六位短信验证码。', 400),
+                'SMS_CHALLENGE_INVALID': ('验证码已失效，请重新发送。', 400),
+            }
+            if isinstance(error, SmsFailure) and isinstance(error.code, str) and error.code in safe:
+                message, status = safe[error.code]
+                raise SmsFailure(error.code, message, status) from None
             raise SmsFailure('SMS_VERIFY_UNAVAILABLE', '验证码核验暂不可用，请重新发送。', 503) from None
         current = self.clock()
+        retry_allowed = False
         with self.auth.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT * FROM sms_challenges WHERE id=?', (identifier,)).fetchone()
@@ -151,11 +163,13 @@ class SmsChallenges:
                 raise SmsFailure('SMS_EXPIRED', '验证已失效，请重新发送。')
             if not reference:
                 db.execute("UPDATE sms_challenges SET state=CASE WHEN attempts>=5 THEN 'failed' ELSE 'sent' END WHERE id=?", (identifier,))
+                retry_allowed = reference is None and row['attempts'] < 5 and current < row['expires_at']
             else:
                 db.execute("UPDATE sms_challenges SET state='verified',provider_reference=?,verified_at=? WHERE id=?",
                            (reference, current, identifier))
         if not reference:
-            raise SmsFailure('SMS_CODE_REJECTED', '验证码不正确或已经失效。', 401)
+            raise SmsFailure('SMS_CODE_REJECTED', '验证码不正确或已经失效。', 401,
+                             same_challenge_retry=retry_allowed)
         return VerifiedSms(identifier, principal, purpose, phone, expected, reference, current, expires)
 
     def consume(self, db, proof):

@@ -21,7 +21,7 @@ PROFILES = (
 )
 _CACHE = None
 
-
+# 官方当前滚动别名的固定本地参考profile；不认证供应商计费上界。
 OFFICIAL_MODEL = 'deepseek-flash'
 OFFICIAL_VERSION = 'DeepSeek-V4.1-Flash-1017'
 OFFICIAL_REVISION = '1bae0e1088993b9b82de08f59de5be5a34e42170'
@@ -211,6 +211,7 @@ def _profiles():
     return _CACHE
 
 
+
 def _official_profile():
     global _OFFICIAL_CACHE
     root = Path(__file__).resolve().parent
@@ -236,6 +237,7 @@ def _official_profile():
             OSError, UnicodeError, AttributeError, TypeError):
         raise RequestBudgetError('request_budget_dependency_load_failed') from None
     return _OFFICIAL_CACHE
+
 
 def _estimate_official(payload, wire, result):
     # 不支持的完整API形态保持原byte回退，不猜测媒体或未知协议的token数。
@@ -296,7 +298,6 @@ def _estimate_official(payload, wire, result):
         gateway_template_certified=False, model_version=OFFICIAL_VERSION)
     return result
 
-
 def estimate_request(wire):
     """完整JSON wire身份独立于完整messages/tools模板token数，绝不认证网关上界。"""
     payload = _payload(wire)
@@ -304,6 +305,8 @@ def estimate_request(wire):
         raise RequestBudgetError('request_budget_unsupported_transport_model')
     result = {'input_bytes': len(wire), 'request_sha256': _sha(wire),
               'model_id': payload['model'], 'provider_bound_certified': False}
+    if payload['model'] == 'glm-5.3-flash':
+        return _estimate_glm53(payload, wire, result)
     if payload['model'] == OFFICIAL_MODEL:
         return _estimate_official(payload, wire, result)
     if payload['model'] != MODEL:
@@ -379,3 +382,171 @@ def validate_estimate(value, *, wire=None):
     if wire is not None and (value['input_bytes'] != len(wire) or value['request_sha256'] != _sha(wire)):
         raise RequestBudgetError('request_budget_wire_identity_mismatch')
     return value
+
+
+WIRE_RESERVATION_POLICY = 'native_full_wire_bytes/1'
+
+def wire_reservation_measurement(wire, *, counter):
+    """Trusted local reservation only; never provider usage or a tokenizer claim."""
+    if type(wire) is not bytes or counter is not len:
+        raise RequestBudgetError('request_reservation_counter_not_native_len')
+    upper = counter(wire)
+    return {'input_bytes': upper, 'request_sha256': _sha(wire),
+            'wire_reservation_upper': upper, 'reservation_method': WIRE_RESERVATION_POLICY,
+            'provider_bound_certified': False}
+
+def with_wire_reservation(estimate, wire, *, counter):
+    measured = wire_reservation_measurement(wire, counter=counter)
+    if (type(estimate) is not dict or type(estimate.get('input_token_estimate')) is not int
+            or estimate['input_token_estimate'] < 0 or type(estimate.get('input_bytes'))is not int
+            or estimate['input_bytes'] != len(wire)
+            or ('request_sha256' in estimate and estimate['request_sha256'] != measured['request_sha256'])):
+        raise RequestBudgetError('request_reservation_wire_identity_mismatch')
+    return {**estimate, **measured}
+
+def reservation_input_upper(estimate):
+    upper = estimate.get('wire_reservation_upper', estimate.get('input_token_estimate'))
+    if type(upper) is not int or upper < 0:
+        raise RequestBudgetError('request_reservation_invalid_upper')
+    if 'wire_reservation_upper' in estimate and (estimate.get('reservation_method') != WIRE_RESERVATION_POLICY
+            or upper != estimate.get('input_bytes')):
+        raise RequestBudgetError('request_reservation_invalid_wire_upper')
+    return upper
+
+
+
+def current_wire_admission(wire, *, counter, known_tokens, output_tokens, limit=100000):
+    """Exactly the original native next-request rule; no future-review sum."""
+    measured=wire_reservation_measurement(wire,counter=counter)
+    if any(type(v)is not int or v<0 for v in (known_tokens,output_tokens,limit)):
+        raise RequestBudgetError('request_reservation_invalid_current_usage')
+    required=known_tokens+measured['wire_reservation_upper']+output_tokens
+    accepted=required<=limit
+    return {**measured,'provider_known_tokens_before':known_tokens,'output_upper':output_tokens,
+        'hard_current_request_upper':required,'hard_limit':limit,'accepted':accepted,
+        'cause_code':None if accepted else 'complete_wire_and_original_output_reserve_required'}
+
+
+# Official Flash has a new base/tokenizer. Never substitute GLM-5.3 or DeepSeek.
+GLM53_MODEL = 'glm-5.3-flash'
+GLM53_REPOSITORY = 'zai-org/GLM-5.3-Flash'
+GLM53_REVISION = '46a050bec13002ad29ee795c16e61cf4fa3c4a9c'
+GLM53_TOKENIZERS_VERSION = '0.23.3'
+GLM53_ASSET_FILES = {
+    'tokenizer.json': '19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d',
+    'tokenizer_config.json': '98b1271574f41abf89427ae2dda030d94dc9478f0edc5a8bd240db213c6fd5fc',
+    'chat_template.jinja': '2614a3c896d53e265f564c23701173c0049f985dacfbae79fc4bcd9f5ba083f4',
+}
+_GLM53_ASSET_ROOT = Path(__file__).resolve().parent.parent / 'dependency-resources' / 'glm53-flash'
+_GLM53_CACHE = None
+
+
+def _glm53_profile():
+    global _GLM53_CACHE
+    # Recheck every pinned byte even when the parsed tokenizer is cached.
+    files = {name: _fixed_file(_GLM53_ASSET_ROOT / name, digest)
+             for name, digest in GLM53_ASSET_FILES.items()}
+    if importlib.metadata.version('tokenizers') != GLM53_TOKENIZERS_VERSION:
+        raise RequestBudgetError('glm53_tokenizers_version_mismatch')
+    config = json.loads(files['tokenizer_config.json'])
+    if (config.get('backend') != 'tokenizers'
+            or config.get('tokenizer_class') != 'TokenizersBackend'):
+        raise RequestBudgetError('glm53_tokenizer_configuration_mismatch')
+    if _GLM53_CACHE is None:
+        from tokenizers import Tokenizer
+        tokenizer = Tokenizer.from_str(files['tokenizer.json'].decode('utf-8'))
+        markers = {'[gMASK]': 154822, '<sop>': 154824, '<|system|>': 154826,
+                   '<|user|>': 154827, '<|assistant|>': 154828, '<think>': 154841}
+        if any(tokenizer.token_to_id(token) != identity for token, identity in markers.items()):
+            raise RequestBudgetError('glm53_tokenizer_identity_mismatch')
+        added = tuple(row['content'] for row in json.loads(files['tokenizer.json'])['added_tokens'])
+        if len(added) != 36 or any(type(x) is not str or not x for x in added):
+            raise RequestBudgetError('glm53_added_token_configuration_mismatch')
+        _GLM53_CACHE = (tokenizer, added)
+    return _GLM53_CACHE
+
+
+def _validate_glm53_review_payload(payload):
+    # Exactly the existing official reviewer wire. Other APIs/media/tool histories
+    # retain the complete-byte fallback instead of guessing a template.
+    required = {'model', 'messages', 'temperature', 'max_tokens', 'thinking',
+                'reasoning_effort', 'response_format'}
+    if (set(payload) != required or payload.get('model') != GLM53_MODEL
+            or type(payload['messages']) is not list or len(payload['messages']) != 2
+            or type(payload['temperature']) not in (int, float) or payload['temperature'] != 0
+            or type(payload['max_tokens']) is not int or payload['max_tokens'] != 8192
+            or payload['thinking'] != {'type': 'enabled'}
+            or payload['response_format'] != {'type': 'json_object'}
+            or payload['reasoning_effort'] not in ('low', 'high', 'max')):
+        raise RequestBudgetError('glm53_unsupported_complete_review_payload')
+    for row, role in zip(payload['messages'], ('system', 'user')):
+        if (type(row) is not dict or set(row) != {'role', 'content'}
+                or row['role'] != role or type(row['content']) is not str):
+            raise RequestBudgetError('glm53_unsupported_complete_review_messages')
+
+
+def _render_glm53_text_review(payload):
+    """Closed reduction of the pinned official Jinja for exactly system+user.
+
+    There are no tools, media or assistant history to interpret; both full content
+    strings remain verbatim. Unsupported complete payloads never enter here.
+    The candidate validation compares this reduction with the official Jinja.
+    """
+    return ('[gMASK]<sop><|system|>Reasoning Effort: '
+            + payload['reasoning_effort'].capitalize()
+            + '<|system|>' + payload['messages'][0]['content']
+            + '<|user|>' + payload['messages'][1]['content']
+            + '<|assistant|><think>')
+
+
+def _estimate_glm53(payload, wire, result):
+    def fallback(reason):
+        result.update(input_token_estimate=len(wire), raw_token_estimate=None,
+                      margin_tokens=0, profiles=[],
+                      bound_method='full_wire_bytes_conservative_token_fallback',
+                      profile_fallback_reason=reason)
+        return result
+    try:
+        _validate_glm53_review_payload(payload)
+    except RequestBudgetError as error:
+        return fallback(error.args[0])
+    try:
+        tokenizer, added = _glm53_profile()
+    except Exception:
+        # No dependency path, source body or sensitive input enters diagnostics.
+        return fallback('glm53_pinned_profile_unavailable')
+    def has_marker(value):
+        if type(value) is str:
+            return any(marker in value for marker in added)
+        if type(value) is dict:
+            return any(has_marker(k) or has_marker(v) for k, v in value.items())
+        if type(value) is list:
+            return any(has_marker(v) for v in value)
+        return False
+    if has_marker(payload):
+        return fallback('glm53_literal_added_token_unsupported')
+    try:
+        prompt = _render_glm53_text_review(payload)
+        raw = len(tokenizer.encode(prompt, add_special_tokens=False).ids)
+        # Non-template API controls are reserved separately, including JSON mode.
+        controls = {k: v for k, v in payload.items() if k != 'messages'}
+        extension = len(json.dumps(controls, ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+        estimated = (raw * 6 + 4) // 5 + 1024 + extension
+    except Exception:
+        return fallback('glm53_complete_template_count_unavailable')
+    result.update(input_token_estimate=estimated, raw_token_estimate=raw,
+                  margin_tokens=estimated-raw, transport_extension_byte_reserve=extension,
+                  bound_method='official_glm53flash_text_review_20pct_plus1024',
+                  model_version='GLM-5.3-Flash', model_repository=GLM53_REPOSITORY,
+                  repository_revision=GLM53_REVISION,
+                  tokenizer_version=GLM53_TOKENIZERS_VERSION,
+                  tokenizer_sha256=GLM53_ASSET_FILES['tokenizer.json'],
+                  chat_template_sha256=GLM53_ASSET_FILES['chat_template.jinja'],
+                  rendered_prompt_sha256=_sha(prompt.encode('utf-8')),
+                  profiles=[{'profile': 'official_glm53flash_system_user_text',
+                             'input_tokens': raw, 'add_generation_prompt': True,
+                             'complete_messages_count': 2,
+                             'reasoning_effort': payload['reasoning_effort'],
+                             'provider_bound_certified': False}],
+                  gateway_template_certified=False)
+    return result

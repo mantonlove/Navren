@@ -52,8 +52,51 @@ def pcm_wav(raw):
     return out.getvalue()
 
 
+def _checked_riff_body(body, maximum):
+    """严格验完整RIFF；仅兼容官方带AIGC响应的根长度少计4字节。"""
+    if not isinstance(body, bytes) or len(body) < 44 or body[:4] != b'RIFF' or body[8:12] != b'WAVE':
+        raise ValueError('invalid RIFF')
+    declared_end = int.from_bytes(body[4:8], 'little') + 8
+    chunks = []
+    cursor = 12
+    while cursor < len(body):
+        if len(body) - cursor < 8:
+            raise ValueError('trailing RIFF bytes')
+        tag = body[cursor:cursor + 4]
+        size = int.from_bytes(body[cursor + 4:cursor + 8], 'little')
+        start, end = cursor + 8, cursor + 8 + size
+        padded_end = end + (size & 1)
+        if padded_end > len(body) or (size & 1 and body[end] != 0):
+            raise ValueError('truncated chunk or invalid padding')
+        chunks.append((tag, size, start, end))
+        cursor = padded_end
+    formats = [chunk for chunk in chunks if chunk[0] == b'fmt ']
+    data = [chunk for chunk in chunks if chunk[0] == b'data']
+    if len(formats) != 1 or len(data) != 1 or formats[0][2] >= data[0][2]:
+        raise ValueError('duplicate or missing audio chunks')
+    if formats[0][1] < 16 or not 0 < data[0][1] <= maximum or data[0][1] % 2:
+        raise ValueError('invalid PCM chunk length')
+    if declared_end == len(body):
+        return body
+    # 只接受这一次真实官方响应的结构；data必须完整且恰好结束于物理EOF。
+    if (declared_end != len(body) - 4 or
+            [chunk[0] for chunk in chunks] != [b'fmt ', b'AIGC', b'LIST', b'data'] or
+            formats[0][1] != 16 or chunks[1][1] == 0 or chunks[2][1] < 4 or
+            data[0][3] != len(body)):
+        raise ValueError('inconsistent RIFF size')
+    fmt = body[formats[0][2]:formats[0][3]]
+    values = (int.from_bytes(fmt[0:2], 'little'), int.from_bytes(fmt[2:4], 'little'),
+              int.from_bytes(fmt[4:8], 'little'), int.from_bytes(fmt[8:12], 'little'),
+              int.from_bytes(fmt[12:14], 'little'), int.from_bytes(fmt[14:16], 'little'))
+    if values != (1, 1, TTS_RATE, TTS_RATE * 2, 2, 16):
+        raise ValueError('unexpected official PCM format')
+    # 仅修内存中的根长度；AIGC、LIST及音频原字节均保留，原响应另行完整存证。
+    return body[:4] + (len(body) - 8).to_bytes(4, 'little') + body[8:]
+
+
 def checked_pcm(body, maximum):
     try:
+        body = _checked_riff_body(body, maximum)
         with wave.open(io.BytesIO(body), 'rb') as stream:
             if (stream.getnchannels(), stream.getsampwidth(), stream.getframerate(), stream.getcomptype()) != (1, 2, TTS_RATE, 'NONE'):
                 raise ValueError('unexpected WAV format')

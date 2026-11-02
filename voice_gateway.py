@@ -12,24 +12,70 @@ import uuid
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from conversation_panels import panel_plain_text
 from finance_gateway import request_json
 from simulated_bank import BankError
-
 from glm_speech_task import (ASR_MODEL, TTS_MODEL, ASR_RATE, TTS_RATE, VOICES,
                              APPROVED_SPEECH, CLOUD_ASR_OPT_IN, SpeechTask,
                              endpoint, load_key)
+
+
+
+
+
+
+
+
+
+def _component_speech_markup(text):
+    """只移除已知展示围栏，保留标题、正文、数字和所有限定条件。"""
+    lines = text.splitlines(keepends=True)
+    output = []
+    index = 0
+    while index < len(lines):
+        opening = re.fullmatch(r' {0,3}(`{3,}|~{3,})([^\r\n]*)', lines[index].rstrip('\r\n'))
+        if opening is None:
+            output.append(lines[index]); index += 1; continue
+        marker, lang = opening.groups()
+        closing = index + 1
+        pattern = r' {0,3}' + re.escape(marker[0]) + '{' + str(len(marker)) + r',}[ \t]*'
+        while closing < len(lines) and re.fullmatch(pattern, lines[closing].rstrip('\r\n')) is None:
+            closing += 1
+        if closing == len(lines):
+            output.extend(lines[index:]); break
+        if lang.strip() == 'navren-panel':
+            plain = panel_plain_text(''.join(lines[index + 1:closing]))
+            if plain is None:
+                output.extend(lines[index:closing + 1])
+            else:
+                output.append(plain + '\n')
+            index = closing + 1
+            continue
+        known = re.fullmatch(r'navren-(?:facts|compare|steps|note)(?:[ \t]+([^\r\n]{1,40}))?', lang.strip())
+        if known is None:
+            output.extend(lines[index:closing + 1])
+        else:
+            if known.group(1): output.append(known.group(1).strip() + '\n')
+            output.extend(lines[index + 1:closing])
+        index = closing + 1
+    return ''.join(output)
 
 
 def speech_text(text):
     """去掉展示标记并规范符号，保留全部风险披露和金额数值。"""
     if not isinstance(text, str) or not text.strip() or len(text) > 8000:
         raise BankError('INVALID_SPEECH_TEXT', '朗读内容为空或超过八千字，请分段朗读。')
+    text = _component_speech_markup(text)
     text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
     text = re.sub(r'(?m)^\s{0,3}(?:#{1,6}|>|[-*])\s+', '', text)
     text = text.replace('**', '').replace('`', '').replace('⚠️', '注意：')
     text = re.sub(r'(\d+(?:\.\d+)?)\s*%', r'百分之\1', text)
     text = re.sub(r'[¥￥]\s*([\d,]+(?:\.\d+)?)', lambda m: m[1].replace(',', '') + '元', text)
     return re.sub(r'\n+', '。', text).strip()
+
+
+
+
 
 
 class BrowserSocket:
@@ -124,7 +170,7 @@ class VoiceGateway:
 
     def status(self):
         import importlib.util
-        dependencies = importlib.util.find_spec('wsproto') is not None
+        dependencies = all(importlib.util.find_spec(name) for name in ('websocket', 'wsproto'))
         local_asr_ready = self.local_asr is not None and self.local_asr.ready() and dependencies
         local_tts_ready = self.local_tts is not None and self.local_tts.ready() and dependencies
         cloud_ready = bool(self.key) and dependencies
@@ -249,12 +295,22 @@ class VoiceGateway:
                                     message = task.receive()
                                 except (socket.timeout, TimeoutError):
                                     continue
+                                except Exception as error:
+                                    from websocket import WebSocketTimeoutException
+                                    if isinstance(error, WebSocketTimeoutException):
+                                        continue
+                                    raise
                                 # receive可能跨过账户切换；每个输出在银行身份锁内发布。
                                 def publish(value):
                                     finance=handler.server.finance
                                     guard=finance.speech_guard(entry[3],entry[4],token) if entry[1]=='tts' else finance.bank.transaction()
                                     with finance.demo_sessions.request(token,entry[3]), guard:
                                         finance.demo_sessions.validate(token,entry[3])
+                                        if (entry[1]=='asr' and getattr(task,'local_only',False)
+                                                and isinstance(value,dict) and value.get('type')=='transcript'
+                                                and value.get('final') is True):
+                                            from asr_name_review import attach_name_review
+                                            value=attach_name_review(value,getattr(finance,'knowledge_provider',None))
                                         browser.send(value)
                                 if isinstance(message, bytes):
                                     if entry[1] == 'tts' and len(generated_audio) + len(message) > 25 * 1024 * 1024:
@@ -265,7 +321,13 @@ class VoiceGateway:
                                 event = message.get('header', {}).get('event')
                                 if event == 'result-generated' and entry[1] == 'asr':
                                     output=message.get('payload', {}).get('output', {})
-                                    sentence = output.get('sentence') or {}
+                                    if (getattr(task, 'local_only', False) or getattr(task, 'normalized_sentence', False)):
+                                        sentence = output.get('sentence') or {}
+                                    else:
+                                        from dashscope.audio.asr import RecognitionResult
+                                        from dashscope.api_entities.dashscope_response import RecognitionResponse
+                                        response=RecognitionResponse(status_code=200,request_id=task.id,output=output)
+                                        sentence = RecognitionResult(response).get_sentence() or {}
                                     if not sentence.get('heartbeat'):
                                         publish({'type': 'transcript', 'text': sentence.get('text', ''),
                                                       'final': bool(sentence.get('sentence_end')),

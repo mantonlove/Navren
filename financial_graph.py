@@ -157,7 +157,6 @@ class FinancialGraph:
         basis=p.get('accounting_basis','holdings_only_v1' if portfolio=='current' else 'total_equity_v2')
         if portfolio=='current' and basis!='holdings_only_v1':raise BankError('GRAPH_BASIS','旧账户组合仅支持 holdings_only_v1；权益法请指定历史组合。')
         if basis not in {'total_equity_v2','holdings_only_v1'}:raise BankError('GRAPH_BASIS','核算口径无效。')
-        self.g.wealth.provision(w)
         archive=self.g.bank.customer_archive(w);records=archive['records'];version=self._version(w)
         nodes={};edges=[];calculations=[];insights=[];gaps=[];metrics=[];portfolio_meta=None
         period={'from':start.isoformat(),'to_exclusive':(end+timedelta(days=1)).isoformat()}

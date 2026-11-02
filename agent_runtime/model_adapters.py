@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -144,6 +146,7 @@ class OpenAICompatibleJsonClient:
         urlopen=None,
         key_loader=None,
         log_path: str | None = None,
+        request_data_observer=None,
     ):
         _validate_official_transport(provider=provider, model_id=model_id, url=url,
             env_name=env_name, keychain_service=keychain_service)
@@ -159,6 +162,9 @@ class OpenAICompatibleJsonClient:
         self.urlopen = urlopen or _official_urlopen
         self.key_loader = key_loader or (lambda: _key_from_sources(env_name, keychain_service))
         self.log_path = log_path
+        if request_data_observer is not None and not callable(request_data_observer):
+            raise TypeError("request_data_observer_must_be_callable")
+        self.request_data_observer = request_data_observer
 
     def _validate_transport(self):
         _validate_official_transport(provider=self.provider, model_id=self.model_id, url=self.url,
@@ -182,6 +188,8 @@ class OpenAICompatibleJsonClient:
 
     def complete_json(self, *, system: str, user: str, stage: str, request_id: str) -> dict:
         started = time.monotonic()
+        mandatory_review = stage == 'reviewer.conversation' and self.max_retries == 0
+        request_sent = False
         attempts = 0
         http_status = None
         finish_reason = None
@@ -189,8 +197,18 @@ class OpenAICompatibleJsonClient:
         error_code = "provider_error"
         exception_type = None
         review_usage = None
+        provider_error_code = None
+        local_rejection_diagnostic = None
+        request_data_observation = None
         try:
             self._validate_transport()
+            if mandatory_review:
+                if (type(self.timeout) not in (int, float)
+                        or not math.isfinite(self.timeout) or self.timeout <= 0):
+                    error = ModelRequestNotSentError()
+                    error.code = 'request_deadline_invalid'
+                    raise error
+                request_deadline = started + self.timeout
             key = self.key_loader()
             if not key:
                 error_code = "missing_api_key"
@@ -206,17 +224,49 @@ class OpenAICompatibleJsonClient:
                 error_code = "official_model_payload_mismatch"
                 raise ModelAdapterError(error_code, model_id=self.model_id, attempts=0)
             payload = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
+            if self.request_data_observer is not None:
+                try:
+                    observed = self.request_data_observer({
+                        'schema':'navren.actual-request-data-observation/1',
+                        'request_id':request_id,'stage':stage,'model_id':self.model_id,
+                        'request_data':payload})
+                    if type(observed) is dict and observed == {'status':'not_scoped'}:
+                        pass
+                    elif (type(observed) is dict
+                            and set(observed) == {'status','request_sha256','request_bytes','cipher_sha256','frame_count'}
+                            and observed['status'] == 'recorded'
+                            and observed['request_sha256'] == hashlib.sha256(payload).hexdigest()
+                            and type(observed['request_bytes']) is int and observed['request_bytes'] == len(payload)
+                            and type(observed['cipher_sha256']) is str
+                            and re.fullmatch(r'[a-f0-9]{64}',observed['cipher_sha256']) is not None
+                            and type(observed['frame_count']) is int and 1 <= observed['frame_count'] <= 8):
+                        request_data_observation = dict(observed)
+                    else:
+                        raise ValueError('scoped_request_data_capture_required')
+                except Exception:
+                    # A scoped observer is trusted local evidence collection.
+                    # No exception text/body/header can enter an error or log.
+                    request_data_observation = {'status':'required_capture_failed',
+                        'request_sha256':hashlib.sha256(payload).hexdigest(),
+                        'request_bytes':len(payload)}
+                    error = ModelRequestNotSentError()
+                    error.code = 'request_data_capture_required'
+                    raise error from ValueError('scoped_request_data_capture_required')
             request = urllib.request.Request(
                 self.url, data=payload,
                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
                 method="POST",
             )
+            if mandatory_review:
+                request._navren_request_deadline_monotonic = request_deadline
             for attempt in range(self.max_retries + 1):
+                attempts = attempt + 1
                 try:
                     self._validate_transport()
                     _validate_official_transport(provider=self.provider, model_id=request_payload["model"],
                         url=request.full_url, env_name=self.env_name, keychain_service=self.keychain_service)
-                    attempts = attempt + 1
+                    if mandatory_review:
+                        request_sent = True
                     with self.urlopen(request, timeout=self.timeout) as response:
                         http_status = getattr(response, "status", 200)
                         raw = response.read(256_000)
@@ -253,13 +303,36 @@ class OpenAICompatibleJsonClient:
                     return parsed
                 except urllib.error.HTTPError as error:
                     http_status = error.code
+                    if self.provider == "zhipu":
+                        # Only a bounded ASCII numeric code is retained. At the
+                        # read limit the body may be incomplete: keep it unknown.
+                        try:
+                            error_body = error.read(8192)
+                            if isinstance(error_body, bytes) and len(error_body) < 8192:
+                                error_envelope = json.loads(error_body.decode("utf-8"),
+                                    object_pairs_hook=_unique_object)
+                                provider_error = (error_envelope.get("error")
+                                    if isinstance(error_envelope, dict) else None)
+                                raw_code = (provider_error.get("code")
+                                    if isinstance(provider_error, dict) else None)
+                                code_text = (str(raw_code) if type(raw_code) is int
+                                    else raw_code if isinstance(raw_code, str) else None)
+                                if isinstance(code_text, str) and re.fullmatch(r"[0-9]{1,8}", code_text):
+                                    provider_error_code = code_text
+                        except Exception:
+                            # No body, message, headers, hashes or usage inferred
+                            # from an error response are persisted or accepted.
+                            pass
                     retryable = error.code in (408, 409, 425, 429) or error.code >= 500
                     if retryable and attempt < self.max_retries:
                         time.sleep(min(0.25 * (attempt + 1), 0.5))
                         continue
                     error_code = "provider_http_error"
-                    raise ModelAdapterError(error_code, model_id=self.model_id,
-                                            attempts=attempts, http_status=http_status) from None
+                    failure = ModelAdapterError(error_code, model_id=self.model_id,
+                                                attempts=attempts, http_status=http_status)
+                    if provider_error_code is not None:
+                        failure.provider_error_code = provider_error_code
+                    raise failure from None
                 except (urllib.error.URLError, TimeoutError, OSError) as error:
                     if attempt < self.max_retries:
                         time.sleep(min(0.25 * (attempt + 1), 0.5))
@@ -277,7 +350,20 @@ class OpenAICompatibleJsonClient:
             raise ModelAdapterError(error_code, model_id=self.model_id, attempts=attempts,
                                     http_status=http_status)
         except ModelAdapterError as error:
-            error_code = error.code
+            if mandatory_review and isinstance(error, ModelRequestNotSentError):
+                request_sent = False
+                attempts = 0
+                error_code = error.code
+                review_usage = {}
+                error.model_id = self.model_id
+                error.request_sent = False
+                error.attempts = 0
+                error.usage = {}
+            local_rejection_diagnostic=safe_local_rejection_diagnostic(error,stage=stage,wire=locals().get('payload'))
+            if local_rejection_diagnostic is not None:
+                error.local_rejection_diagnostic=local_rejection_diagnostic
+                error_code=error.code
+                attempts=0
             raise
         except Exception as error:
             # Keep unexpected library/provider shape failures diagnosable without
@@ -296,11 +382,15 @@ class OpenAICompatibleJsonClient:
                 "outcome": outcome,
                 "duration_ms": max(0, round((time.monotonic() - started) * 1000)),
                 "attempts": attempts,
+                **({'request_sent': request_sent} if mandatory_review else {}),
                 "http_status": http_status,
                 "finish_reason": finish_reason,
                 "error_code": error_code,
                 "exception_type": exception_type,
                 **({"usage": review_usage} if review_usage is not None else {}),
+                **({"provider_error_code": provider_error_code} if provider_error_code is not None else {}),
+                **({"local_rejection_diagnostic":local_rejection_diagnostic} if local_rejection_diagnostic is not None else {}),
+                **({"request_data_observation":request_data_observation} if request_data_observation is not None else {}),
             }, self.log_path)
 
 
@@ -525,3 +615,53 @@ class AIPingCashflowReviewer:
 def live_cashflow_agents():
     """返回 production 模型组合；密钥只在实际请求时读取。"""
     return AIPingCashflowSupervisor(), AIPingCashflowReviewer()
+
+class ModelRequestNotSentError(ModelAdapterError):
+    """A trusted local transport rejected before its actual upstream opener."""
+    def __init__(self):
+        super().__init__('request_rejected_before_send',model_id='not_dispatched',attempts=0)
+        self.request_sent=False
+        self.usage={}
+
+def safe_local_rejection_diagnostic(error, *, stage=None, wire=None):
+    """Only a real not-sent marker and exact allowlisted cause; no exception text."""
+    if (not isinstance(error,ModelRequestNotSentError) or error.attempts!=0
+            or getattr(error,'request_sent',None)is not False):
+        return None
+    cause=error.__cause__
+    code=(cause.args[0] if type(cause)is ValueError and len(cause.args)==1
+          and type(cause.args[0])is str and cause.args[0]in _LOCAL_REJECTION_CODES
+          else 'unclassified_local_before_send')
+    result={'cause_code':code,'layer':'local_before_send','request_sent':False,'attempts':0}
+    if stage in ('primary','conversation.tools'):result['stage']='primary'
+    elif stage in ('reviewer','reviewer.conversation'):result['stage']='reviewer'
+    if type(wire)is bytes:
+        import hashlib
+        result.update(wire_bytes=len(wire),request_sha256=hashlib.sha256(wire).hexdigest())
+    else:
+        previous=getattr(error,'local_rejection_diagnostic',None)
+        if type(previous)is dict:
+            size=previous.get('wire_bytes');pin=previous.get('request_sha256')
+            if type(size)is int and size>=0 and type(pin)is str and len(pin)==64 and all(c in '0123456789abcdef'for c in pin):
+                result.update(wire_bytes=size,request_sha256=pin)
+    return result
+
+_LOCAL_REJECTION_CODES=frozenset({
+    'scoped_request_data_capture_required',
+    'complete_wire_and_original_output_reserve_required',
+    'original_component_request_count_exceeded',
+    'component_actual_task_usage_required',
+    'component_actual_ledger_calls_required',
+    'attempt_not_human_authorized_scope',
+    'exact_official_endpoint_and_model_required',
+    'official_primary_mode_mismatch',
+    'official_GLM_full_review_mode_mismatch',
+    'AiPing_or_unregistered_provider_fields_forbidden',
+    'campaign_request_after_unknown_or_concurrent_call',
+    'campaign_duplicate_payload_key',
+    'campaign_nonfinite_payload',
+    'campaign_actual_payload_auto_route_and_model_required',
+})
+
+GLM_OFFICIAL_MODEL = GLM_REVIEW_MODEL
+GLM_OFFICIAL_URL = ZHIPU_URL

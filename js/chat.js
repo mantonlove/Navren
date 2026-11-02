@@ -10,20 +10,126 @@ const PRESET_QUESTIONS = {
 
 let currentMode = 'classic';
 let isListening = false;
-let pendingImage = null;
-// 保留选择的原始 bytes；预览 dataURL 不作为服务端上传原件。
-let pendingImageFile = null;
-const chatImageUploadKeys=new WeakMap();
-const chatImageUploads=new WeakMap();
-const activeChatImageReaders=new Set();
+const chatAttachmentUploadKeys=new WeakMap();
+const chatAttachmentUploads=new WeakMap();
 let handoffActive = false;
 let chatSending=false;
+let newConversationStarting=false;
+let conversationIssueRun=0;
+let conversationScope=null;
+let conversationScopeBinding=null;
+let conversationScopeInvalid=false;
+const conversationScopeStorageKey='navren:conversation-scope:v1';
 let chatRequestVersion=0;
 let chatReferenceRevision=0;
 let chatDraftRevision=0;
 document.addEventListener('input',event=>{if(event.target?.id==='userInput')chatDraftRevision++;});
 function chatBinding(){const s=BankClient.identity();return s?{registered_user_id:s.registered_user_id,workspace_id:s.workspace_id,privacy_revision:s.privacy_revision}:{};}
 function currentChatHistory(){const s=BankClient.identity();return (Storage.get('qingzhou_chatHistory')||[]).filter(m=>m.registered_user_id===s?.registered_user_id&&m.workspace_id===s?.workspace_id&&m.privacy_revision===s?.privacy_revision);}
+function validConversationScopeToken(value){
+  return typeof value==='string'&&value.startsWith('pd1:')&&value.length>4&&value.length<=8192&&!/[\s\u0000-\u001f\u007f]/u.test(value);
+}
+function sameConversationIdentity(a,b){
+  return !!a&&!!b&&a.registered_user_id===b.registered_user_id&&a.workspace_id===b.workspace_id&&a.privacy_revision===b.privacy_revision;
+}
+function clearConversationScope({preserveStorage=false}={}){
+  conversationScope=null;conversationScopeBinding=null;conversationScopeInvalid=false;
+  if(!preserveStorage)try{sessionStorage.removeItem(conversationScopeStorageKey);}catch(_){}
+}
+function restoreConversationScope(identity=BankClient.identity()){
+  clearConversationScope({preserveStorage:true});
+  let raw;
+  try{raw=sessionStorage.getItem(conversationScopeStorageKey);}catch(_){conversationScopeInvalid=true;return false;}
+  if(raw===null)return true;
+  try{
+    const stored=JSON.parse(raw);
+    if(!stored||Object.keys(stored).sort().join(',')!=='contract,conversation_scope,execution_authority,privacy_revision,registered_user_id,workspace_id'||
+      stored.contract!=='navren.conversation-scope/1'||stored.execution_authority!==false||!validConversationScopeToken(stored.conversation_scope))throw Error('invalid_scope');
+    if(!sameConversationIdentity(stored,identity)){clearConversationScope();return true;}
+    conversationScope=stored.conversation_scope;conversationScopeBinding=Object.freeze(chatBinding());return true;
+  }catch(_){clearConversationScope();conversationScopeInvalid=true;return false;}
+}
+function currentConversationScope(){
+  if(conversationScopeBinding&&!sameConversationIdentity(conversationScopeBinding,BankClient.identity()))clearConversationScope();
+  return conversationScope;
+}
+// A fresh browser tab has no session scope. Issue a server-authenticated
+// range before enabling its first send; never fall back to workspace history.
+async function ensureInitialConversationScope(identity){
+  if(conversationScopeInvalid)return false;
+  if(currentConversationScope()!==null)return true;
+  if(chatSending||newConversationStarting)return false;
+  newConversationStarting=true;const issueRun=++conversationIssueRun,version=chatRequestVersion;updateChatSendState();
+  try{
+    const guard=BankClient.guard();
+    if(!guard.valid(identity))throw Error('账户身份已变化，请重新核对。');
+    const receipt=await BankClient.post('/dialogue/new-conversation',{});
+    if(issueRun!==conversationIssueRun||version!==chatRequestVersion||!guard.valid(identity))throw Error('账户或页面已变化，新对话未建立。');
+    if(!receipt||typeof receipt!=='object'||Array.isArray(receipt)||receipt.contract!=='navren.conversation-scope/1'||
+      receipt.execution_authority!==false||!validConversationScopeToken(receipt.conversation_scope))throw Error('新对话范围尚未核实，请点击新对话重试。');
+    const stored={contract:receipt.contract,conversation_scope:receipt.conversation_scope,execution_authority:false,
+      registered_user_id:identity.registered_user_id,workspace_id:identity.workspace_id,privacy_revision:identity.privacy_revision};
+    sessionStorage.setItem(conversationScopeStorageKey,JSON.stringify(stored));
+    conversationScope=receipt.conversation_scope;conversationScopeBinding=Object.freeze({...chatBinding()});conversationScopeInvalid=false;
+    return true;
+  }catch(error){
+    if(issueRun===conversationIssueRun&&version===chatRequestVersion){
+      conversationScopeInvalid=true;
+      if(typeof showToast==='function')showToast(error.message||'新对话暂时无法建立，请点击新对话重试。');
+    }
+    return false;
+  }finally{
+    if(issueRun===conversationIssueRun){newConversationStarting=false;updateChatSendState();}
+  }
+}
+async function collapseConversationArchive(run,guard){
+  if(run!==chatArchiveRun||!guard.valid())return false;
+  const view=historyView(),toggle=document.querySelector('#chatMessages .chat-history-toggle');
+  if(!toggle)return run===chatArchiveRun&&guard.valid();
+  if(view?.isExpanded()){
+    if(!toggle)throw Error('对话历史入口尚未就绪，请重新读取。');
+    toggle.click();
+  }
+  const panel=document.querySelector('#chatMessages #chatHistoryPanel');
+  const deadline=Date.now()+1200;
+  while(panel&&!panel.hidden){
+    if(run!==chatArchiveRun||!guard.valid())return false;
+    if(Date.now()>=deadline)throw Error('对话历史尚未折叠，请重新读取。');
+    await new Promise(resolve=>setTimeout(resolve,16));
+  }
+  return run===chatArchiveRun&&guard.valid()&&(!view||!view.isExpanded());
+}
+async function startNewConversation(){
+  if(chatSending||newConversationStarting)return false;
+  newConversationStarting=true;const issueRun=++conversationIssueRun,version=chatRequestVersion;updateChatSendState();
+  try{
+    const identity=await BankClient.refreshIdentity(),guard=BankClient.guard();
+    if(chatSending||issueRun!==conversationIssueRun||version!==chatRequestVersion||!guard.valid(identity))throw Error('账户身份已变化，请重新核对。');
+    const receipt=await BankClient.post('/dialogue/new-conversation',{});
+    if(chatSending||issueRun!==conversationIssueRun||version!==chatRequestVersion||!guard.valid(identity))throw Error('账户或页面已变化，新对话未切换。');
+    if(!receipt||typeof receipt!=='object'||Array.isArray(receipt)||receipt.contract!=='navren.conversation-scope/1'||
+      receipt.execution_authority!==false||!validConversationScopeToken(receipt.conversation_scope))throw Error('新对话范围尚未核实，请重试。');
+    const stored={contract:receipt.contract,conversation_scope:receipt.conversation_scope,execution_authority:false,
+      registered_user_id:identity.registered_user_id,workspace_id:identity.workspace_id,privacy_revision:identity.privacy_revision};
+    sessionStorage.setItem(conversationScopeStorageKey,JSON.stringify(stored));
+    conversationScope=receipt.conversation_scope;conversationScopeBinding=Object.freeze({...chatBinding()});conversationScopeInvalid=false;
+    chatRequestVersion++;window.NavrenReplyInteractions?.clear();cancelVoice();NavrenSpeech.stop();
+    const input=document.getElementById('userInput');if(input)input.value='';
+    try{removeImage();clearChatReference();}catch(_){}
+    const loaded=await initializeChatArchive({identity});
+    if(!loaded)throw Error('新对话已建立，聊天历史暂时无法读取，请点击重新读取。');
+    const host=document.getElementById('chatMessages');
+    if(host&&!host.querySelector('#welcomeMsg')&&chatWelcomeTemplate){
+      host.append(chatWelcomeTemplate.cloneNode(true));personalizeWelcome();renderPresets();
+    }
+    input?.focus();return true;
+  }catch(error){
+    if(typeof showToast==='function')showToast(error.message||'新对话尚未建立，请重试。');
+    return false;
+  }finally{
+    if(issueRun===conversationIssueRun){newConversationStarting=false;updateChatSendState();}
+  }
+}
 function newChatMessageId(){return globalThis.crypto?.randomUUID?.()||'chat-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);}
 function consumeReplyControl(message,kind,binding=chatBinding()){
   if(!message||binding.workspace_id!==BankClient.identity()?.workspace_id||binding.privacy_revision!==BankClient.identity()?.privacy_revision)return false;
@@ -108,7 +214,12 @@ function renderReplyProjection(message,presentation,binding,{historical=false}={
     }};
   if(!NavrenReplyComponents.render(message,presentation,context))return false;
   const body=message.querySelector('.message-body');
-  if(body){body.textContent=presentation.lead;body.classList.add('reply-lead');}
+  if(body){
+    // A verified lead is plain data, not model-provided HTML or Markdown.
+    if (window.NavrenMarkdown?.renderPlain) body.innerHTML=NavrenMarkdown.renderPlain(presentation.lead);
+    else body.textContent=presentation.lead;
+    body.classList.add('reply-lead');
+  }
   message.__navrenReplyProjection=presentation;
   message.__navrenReplyCurrent=isCurrent;
   return true;
@@ -178,6 +289,7 @@ function mountArchivedMedia(message,row,run,guard){
     }
     if(row.role!=='user')continue;
     const host=message.querySelector('.message-body');if(!host)continue;
+    if(media.kind==='document'){window.NavrenChatAttachments?.mountStoredDocument(host,media,current);continue;}
     const note=document.createElement('span');note.className='chat-user-text';note.textContent='正在读取图片…';host.prepend(note);
     tasks.push(window.NavrenChatMedia.open(media).then(handle=>{
       if(!current()){handle.dispose();return;}
@@ -331,6 +443,7 @@ async function initializeChatArchive({identity:verifiedIdentity=null}={}){
     await archive.loadNext();
     if(run!==chatArchiveRun||!guard.valid())return false;
     await Promise.allSettled([...chatArchiveMediaTasks]);
+    if(currentConversationScope()!==null&&!await collapseConversationArchive(run,guard))return false;
     return run===chatArchiveRun&&guard.valid();
   }catch(_){
     if(run!==chatArchiveRun)return false;
@@ -353,15 +466,14 @@ async function loadEarlierChatArchive(){
   if(!chatArchive||chatSending||chatArchiveBusy)return false;
   try{await chatArchive.loadNext();return true;}catch(_){return false;}
 }
-function resetPrivateChat(){
+function resetPrivateChat(event){
+  conversationIssueRun++;newConversationStarting=false;
+  clearConversationScope({preserveStorage:event?.type==='pagehide'});
   chatRequestVersion++;chatSending=false;
   window.NavrenReplyInteractions?.clear();
   globalThis.NavrenChatPrivacyVersion=(globalThis.NavrenChatPrivacyVersion||0)+1;
   cancelVoice();
   const input=document.getElementById('userInput');if(input)input.value='';
-  pendingImage=null;
-  pendingImageFile=null;
-  for(const reader of activeChatImageReaders){try{reader.abort();}catch(_){}}activeChatImageReaders.clear();
   try{removeImage();clearChatReference();}catch(_){}
   unloadChatArchive();
 }
@@ -377,6 +489,9 @@ window.addEventListener('pageshow',async event=>{
   let pageLoad=window.NavrenPageLoad?.join();let run;
   try{
     const identity=await BankClient.refreshIdentity();await Storage.ready();
+    if(!BankClient.guard().valid(identity))return;
+    restoreConversationScope(identity);
+    await ensureInitialConversationScope(identity);
     if(!BankClient.guard().valid(identity))return;
     pageLoad=window.NavrenPageLoad?.resume();
     const restoration=initializeChatArchive({identity});run=chatArchiveRun;
@@ -401,6 +516,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   const pageGuard=BankClient.guard(),privacyTurn=globalThis.NavrenChatPrivacyVersion||0;
   if(!pageGuard.valid(initialIdentity))return;
+  restoreConversationScope(initialIdentity);
+  await ensureInitialConversationScope(initialIdentity);
+  if(!pageGuard.valid(initialIdentity)||privacyTurn!==(globalThis.NavrenChatPrivacyVersion||0))return;
   pageLoad=window.NavrenPageLoad?.resume();
   const pageCurrent=()=>pageGuard.valid()&&privacyTurn===(globalThis.NavrenChatPrivacyVersion||0);
   // 旧URL只作预填。图谱对象必须由服务器重新核对，不能信任URL里的个人JSON。
@@ -476,10 +594,66 @@ let voiceResumeTimer = null;
 let voiceRequest = 0;
 let voiceInputState = 'idle';
 
+let pendingVoiceNameReview = null;
+const VOICE_NAME_REVIEW_NOTICE='请核对产品名称及份额后发送';
+
+function voiceNameReviewCurrent(review) {
+  return !!review&&review.request===voiceRequest&&review.privacyTurn===(globalThis.NavrenChatPrivacyVersion||0)&&
+    review.guard.valid(review.binding);
+}
+function clearVoiceNameReview({clearDraft=false}={}) {
+  const review=pendingVoiceNameReview;pendingVoiceNameReview=null;
+  if(!review)return;
+  const input=document.getElementById('userInput');
+  if(clearDraft&&input?.value===review.raw_text&&chatDraftRevision===review.draftRevision){
+    input.value='';input.dispatchEvent(new Event('input'));
+  }
+  const status=document.getElementById('voiceStatus');
+  if(status){status.textContent='';status.classList.remove('visible');}
+  updateChatSendState();
+}
+function renderVoiceNameReview() {
+  const review=pendingVoiceNameReview;
+  if(!voiceNameReviewCurrent(review)){clearVoiceNameReview({clearDraft:true});return;}
+  const status=document.getElementById('voiceStatus');
+  if(status){
+    status.textContent=VOICE_NAME_REVIEW_NOTICE+(review.names.length?'。参考名称：'+review.names.join('；'):'');
+    status.classList.add('visible');
+  }
+  updateChatSendState();
+}
+async function checkedVoiceNameReview(raw,metadata) {
+  // 兼容没有该字段的原服务；有字段但无法核对时只保留 raw 供本人编辑，不信任候选名。
+  if(metadata===undefined)return null;
+  const manual={names:[]};
+  const keys=['schema_version','status','reason','notice','names','raw_sha256','public_release_id','hint_only','identity_authority'];
+  if(!metadata||typeof metadata!=='object'||Array.isArray(metadata)||Object.keys(metadata).some(key=>!keys.includes(key))||
+    metadata.schema_version!=='navren.asr-name-review.v1'||!['review_required','not_required'].includes(metadata.status)||
+    metadata.hint_only!==true||metadata.identity_authority!==false||
+    !['possible_public_name_mismatch','no_public_name_mismatch','public_name_hints_unavailable','candidate_assist_limit'].includes(metadata.reason)||
+    typeof metadata.notice!=='string'||metadata.notice.length>512||
+    (metadata.status==='review_required'&&metadata.notice!==VOICE_NAME_REVIEW_NOTICE)||
+    !Array.isArray(metadata.names)||metadata.names.length>3||new Set(metadata.names).size!==metadata.names.length||metadata.names.some(name=>
+      typeof name!=='string'||!name||name!==name.trim()||name.length>160||/[\u0000-\u001f\u007f]/.test(name))||
+    (metadata.status==='not_required'&&(metadata.names.length!==0||metadata.notice!==''||metadata.reason!=='no_public_name_mismatch'))||
+    typeof metadata.raw_sha256!=='string'||!/^[a-f0-9]{64}$/.test(metadata.raw_sha256)||
+    !(typeof metadata.public_release_id==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(metadata.public_release_id)||
+      metadata.public_release_id===null&&metadata.names.length===0))return manual;
+  try {
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+    const hex=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+    if(hex!==metadata.raw_sha256)return manual;
+  }catch(_){return manual;}
+  return metadata.status==='review_required'?{names:[...new Set(metadata.names)]}:null;
+}
+
 function setupVoice() {
   const btn = document.getElementById('voiceBtn');
   btn.dataset.idleContent = btn.innerHTML;
   btn.classList.remove('hidden');
+  // 沿用原发送键；这个标记只区分本人提交输入框，不是业务授权。
+  const send=document.getElementById('sendBtn');
+  if(send)send.onclick=()=>sendMessage(null,null,{manualVoiceReview:true});
   voiceButton();
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') cancelVoice();
@@ -508,12 +682,15 @@ function voiceButton(state = 'idle') {
       state === 'finishing' ? '正在整理识别内容…' : '';
     status.classList.toggle('visible', Boolean(status.textContent));
   }
+  // 正常收起录音器不等于本人取消，仍保留这一轮已绑定的待核对草稿。
+  if(state==='idle'&&voiceNameReviewCurrent(pendingVoiceNameReview))renderVoiceNameReview();
 }
 
 function cancelVoice() {
   voiceConversation = false;
   clearTimeout(voiceResumeTimer);
   voiceRequest++;
+  clearVoiceNameReview({clearDraft:true});
   NavrenSpeech.stop();
   voiceButton();
 }
@@ -525,39 +702,55 @@ async function toggleVoice() {
     return;
   }
   clearTimeout(voiceResumeTimer);
+  clearVoiceNameReview({clearDraft:true});
   voiceConversation = true;
   const request = ++voiceRequest;
+  const binding=chatBinding(),guard=BankClient.guard(),privacyTurn=globalThis.NavrenChatPrivacyVersion||0;
+  const current=()=>request===voiceRequest&&privacyTurn===(globalThis.NavrenChatPrivacyVersion||0)&&guard.valid(binding);
+  if(!binding.workspace_id||!current()){voiceConversation=false;voiceButton();return;}
   const input = document.getElementById('userInput');
   const before = input.value;
-  let voiceMessage=null,recording=null;
+  let voiceMessage=null,recording=null,nameReview;
   try {
     const text = await NavrenSpeech.startASR({ finishOnSentence: false,
-      onState: voiceButton,
+      onState: state=>{if(current())voiceButton(state);},
       onRecording: async clip=>{
-        if(request!==voiceRequest)return;
+        if(!current())return;
         recording=await VoiceMessages.save(clip);
-        if(request!==voiceRequest)return;
+        if(!current())return;
         voiceMessage=addMessage('user','');voiceMessage.dataset.recordingId=recording.id;VoiceMessages.mount(voiceMessage,recording);
         const history=currentChatHistory();
         history.push({role:'user',client_origin:'live',content:'',recording_id:recording.id,...chatBinding(),timestamp:new Date().toISOString()});
         Storage.set('qingzhou_chatHistory',history);scrollToBottom();
       },
-      onTranscript: text => {
-        if (request !== voiceRequest) return;
+      onTranscript: (text,final,review) => {
+        if (!current()) return;
+        if(review!==undefined)nameReview=review;
         input.value = text;
         input.dispatchEvent(new Event('input'));
       }
     });
-    if (request !== voiceRequest) return;
+    if (!current()) return;
     voiceButton();
     if(voiceMessage)VoiceMessages.update(voiceMessage,text);
     if(recording){const history=Storage.get('qingzhou_chatHistory')||[];const entry=history.find(m=>m.recording_id===recording.id);if(entry)entry.content=text;Storage.set('qingzhou_chatHistory',history);}
     if (text.trim()||recording?.media) {
+      const draftValue=input.value,draftRevision=chatDraftRevision;
+      const review=nameReview===undefined?null:await checkedVoiceNameReview(text,nameReview);
+      if(!current())return;
+      const voiceEntry=recording?{recording_id:recording.id,message:voiceMessage,media:recording.media,clip:recording}:null;
+      const editedWhileChecking=input.value!==draftValue||chatDraftRevision!==draftRevision;
+      if(review||editedWhileChecking){
+        if(!editedWhileChecking)input.value=text;
+        pendingVoiceNameReview={raw_text:text,names:review?.names||[],voiceEntry,request,guard,binding,privacyTurn,
+          draftRevision:chatDraftRevision};
+        input.dispatchEvent(new Event('input'));renderVoiceNameReview();input.focus({preventScroll:true});return;
+      }
       input.value = text;
-      await sendMessage(recording?{recording_id:recording.id,message:voiceMessage,media:recording.media,clip:recording}:null);
+      await sendMessage(voiceEntry);
     } else { voiceConversation = false; showToast('未取得可保存的录音，请重新录音。'); }
   } catch (error) {
-    if (request !== voiceRequest) return;
+    if (!current()) return;
     voiceButton();
     voiceConversation = false;
     if (error.name === 'AbortError') { input.value = before; input.dispatchEvent(new Event('input')); }
@@ -588,13 +781,13 @@ function renderPrivacyGuide() {
   const copy = english ? [
     'To tailor its banking and everyday financial services to you, Navren learns about your investment preferences and assets during conversations and builds a personal profile.',
     'Conversations and demo account records are stored on this computer. Account summaries needed to answer your questions are sent to DeepSeek and GLM.',
-    'When you use voice features, recordings and text to be read aloud are sent to Alibaba Cloud Model Studio for processing. Original chat images and audio are stored privately with your account for playback after sign-in.',
+    'Voice recordings are transcribed locally by SenseVoice, with cloud transcription disabled. Text approved for reading aloud is sent to the official Zhipu GLM TTS service. Original chat attachments are stored privately with your account; extracted document text needed to answer is sent to DeepSeek and GLM as user-provided material.',
     'Your data will not be used for other purposes without your confirmation.',
     'Manage conversation permissions in Profile. Change demo risk and funding settings in Accounts.'
   ] : [
     '为提供更贴合你的银行与生活财务服务，Navren会在对话中了解您的投资偏好和资产情况，并建立个人档案。',
     '对话与模拟账户记录保存在本机；回答问题所需的账户摘要会发送至 DeepSeek 和 GLM',
-    '使用语音时，录音和待朗读文字发送至阿里云百炼处理；聊天图片和原始音频随本人账户私密保存，登录后可回看和回放',
+    '录音仅在本机通过 SenseVoice 转写，不启用云端转写；经核准的待朗读正文发送至智谱官方 GLM TTS。聊天附件随本人账户私密保存；回答问题所需的文档提取正文以本人提供资料的身份发送至 DeepSeek 和 GLM',
     '未经您确认，不会用于其他用途',
     '聊天授权在「我的」中管理；模拟风险与资金设置请在「账户」中修改'
   ];
@@ -625,57 +818,50 @@ async function checkVoiceGuide() {
   }
 }
 
-// ── Image Upload ──
-function triggerUpload() {
-  document.getElementById('imageInput').click();
-}
-
+// 文件选择与剪贴板共用原件队列；点击发送前不上传。
+function triggerUpload() {document.getElementById('imageInput').click();}
 function handleImageUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  if(!['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)||file.size>10485760||file.size<1){
-    showToast('请选择 10 MB 以内的 PNG、JPEG、WebP 或 GIF 图片。');event.target.value='';return;
-  }
-  const guard=BankClient.guard(),request=chatRequestVersion;
-  if(!guard.valid())return;
-  const reader = new FileReader();activeChatImageReaders.add(reader);
-  reader.onload = (e) => {
-    if(request!==chatRequestVersion||!guard.valid())return;
-    pendingImage = e.target.result;
-    pendingImageFile = file;
-    document.getElementById('previewImg').src = pendingImage;
-    document.getElementById('imagePreview').classList.remove('hidden');
-    updateChatSendState();
-  };
-  reader.onloadend=()=>activeChatImageReaders.delete(reader);
-  reader.readAsDataURL(file);
+  window.NavrenChatAttachments?.addFiles(Array.from(event.target.files||[]));event.target.value='';
 }
-
 function removeImage() {
-  pendingImage = null;
-  pendingImageFile = null;
-  document.getElementById('imagePreview').classList.add('hidden');
-  document.getElementById('imageInput').value = '';
+  window.NavrenChatAttachments?.clear();
+  const input=document.getElementById('imageInput');if(input)input.value='';
   updateChatSendState();
 }
+window.NavrenChatAttachments?.init({onChange:()=>{chatDraftRevision++;updateChatSendState();},notify:message=>showToast(message)});
 
 // ── Send Message ──
 async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}) {
   const input = document.getElementById('userInput');
   const text = retrySnapshot ? retrySnapshot.text : input.value.trim();
-  if(chatSending||!chatArchiveReady||chatArchiveBusy||typeof text!=='string')return;
+  if(chatSending){showToast('当前问题正在处理，请稍候。');return;}
+  if(newConversationStarting){showToast('新对话正在准备，请稍候。');return;}
+  if(conversationScopeInvalid){showToast('对话范围已失效，请开始新对话。');return;}
+  if(!chatArchiveReady||chatArchiveBusy){showToast('聊天记录尚未准备完成，请稍候或重新读取。');return;}
+  if(typeof text!=='string'){showToast('问题内容无法读取，请重新输入。');return;}
+  const requestScope=currentConversationScope();
+  if(requestScope===null){showToast('对话尚未建立，请点击新对话后再试。');return;}
+  if(retrySnapshot&&retrySnapshot.internal_choice!==true&&(retrySnapshot.conversation_scope??null)!==requestScope){
+    showToast('这个问题属于之前的对话，请在当前对话重新提问。');return;
+  }
+  let voiceReview=null;
+  if(!voiceEntry&&!retrySnapshot&&options.internalChoice!==true&&pendingVoiceNameReview){
+    if(!voiceNameReviewCurrent(pendingVoiceNameReview)){clearVoiceNameReview({clearDraft:true});return;}
+    if(options.manualVoiceReview!==true){renderVoiceNameReview();return;}
+    if(!text.trim())return;
+    voiceReview=pendingVoiceNameReview;voiceEntry=voiceReview.voiceEntry;voiceConversation=true;
+  }
   const reference = retrySnapshot ? cloneChatReference(retrySnapshot.reference) : currentChatReference();
   const internalChoice=options.internalChoice===true;
-  const imageToSend=internalChoice?null:retrySnapshot?(typeof retrySnapshot.image==='string'?retrySnapshot.image:null):pendingImage;
-  const imageFileToSend=internalChoice?null:retrySnapshot?retrySnapshot.imageBlob||null:pendingImageFile;
+  const attachmentFiles=internalChoice?[]:retrySnapshot?(retrySnapshot.attachmentFiles|| (retrySnapshot.imageBlob?[retrySnapshot.imageBlob]:[])):(window.NavrenChatAttachments?.files()||[]);
   const voiceClip=internalChoice?null:voiceEntry?.clip||retrySnapshot?.voiceClip||null;
-  if(!text.trim()&&!reference&&!imageFileToSend&&!voiceEntry?.recording_id&&!voiceClip?.blob)return;
-  if(retrySnapshot?.had_image&&!imageToSend){
-    showToast('原问题包含图片，请重新附上图片后使用发送按钮。');return;
+  if(!text.trim()&&!reference&&!attachmentFiles.length&&!voiceEntry?.recording_id&&!voiceClip?.blob)return;
+  if((retrySnapshot?.had_attachments||retrySnapshot?.had_image)&&!attachmentFiles.length){
+    showToast('原问题包含附件，请重新添加原附件后发送。');return;
   }
-  const requestSnapshot = Object.freeze({text,reference:reference?JSON.parse(JSON.stringify(reference)):null,
-    internal_choice:internalChoice,
-    image:imageToSend,imageBlob:imageFileToSend,had_image:Boolean(imageToSend),voiceClip,had_audio:Boolean(voiceClip?.blob||voiceEntry?.recording_id),
+  const requestSnapshot = Object.freeze({text,conversation_scope:requestScope,reference:reference?JSON.parse(JSON.stringify(reference)):null,
+    internal_choice:internalChoice,attachmentFiles:Object.freeze([...attachmentFiles]),had_attachments:attachmentFiles.length>0,
+    had_image:attachmentFiles.some(file=>file.type.startsWith('image/')),voiceClip,had_audio:Boolean(voiceClip?.blob||voiceEntry?.recording_id),
     return_view:JSON.parse(JSON.stringify(retrySnapshot?.return_view||window.NavrenChatReturnView||{page:'chat',view:'home'}))});
   // 显式重试只使用冻结请求；即使新草稿内容相同，也不消费输入区。
   let consumesComposer=!internalChoice&&!retrySnapshot;
@@ -695,6 +881,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     (!turnGuard||turnGuard.valid(binding));
   clearTimeout(voiceResumeTimer);
   voiceRequest++;
+  if(voiceReview)voiceReview.request=voiceRequest;else clearVoiceNameReview();
   const voiceTurn = voiceRequest;
   const userMessageId=voiceEntry?.recording_id||newChatMessageId();
   NavrenSpeech.stop();
@@ -704,15 +891,15 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
   const media=[];
   updateChatSendState();
   try{
-    if(imageFileToSend){
-      if(!window.NavrenChatMedia)throw Error('图片保存服务暂不可用，请稍后重试。');
-      let descriptor=chatImageUploads.get(imageFileToSend);
+    for(const file of attachmentFiles){
+      if(!window.NavrenChatMedia)throw Error('附件保存服务暂不可用，请稍后重试。');
+      let descriptor=chatAttachmentUploads.get(file);
       if(!descriptor){
-        let uploadKey=chatImageUploadKeys.get(imageFileToSend);
-        if(!uploadKey){uploadKey=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');chatImageUploadKeys.set(imageFileToSend,uploadKey);}
-        descriptor=await NavrenChatMedia.upload(imageFileToSend,{uploadKey});
+        let uploadKey=chatAttachmentUploadKeys.get(file);
+        if(!uploadKey){uploadKey=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');chatAttachmentUploadKeys.set(file,uploadKey);}
+        descriptor=await NavrenChatMedia.upload(file,{uploadKey});
         if(!turnCurrent())return;
-        chatImageUploads.set(imageFileToSend,descriptor);
+        chatAttachmentUploads.set(file,descriptor);
       }
       media.push(NavrenChatMedia.validate(descriptor));
     }
@@ -731,28 +918,29 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     return;
   }finally{
     // 成功后由本轮继续持有发送锁；取消/失败时立即释放，不留下虚假的已发送消息。
-    if(!turnCurrent()||media.length!==(Number(Boolean(imageFileToSend))+Number(Boolean(voiceEntry?.recording_id||voiceClip?.blob)))){
-      if(requestVersion===chatRequestVersion){chatSending=false;syncChatReference();updateChatSendState();}
+    if(!turnCurrent()||media.length!==(attachmentFiles.length+Number(Boolean(voiceEntry?.recording_id||voiceClip?.blob)))){
+      if(requestVersion===chatRequestVersion){
+        chatSending=false;syncChatReference();updateChatSendState();
+        if(voiceReview&&pendingVoiceNameReview===voiceReview&&voiceNameReviewCurrent(voiceReview))renderVoiceNameReview();
+      }
     }
   }
   consumesComposer=consumesComposer&&chatDraftRevision===frozenDraftRevision&&chatReferenceRevision===frozenReferenceRevision&&
-    (!imageFileToSend||pendingImageFile===imageFileToSend);
+    (!attachmentFiles.length||window.NavrenChatAttachments?.matches(attachmentFiles));
+  if(voiceReview&&pendingVoiceNameReview===voiceReview)clearVoiceNameReview();
 
-  const userContent = imageToSend
-    ? `<img src="${imageToSend}" style="max-width:200px;border-radius:8px;margin-bottom:6px;display:block;">${chatUserMessageHtml(text, requestSnapshot.reference,requestSnapshot.return_view)}`
-    : chatUserMessageHtml(text, requestSnapshot.reference,requestSnapshot.return_view);
+  const userContent = chatUserMessageHtml(text, requestSnapshot.reference,requestSnapshot.return_view);
   let userMessage=voiceEntry?.message||null;
   if(!voiceEntry?.recording_id){userMessage=addMessage('user', userContent);userMessage.dataset.clientMessageId=userMessageId;}
   if(!voiceEntry?.recording_id&&voiceClip?.blob){VoiceMessages.mount(userMessage,{...voiceClip,media:media.find(item=>item.kind==='audio')},text);renderChatVoiceReference(userMessage,requestSnapshot.reference,requestSnapshot.return_view);}
-  if(imageToSend&&(voiceEntry?.recording_id||voiceClip?.blob)&&userMessage){
-    const image=document.createElement('img');image.src=imageToSend;image.alt='聊天图片';
-    image.style.cssText='max-width:200px;border-radius:8px;margin-bottom:6px;display:block';userMessage.querySelector('.bubble')?.prepend(image);
-  }
+  window.NavrenChatAttachments?.mountFiles(userMessage,attachmentFiles,media);
   if(consumesComposer){input.value='';if(requestSnapshot.reference)clearChatReference();removeImage();}
+  else if(!internalChoice&&!retrySnapshot)window.NavrenChatAttachments?.consume(attachmentFiles);
   updateChatSendState();
 
   // 保存用户消息到历史（在所有 early return 之前）
   if(voiceEntry?.recording_id){
+    VoiceMessages.update(voiceEntry.message,text);
     const history=currentChatHistory(),entry=history.findLast(item=>item.recording_id===voiceEntry.recording_id);
     if(entry){entry.content=text;entry.attachments=media;entry.reference_snapshot=requestSnapshot.reference;entry.request_snapshot={...(entry.request_snapshot||{}),return_view:requestSnapshot.return_view};Storage.set('qingzhou_chatHistory',history);}
     const message=voiceEntry.message||[...document.querySelectorAll('#chatMessages .message.user')].findLast(item=>item.dataset.recordingId===voiceEntry.recording_id);
@@ -776,29 +964,37 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
       // 每次发送及重试都重新解析同一对象版本并创建新票据；不提交 request_mode。
       const ticket=await BankClient.post('/page-contexts',{question:requestSnapshot.text,
         reference:chatReferencePacket(requestSnapshot.reference),return_view:requestSnapshot.return_view});
-      if(!turnCurrent()){loadingMsg.remove();chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
+      if(!turnCurrent()){loadingMsg.remove();if(requestVersion===chatRequestVersion)chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
       if(typeof ticket.context_id!=='string'||!ticket.context_id)throw new Error('关联资料票据暂时无法核对。');
       pageContextId=ticket.context_id;
     }
-    if(!turnCurrent()){loadingMsg.remove();chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
+    if(!turnCurrent()){loadingMsg.remove();if(requestVersion===chatRequestVersion)chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
     // 一旦提交回合，上传ID可能已被服务端绑定；显式重试重新上传原Blob，不跨请求重绑旧ID。
-    if(imageFileToSend){chatImageUploads.delete(imageFileToSend);chatImageUploadKeys.delete(imageFileToSend);}
+    for(const file of attachmentFiles){chatAttachmentUploads.delete(file);chatAttachmentUploadKeys.delete(file);}
     result = await Api.sendMessage(requestSnapshot.text, currentMode, null, sentiment,
-      event => renderRuntimeEvent(loadingMsg,event),{page_context_id:pageContextId,isolated_text:internalChoice,media_ids:media.map(item=>item.media_id)});
+      event => renderRuntimeEvent(loadingMsg,event),{page_context_id:pageContextId,isolated_text:internalChoice,media_ids:media.map(item=>item.media_id),conversation_scope:requestSnapshot.conversation_scope});
   } catch (e) {
-    console.error('sendMessage error:', e);
-    result = { reply: '抱歉，系统遇到了一个小问题，请稍后再试。\n\n⚠️ 理财非存款，产品有风险，投资须谨慎。', isFallback: true };
+    result = typeof agentFailureResponse==='function' ? agentFailureResponse(e) : {bank:true,reply:'本次处理未完成，原因暂无法确定，请查看相关记录后再继续。',isFallback:true};
   }
 
   // 最终答复与确认组件真正插入后，再由 finishRuntimeProgress 移除本轮进度。
-  chatSending=false;
+  if(requestVersion===chatRequestVersion)chatSending=false;
   syncChatReference();
   if(!turnCurrent()){loadingMsg.remove();taskRequest?.component.destroy();return;}
+  // Keep an obsolete scope visible but unsendable until the user opens a new
+  // conversation. Never clear or silently fall back to workspace history.
+  if(result?.isFallback===true&&['CONVERSATION_SCOPE_REQUIRED','CONVERSATION_SCOPE_UPGRADE_REQUIRED',
+      'CONVERSATION_SCOPE_STALE','CONVERSATION_SCOPE_INVALID','CONVERSATION_SCOPE_CURRENT_TURN_REQUIRED',
+      'CONVERSATION_SCOPE_MEMBERSHIP_INVALID','CONVERSATION_SCOPE_CONFLICT'].includes(result.error?.code)&&
+      requestSnapshot.conversation_scope===currentConversationScope()){
+    conversationScopeInvalid=true;updateChatSendState();
+  }
   try {
   result.reply=NavrenPresentation.text(result.reply);
   const attachmentReceived=result.attachment_receipt?.status==='archived'&&result.attachment_receipt.request_id===result.bank_response_id&&
     result.workspace_id===binding.workspace_id&&result.privacy_revision===binding.privacy_revision;
-  if(attachmentReceived)voiceConversation=false;
+  const reviewedVoiceReply=!!voiceReview&&result.isFallback!==true&&typeof result.speech_receipt==='string'&&!!result.speech_receipt.trim();
+  if(attachmentReceived&&!reviewedVoiceReply)voiceConversation=false;
   const replyProjection=verifiedReplyProjection(result,binding);
   if(replyProjection?.text)result.reply=replyProjection.text;
   let replyHtml = renderReplyText(result.reply);
@@ -813,11 +1009,14 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
   msgEl.dataset.clientMessageId=newChatMessageId();
   msgEl.dataset.bankResponseId=result.bank_response_id||'';
   msgEl.dataset.speechReceipt=result.speech_receipt||'';
-  if(attachmentReceived){msgEl.querySelector('.message-audio-control')?.remove();msgEl.querySelector('.bubble')?.classList.remove('has-audio-control');}
+  if(attachmentReceived&&!reviewedVoiceReply){msgEl.querySelector('.message-audio-control')?.remove();msgEl.querySelector('.bubble')?.classList.remove('has-audio-control');}
   const unifiedTask=window.NavrenTaskChat?.render(msgEl,result,taskRequest)||false;
   if(!unifiedTask&&replyProjection)renderReplyProjection(msgEl,replyProjection,binding);
   if(unifiedTask)attachMessageSpeech(msgEl,result.reply);
   if(result.isFallback&&!attachmentReceived){
+    if(['AGENT_TIMEOUT','AGENT_CONNECTION_INTERRUPTED','AGENT_STREAM_INVALID','AGENT_HTTP_401','AGENT_HTTP_403','AGENT_HTTP_413','AGENT_HTTP_429','AGENT_HTTP_ERROR','AGENT_UNKNOWN'].includes(result.error?.code)){
+      const note=document.createElement('p');note.className='task-history-note';note.textContent='本次消息或答复是否已保存尚未确认，可重新读取聊天记录核对。';msgEl.querySelector('.bubble')?.append(note);
+    }
     if(internalChoice){
       const note=document.createElement('p');note.className='task-history-note';note.textContent=window.NavrenI18n?.language==='en'?'This choice could not be processed. Please ask again.':'此选择未继续处理，请重新查询。';
       msgEl.querySelector('.bubble')?.append(note);
@@ -845,7 +1044,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
 
   // 语音播报与每条回复的朗读按钮共用控制器。
   const voiceEnabled = Storage.get('qingzhou_voiceEnabled');
-  if (!attachmentReceived&&!result.task_result_rejected&&(voiceEnabled || voiceConversation) && voiceTurn === voiceRequest) {
+  if ((!attachmentReceived||reviewedVoiceReply)&&!result.task_result_rejected&&(voiceEnabled || voiceConversation) && voiceTurn === voiceRequest) {
     speakMessage(msgEl, result.reply, scheduleVoiceResume);
   }
 
@@ -897,7 +1096,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
   checkRiskReassessmentNudge(msgEl);
 
   // 重新读取 history（并发调用时避免覆盖其他 sendMessage 写入的数据）
-  finishRuntimeProgress(loadingMsg, msgEl, result);
+  finishRuntimeProgress(loadingMsg, msgEl, result, attachmentReceived && result.attachment_only_receipt === true);
   const latestHistory = currentChatHistory();
   const originalQuestion=latestHistory.findLast(row=>row.role==='user'&&(row.client_message_id===userMessageId||voiceEntry?.recording_id&&row.recording_id===voiceEntry.recording_id));
   if(originalQuestion&&result.bank_response_id){originalQuestion.bank_response_id=result.bank_response_id;if(userMessage)userMessage.dataset.bankResponseId=result.bank_response_id;}
@@ -917,7 +1116,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     client_origin:'live',
     client_message_id:msgEl.dataset.clientMessageId,
     consumed_reply_controls:msgEl.__navrenConsumedReplyControls||{},
-    request_snapshot: {text:requestSnapshot.text,reference:requestSnapshot.reference,return_view:requestSnapshot.return_view,internal_choice:requestSnapshot.internal_choice,had_image:requestSnapshot.had_image,had_audio:requestSnapshot.had_audio},
+    request_snapshot: {text:requestSnapshot.text,conversation_scope:requestSnapshot.conversation_scope,reference:requestSnapshot.reference,return_view:requestSnapshot.return_view,internal_choice:requestSnapshot.internal_choice,had_image:requestSnapshot.had_image,had_audio:requestSnapshot.had_audio},
     presentation_ref:localSocialReply ? null : (window.NavrenPresentationBridge?.descriptor?.(result)||null),
     ...binding,
     content: result.reply,
@@ -1207,13 +1406,13 @@ function renderRuntimeEvent(message, event) {
   scrollToBottom();
 }
 
-function finishRuntimeProgress(loadingMessage, replyMessage, result = {}) {
+function finishRuntimeProgress(loadingMessage, replyMessage, result = {}, attachmentOnlyReceiptVerified = false) {
   const state = runtimeActivityStates.get(loadingMessage);
   if (state) {
     state.finished = true; state.panel.remove();
     runtimeActivityStates.delete(loadingMessage);
     // 失败只保留简短状态；具体原因和重试沿用真实答复，不从参数或异常文本拼接。
-    if (state.runError || result.isFallback === true || result.task_result_rejected === true) {
+    if (state.runError || (result.isFallback === true && attachmentOnlyReceiptVerified !== true) || result.task_result_rejected === true) {
       const notice = document.createElement('p'); notice.className = 'runtime-panel runtime-activity-notice';
       notice.textContent = '本次处理未完成';
       (replyMessage.querySelector('.bubble') || replyMessage).prepend(notice);
@@ -1550,10 +1749,10 @@ function formatServiceMoney(minor) {
 function setSpeechControl(button, state) {
   const muted = state === 'idle' && (button.dataset.muted === 'true' || !Storage.get('qingzhou_voiceEnabled'));
   const icons = {
-    idle: '<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
-    muted: '<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m3 3 18 18"/>',
-    speaking: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>',
-    preparing: '<circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/>'
+    idle: '<path d="M11 5.5 6.8 9H4.5v6h2.3l4.2 3.5z"/><path d="M15 9a4.5 4.5 0 0 1 0 6m2.7-9a8.5 8.5 0 0 1 0 12"/>',
+    muted: '<path d="M11 5.5 6.8 9H4.5v6h2.3l4.2 3.5z"/><path d="M15 9a4.5 4.5 0 0 1 0 6"/>',
+    speaking: '<rect x="7" y="7" width="10" height="10" rx="2.5" fill="currentColor" stroke="none"/>',
+    preparing: '<circle cx="6" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.35" fill="currentColor" stroke="none"/>'
   };
   button.dataset.state = muted ? 'muted' : state;
   button.setAttribute('aria-pressed', state === 'idle' ? 'false' : 'true');
@@ -1809,7 +2008,7 @@ function bookmarkIcon(button, saved) {
   button.classList.add('message-bookmark-control');
   button.classList.remove('tts-btn');
   button.style.color='';button.style.borderColor='';button.style.background='';
-  button.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24" fill="'+(saved?'currentColor':'none')+'" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.7 6.3.9-4.55 4.45 1.07 6.28L12 17.36l-5.62 2.97 1.07-6.28L2.9 9.6l6.3-.9Z"/></svg>';
+  button.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24" fill="'+(saved?'currentColor':'none')+'" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 4.25h9a1.75 1.75 0 0 1 1.75 1.75v13.7L12 16.05 5.75 19.7V6A1.75 1.75 0 0 1 7.5 4.25Z"/></svg>';
   button.title=saved?'取消收藏':'收藏此回复';
   button.setAttribute('aria-label',button.title);button.setAttribute('aria-pressed',String(saved));
   button.closest('.bubble')?.classList.add('has-message-actions');
@@ -1942,7 +2141,7 @@ function extractProfileFromMessage(text) {
 function handleKeyDown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    sendMessage();
+    sendMessage(null,null,{manualVoiceReview:true});
   }
 }
 
@@ -2530,7 +2729,9 @@ function chatReferencePacket(ref){
 }
 function updateChatSendState(){
   const button=document.getElementById('sendBtn'),input=document.getElementById('userInput');
-  if(button)button.disabled=chatSending||!chatArchiveReady||chatArchiveBusy||(!input?.value.trim()&&!currentChatReference()&&!pendingImageFile);
+  if(button)button.disabled=chatSending||newConversationStarting||conversationScopeInvalid||currentConversationScope()===null||!chatArchiveReady||chatArchiveBusy||(!input?.value.trim()&&!currentChatReference()&&!(window.NavrenChatAttachments?.files().length));
+  const newButton=document.getElementById('newConversationBtn');
+  if(newButton){newButton.disabled=chatSending||newConversationStarting;newButton.setAttribute('aria-busy',String(newConversationStarting));}
 }
 function clearChatReference(){
   chatReferenceRevision++;
@@ -2540,7 +2741,10 @@ function clearChatReference(){
 }
 function retryChatRequest(snapshot,binding,message=null){
   const identity=chatBinding();
-  if(chatSending||binding.workspace_id!==identity.workspace_id||binding.privacy_revision!==identity.privacy_revision)return;
+  if(chatSending||newConversationStarting||binding.workspace_id!==identity.workspace_id||binding.privacy_revision!==identity.privacy_revision)return;
+  if((snapshot.conversation_scope??null)!==currentConversationScope()){
+    showToast('这个问题属于之前的对话，请在当前对话重新提问。');return;
+  }
   if(snapshot.internal_choice===true){
     if(typeof showToast==='function')showToast(window.NavrenI18n?.language==='en'?'This choice has expired. Please ask again.':'此选择已失效，请重新查询。');
     return;
@@ -2555,7 +2759,7 @@ function retryChatRequest(snapshot,binding,message=null){
   if(message?.__navrenConsumedReplyControls?.retry===true)return;
   if(message&&!consumeReplyControl(message,'retry',binding))return;
   // 重试直接使用冻结请求；不会先把旧引用放进另写的草稿。
-  sendMessage(null,{text:snapshot.text,reference:ref,return_view:snapshot.return_view,internal_choice:snapshot.internal_choice===true,
+  sendMessage(null,{text:snapshot.text,conversation_scope:snapshot.conversation_scope??null,reference:ref,return_view:snapshot.return_view,internal_choice:snapshot.internal_choice===true,
     image:snapshot.image,imageBlob:snapshot.imageBlob,had_image:snapshot.had_image===true,
     voiceClip:snapshot.voiceClip,had_audio:snapshot.had_audio===true},
     {internalChoice:snapshot.internal_choice===true});

@@ -15,9 +15,16 @@ import time
 import sqlite3
 
 
+SMS_VERIFICATION_REASONS = frozenset({'SMS_CODE_REJECTED', 'SMS_CODE_INVALID',
+    'SMS_CHALLENGE_INVALID', 'SMS_EXPIRED', 'SMS_TIMEOUT',
+    'SMS_VERIFY_UNAVAILABLE', 'FINANCIAL_WRITE_LOCKED'})
+
+
 class SmsFailure(Exception):
-    def __init__(self, code, message, status=400):
+    def __init__(self, code, message, status=400, *, same_challenge_retry=False):
         self.code, self.message, self.status = code, message, status
+        # This is server-owned eligibility, never a general provider retry hint.
+        self.same_challenge_retry = code == 'SMS_CODE_REJECTED' and same_challenge_retry is True
         super().__init__(message)
 
 
@@ -200,9 +207,14 @@ class AliyunSmsTransport:
         if self.clock() >= deadline:
             raise SmsFailure('SMS_TIMEOUT', '验证码核验已超时，请重新发送。', 504)
         if (body.get('Success') is True and body.get('Code') == 'OK'
-                and isinstance(body.get('Model'), dict) and body['Model'].get('VerifyResult') == 'PASS'):
-            return hashlib.sha256((str(body.get('RequestId', '')) + ':' + purpose + ':' + reference).encode()).hexdigest()
-        return None
+                and isinstance(body.get('Model'), dict)):
+            result = body['Model'].get('VerifyResult')
+            if result == 'PASS':
+                return hashlib.sha256((str(body.get('RequestId', '')) + ':' + purpose + ':' + reference).encode()).hexdigest()
+            if result == 'UNKNOWN':
+                # The documented negative result; no proof is issued.
+                return None
+        raise SmsFailure('SMS_VERIFY_UNAVAILABLE', '验证码核验暂时不可用，请重新发送。', 503)
 
 
 def load_sms_transport(config_path=None):
