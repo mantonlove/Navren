@@ -1385,6 +1385,39 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
                     check_current()
                     target.sendall(chunk)
 
+    def _public_market_proxy(self):
+        # No browser cookies, identity, authorization or other caller headers
+        # are forwarded.  Only the dedicated read-only market projection can
+        # be requested; response body is bounded and errors are generic.
+        from public_market_projection import route_target, PublicProjectionError
+        try:
+            route_target(self.path)
+        except PublicProjectionError as error:
+            raise AuthError('市场请求地址无效。',error.status,error.code) from None
+        connection=client.HTTPConnection('127.0.0.1',self.server.upstream_port,timeout=5)
+        try:
+            connection.request('GET',self.path,headers={'Accept':'application/json'})
+            response=connection.getresponse()
+            if response.status!=200:
+                status=response.status if response.status in (400,404,409) else 503
+                raise AuthError('市场资料暂不可用。',status,'PUBLIC_MARKET_UNAVAILABLE')
+            content_type=response.getheader('Content-Type','').split(';',1)[0].strip().lower()
+            body=response.read(512*1024+1)
+            if content_type!='application/json' or len(body)>512*1024:
+                raise AuthError('市场资料暂不可用。',503,'PUBLIC_MARKET_UNAVAILABLE')
+            json.loads(body.decode('utf-8'))
+        except (OSError, UnicodeDecodeError, ValueError, client.HTTPException):
+            raise AuthError('市场资料暂不可用。',503,'PUBLIC_MARKET_UNAVAILABLE') from None
+        finally:
+            connection.close()
+        self.send_response(200)
+        self.send_header('Content-Type','application/json; charset=utf-8')
+        self.send_header('Cache-Control','no-store')
+        self.send_header('X-Content-Type-Options','nosniff')
+        self.send_header('Content-Length',str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _route(self):
         try:
             self._origin_check()
@@ -1393,6 +1426,11 @@ class WelcomeHandler(server.SimpleHTTPRequestHandler):
                 raise AuthError('页面地址无效。', 404)
             if path.startswith(AUTH_PREFIX):
                 self._auth(path)
+                return
+            if path.startswith('/api/public-market/v1/'):
+                if self.command != 'GET':
+                    raise AuthError('市场公开接口仅支持读取。',405,'PUBLIC_MARKET_GET_ONLY')
+                self._public_market_proxy()
                 return
             if path in PUBLIC_ROUTES or path.startswith('/assets/vendor/welcome-three/'):
                 if self.command not in ('GET', 'HEAD'):

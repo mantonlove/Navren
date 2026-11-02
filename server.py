@@ -145,6 +145,8 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.server.finance.assert_publication_current()
         self.send_response(status)
         self.send_header('Content-Type','application/json; charset=utf-8')
+        if urlsplit(self.path).path.startswith('/api/public-market/v1/'):
+            self.send_header('Cache-Control','no-store')
         self.send_header('Content-Length',str(len(body)))
         self.send_header('X-Content-Type-Options','nosniff')
         if binding:
@@ -208,6 +210,17 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path.startswith('/api/public-market/v1/'):
+            from public_market_projection import dispatch, PublicProjectionError
+            from market_daily import MarketDailyError
+            try:
+                result=dispatch(self.server.market,self.path)
+                self._finance_json(200,result)
+            except (PublicProjectionError,MarketDailyError) as error:
+                self._finance_json(error.status,{'error':{'code':error.code,'message':'市场资料暂不可用。'}})
+            except (KeyError,ValueError,TypeError):
+                self._finance_json(503,{'error':{'code':'PUBLIC_MARKET_UNAVAILABLE','message':'市场资料暂不可用。'}})
+            return
         if self._dispatch_chat_media(): return
         if path.startswith('/api/market/history/'):
             try:

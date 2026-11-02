@@ -1,0 +1,36 @@
+{
+  "repository": "https://github.com/mantonlove/Navren",
+  "branch": "main",
+  "base_commit": "713613b9b9745a7d2b7277f9cff2538cc166d8dc",
+  "files": {
+    "public_market_projection.py": "06edf30ae2aa6637a98139a76579e753b8f67484d0c5525f94c9f6b53698d371",
+    "server.py": "e382fe8d2a658be3682dc07110000d2dbd95468e8a0dc64bce0eaa149543321b",
+    "welcome_auth.py": "29a38d21da8053c946766c0f31066572ac468933d6bfa685a289a2f089d7cee7",
+    "deployment/public-market-v1/live/server.py": "2058c61b0b0a1edbaddb88c74e5cc53d00567e6c13bb3e5b413f919df111380e",
+    "deployment/public-market-v1/live/welcome_auth.py": "0ed5a9b068e670b758a6c686bfcec86922014ac83441947e9bbf4b758312392a",
+    "deployment/public-market-v1/nginx/location.conf": "e9d8964207c01ae1b33b7ec396d8900bfee2dd02136a97f72681c4d9e13a62c5",
+    "deployment/public-market-v1/nginx/site.conf": "0189547d168ed9c7e21bc8dfe009cb85a53056808cefdf5465f3751357652b26",
+    "deployment/public-market-v1/nginx/zones.conf": "331fce7002714378e019e7a8d99b991de60477cf33d36b3077a4055eb415c0c7"
+  },
+  "deployment_targets": {
+    "/opt/navren/releases/navren-20261022-market-cutover-1/app/server.py": "deployment/public-market-v1/live/server.py",
+    "/opt/navren/releases/navren-20261022-market-cutover-1/app/welcome_auth.py": "deployment/public-market-v1/live/welcome_auth.py",
+    "/opt/navren/releases/navren-20261022-market-cutover-1/app/public_market_projection.py": "public_market_projection.py",
+    "/etc/nginx/conf.d/navren-public-market.conf": "deployment/public-market-v1/nginx/zones.conf",
+    "/etc/nginx/snippets/navren-public-market.conf": "deployment/public-market-v1/nginx/location.conf",
+    "/etc/nginx/sites-available/navren-public": "deployment/public-market-v1/nginx/site.conf"
+  },
+  "before_sha256": {
+    "server.py": "dd0571b42b6358909357a9e7ae31202390280bde9837410b5a14b301ed0b1f8a",
+    "welcome_auth.py": "d9fd891f0b771cd8b9ff3f44ba90983ab7524c36e3d4e26dda58f3c23af8c9ec"
+  },
+  "scope": "anonymous-public-market-get-only",
+  "market_dependencies": {
+    "market_content": "dac14d20f788ec1d44ffa61ddabceca541727647eacb146787ee8c934c54ec8b",
+    "market_daily": "6950d8bcf1eec84e49410942b8b2d0ac4b52f01e591bea1628830895f26e8ee1",
+    "market_semantic_checks": "290d9056f7e042b9937b0dc86027a8eca18a46ee682d6fb412be03cda7ab7ea8",
+    "market_source_attribution": "6ae41479f28ee05f9093d08e43e31d6f01e1ebd59af02dce1aaf58e5542383e5",
+    "market_sources": "6203942ac2753ecab5266568efbfc4fde7df6738a469147378fa2a38954e4b0e",
+    "market_statistical_identity": "5cf550d0fb7dc6692dea6242b8f323cd693c31487c34910e38bca7e27fdfb3ab"
+  }
+}
