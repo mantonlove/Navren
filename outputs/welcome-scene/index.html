@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN" class="navren-welcome">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>Navren · 欢迎画面</title>
+  <link rel="icon" href="/assets/brand/navren-icon.png" type="image/png">
+  <link rel="stylesheet" href="/css/welcome_scene.css">
+  <script type="importmap">
+  {"imports":{"three":"/assets/vendor/welcome-three/build/three.module.js","three/addons/":"/assets/vendor/welcome-three/examples/jsm/"}}
+  </script>
+  <link rel="stylesheet" href="/css/navigation_gestures.css?ui=dc4db77b8cb5">
+  <link rel="stylesheet" href="/css/quiet_focus.css?v=fb63a47fe877">
+</head>
+<body>
+  <main class="welcome-stage" aria-label="Navren 的双蓝曲面与微光水面">
+    <div class="welcome-scene-frame" id="welcomeSceneFrame">
+      <div id="welcomeFallback" class="welcome-scene-fallback" aria-hidden="true"></div>
+      <canvas id="welcomeScene" class="welcome-scene-canvas" aria-label="自然日光下，Navren 的双蓝曲面映在缓慢起伏的水中。" role="img"></canvas>
+    </div>
+    <section class="welcome-copy" aria-label="Navren 品牌主张">
+      <div class="welcome-wordmark">
+        <img src="/assets/brand/navren-wordmark.png" width="2172" height="724" alt="Navren" decoding="async">
+      </div>
+      <div class="welcome-content">
+      <p class="welcome-eyebrow">你的银行与生活助手</p>
+      <h1 class="welcome-headline">
+        <span>让每一笔钱，</span>
+        <span>靠近你想要的生活。</span>
+      </h1>
+      <p class="welcome-description">看清资产，理顺收支。<br>从一段对话，开始更从容的资金安排。</p>
+      <button id="welcomeEnter" class="welcome-enter" type="button" aria-label="开启 Navren">
+        <span class="welcome-enter-label">开启 Navren</span>
+        <span class="welcome-enter-icon" aria-hidden="true">
+          <svg viewBox="0 0 20 20" width="20" height="20" fill="none">
+            <path d="M3.5 10h12M10 4.5l5.5 5.5-5.5 5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </button>
+      </div>
+      <ul class="welcome-capabilities" aria-label="Navren 的日常服务">
+        <li><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="2.5" y="4" width="15" height="12" rx="2"/><path d="M3 8h14M12 12h2.5"/></svg><span>账户与资产</span></li>
+        <li><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 6h13m-3-3 3 3-3 3M17 14H4m3-3-3 3 3 3"/></svg><span>日常收付款</span></li>
+        <li><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M6.5 2.5v3M13.5 2.5v3M3.5 8.5h13M7 12h2"/></svg><span>财务日历</span></li>
+      </ul>
+    </section>
+    <section class="welcome-auth-shell" id="welcomeAuthShell" aria-label="Navren 账户登录" hidden>
+      <header class="welcome-auth-header">
+        <div class="welcome-auth-brand" aria-label="Navren">
+          <img src="/assets/brand/navren-icon.png" alt="" width="32" height="32">
+          <span>Navren</span>
+        </div>
+      </header>
+      <div class="welcome-auth-body">
+        <aside class="welcome-auth-visual" aria-label="Navren 品牌视觉">
+          <p class="welcome-auth-visual-copy">
+            <span>让每一笔钱，</span>
+            <span>靠近你想要的生活。</span>
+          </p>
+        </aside>
+        <section class="welcome-login" id="welcomeLogin" aria-labelledby="welcomeLoginTitle" hidden>
+          <h1 id="welcomeLoginTitle">欢迎回来</h1>
+          <p class="welcome-login-intro" id="welcomeLoginIntro">登录，继续你的旅程。</p>
+          <form id="welcomeLoginForm" novalidate>
+            <div class="welcome-login-methods" id="welcomeLoginMethods" role="tablist" aria-label="登录方式">
+              <button class="welcome-login-method" id="welcomePasswordLoginTab" type="button" role="tab" data-login-method="password" aria-controls="welcomeCredentials" aria-selected="true">密码登录</button>
+              <button class="welcome-login-method" id="welcomeSmsLoginTab" type="button" role="tab" data-login-method="sms" aria-controls="welcomeCredentials" aria-selected="false" tabindex="-1">验证码登录</button>
+            </div>
+            <div class="welcome-credentials" id="welcomeCredentials" role="tabpanel" aria-labelledby="welcomePasswordLoginTab">
+            <div class="welcome-login-field">
+              <label for="welcomePhone">手机号</label>
+              <input class="welcome-login-input" id="welcomePhone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="输入手机号" minlength="11" maxlength="11" pattern="1[3-9][0-9]{9}" aria-describedby="welcomeLoginStatus" required>
+            </div>
+            <div class="welcome-login-field" id="welcomeSmsField" hidden>
+              <label for="welcomeSmsCode">短信验证码</label>
+              <div class="welcome-sms-row">
+                <input class="welcome-login-input" id="welcomeSmsCode" name="verification_code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="输入六位验证码" maxlength="6" pattern="[0-9]{6}" aria-describedby="welcomeLoginStatus">
+                <button class="welcome-sms-send" id="welcomeSmsSend" type="button">发送验证码</button>
+              </div>
+            </div>
+            <div class="welcome-login-field" id="welcomePasswordField">
+              <label for="welcomePassword">密码</label>
+              <div class="welcome-password-field">
+                <input class="welcome-login-input" id="welcomePassword" name="password" type="password" autocomplete="current-password" placeholder="输入密码" minlength="8" maxlength="128" aria-describedby="welcomeLoginStatus" required>
+                <button class="welcome-password-toggle" id="welcomePasswordToggle" type="button" aria-label="显示密码" aria-controls="welcomePassword" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <g class="welcome-eye-open"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></g>
+                    <g class="welcome-eye-closed"><path d="m3 3 18 18M10.6 6.1 12 6c6.1 0 9.5 6 9.5 6a17 17 0 0 1-3 3.5M6.2 6.2A17.8 17.8 0 0 0 2.5 12s3.4 6 9.5 6c1.8 0 3.4-.5 4.7-1.2M10.2 10.2a2.5 2.5 0 0 0 3.6 3.6"/></g>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="welcome-login-field" id="welcomePasswordConfirmationField" hidden>
+              <label for="welcomePasswordConfirmation">确认密码</label>
+              <input class="welcome-login-input" id="welcomePasswordConfirmation" name="password_confirmation" type="password" autocomplete="new-password" placeholder="再输入一次密码" minlength="8" maxlength="128" aria-describedby="welcomeLoginStatus">
+            </div>
+            </div>
+            <fieldset class="welcome-experience-grid" id="welcomeExperienceAccounts" aria-describedby="welcomeExperienceNotice" hidden>
+              <legend class="welcome-sr-only">选择体验账户</legend>
+              <label class="welcome-experience-card">
+                <input type="radio" name="experienceAccount" value="tycoon">
+                <span class="welcome-experience-surface">
+                  <svg class="welcome-experience-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 21V8l7-4 7 4v13M3 21h18M9 9h.01M15 9h.01M9 13h.01M15 13h.01M10 21v-4h4v4"/></svg>
+                  <span class="welcome-experience-name">A市首富</span>
+                  <span class="welcome-experience-detail">多类资产 · 长期配置</span>
+                  <span class="welcome-experience-check" aria-hidden="true">✓</span>
+                </span>
+              </label>
+              <label class="welcome-experience-card">
+                <input type="radio" name="experienceAccount" value="grain_farmer">
+                <span class="welcome-experience-surface">
+                  <svg class="welcome-experience-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 22V4M12 14c-4 0-6-3-6-6 4 0 6 3 6 6Zm0 4c4 0 6-3 6-6-4 0-6 3-6 6ZM12 10c4 0 6-3 6-6-4 0-6 3-6 6ZM12 6c-2-2-2-4 0-5 2 1 2 3 0 5Z"/></svg>
+                  <span class="welcome-experience-name">种粮大户</span>
+                  <span class="welcome-experience-detail">季节回款 · 经营周转</span>
+                  <span class="welcome-experience-check" aria-hidden="true">✓</span>
+                </span>
+              </label>
+              <label class="welcome-experience-card">
+                <input type="radio" name="experienceAccount" value="working_landlady">
+                <span class="welcome-experience-surface">
+                  <svg class="welcome-experience-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 10 9-7 9 7M5 9v12h14V9M10 21v-7h4v7M8 10h.01M16 10h.01"/></svg>
+                  <span class="welcome-experience-name">坚持上班的包租婆</span>
+                  <span class="welcome-experience-detail">工资租金 · 家庭收支</span>
+                  <span class="welcome-experience-check" aria-hidden="true">✓</span>
+                </span>
+              </label>
+              <label class="welcome-experience-card">
+                <input type="radio" name="experienceAccount" value="retired_entrepreneur">
+                <span class="welcome-experience-surface">
+                  <svg class="welcome-experience-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 22V12M12 16C6 16 3 12 3 7c6 0 9 4 9 9Zm0-4c0-5 3-9 9-9 0 5-3 9-9 9Z"/></svg>
+                  <span class="welcome-experience-name">退休后重新创业的阿姨</span>
+                  <span class="welcome-experience-detail">退休生活 · 创业经营</span>
+                  <span class="welcome-experience-check" aria-hidden="true">✓</span>
+                </span>
+              </label>
+            </fieldset>
+            <p class="welcome-login-intro" id="welcomeExperienceNotice" hidden>体验用户为虚拟身份，账户与财务数据均为模拟数据，资金操作仅在体验环境内生效；公开资料以标注来源为准。</p>
+            <p class="welcome-login-status" id="welcomeLoginStatus" role="status" aria-live="polite"></p>
+            <button class="welcome-login-submit" id="welcomeLoginSubmit" type="submit" aria-label="登录 Navren">
+              <span>登录</span>
+            </button>
+          </form>
+          <button class="welcome-experience-button" id="welcomeExperience" type="button" hidden disabled>进入所选画像</button>
+          <button class="welcome-login-switch" id="welcomeLoginSwitch" type="button">首次使用？创建账户</button>
+          <button class="welcome-login-switch" id="welcomeExperienceReturn" type="button" hidden>使用手机号登录</button>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script src="/js/welcome_scene.js" type="module"></script>
+  <script src="/js/navigation_gestures.js?ui=acce6603cf27" defer></script>
+</body>
+</html>
