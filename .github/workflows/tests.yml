@@ -21,6 +21,9 @@ jobs:
   python:
     name: Python 门禁（子集）
     runs-on: ubuntu-latest
+    env:
+      # 仅供测试的固定 Fernet 密钥，用来替代 macOS 钥匙串；不是生产密钥。
+      NAVREN_PERSONAL_DATA_KEY: 'IO4RcIksf8z7NYryxW1uQR2bGCOvDoKFORSiNBDjSds='
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -52,6 +55,8 @@ jobs:
     name: 全量测试（仅报告）
     runs-on: ubuntu-latest
     continue-on-error: true
+    env:
+      NAVREN_PERSONAL_DATA_KEY: 'IO4RcIksf8z7NYryxW1uQR2bGCOvDoKFORSiNBDjSds='
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

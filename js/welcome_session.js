@@ -40,23 +40,6 @@
     }
     return originalFetch(input, options);
   };
-  async function boundedJSON(request, path, options) {
-    let timeout, onAbort;
-    const interrupted = new Promise((_, reject) => {
-      onAbort = () => reject(new Error('welcome_request_interrupted'));
-      request.controller.signal.addEventListener('abort', onAbort, {once: true});
-    });
-    timeout = setTimeout(() => request.controller.abort(), 15000);
-    try {
-      return await Promise.race([(async () => {
-        const response = await fetch(path, {...options, signal: request.controller.signal});
-        return {response, data: response.ok ? await response.json() : null};
-      })(), interrupted]);
-    } finally {
-      clearTimeout(timeout);
-      request.controller.signal.removeEventListener('abort', onAbort);
-    }
-  }
   const logoutButtons = new Set(), buttonLabels = new WeakMap();
   const copy = value => {
     if (Array.isArray(value)) return Object.freeze(value.map(copy));
@@ -196,10 +179,11 @@
     update({status: 'checking', error: null});
     request.promise = (async () => {
       try {
-        const {response, data} = await boundedJSON(request, '/api/welcome/auth/session', {credentials: 'same-origin', cache: 'no-store'});
+        const response = await fetch('/api/welcome/auth/session', {credentials: 'same-origin', cache: 'no-store', signal: request.controller.signal});
         if (request.epoch !== epoch || revoked || paused) return state;
         if (response.status === 401) { revoke('welcome_session_401'); return state; }
         if (!response.ok) throw new Error('session_unavailable');
+        const data = await response.json();
         if (request.epoch !== epoch || revoked || paused) return state;
         return applySession(data);
       } catch (_) {
@@ -227,21 +211,23 @@
     request.promise = (async () => {
       try {
         // 退出失败后欢迎 Cookie 仍可存在。仅取新 CSRF，不恢复已撤销的客户端视图。
-        const {response, data: session} = await boundedJSON(request, '/api/welcome/auth/session', {credentials: 'same-origin', cache: 'no-store'});
+        const response = await fetch('/api/welcome/auth/session', {credentials: 'same-origin', cache: 'no-store', signal: request.controller.signal});
         if (request.epoch !== epoch || paused) return false;
         if (response.status === 401) { revoke('welcome_session_401'); return false; }
         if (!response.ok) throw new Error('session_unavailable');
+        const session = await response.json();
         if (request.epoch !== epoch || paused) return false;
         if (session?.authenticated !== true || typeof session.auth_subject !== 'string' || !/^[A-Za-z0-9:_-]{16,192}$/.test(session.auth_subject)) { revoke('welcome_session_revoked'); return false; }
         if (registeredUser&&session.registered_user_id!==registeredUser) { revoke('registered_user_changed'); return false; }
         if (subject && session.auth_subject !== subject) { revoke('welcome_subject_changed'); return false; }
         subject = session.auth_subject;
         if (typeof session.csrf !== 'string' || !session.csrf) throw new Error('csrf_unavailable');
-        const {response: result, data} = await boundedJSON(request, '/api/welcome/auth/logout', {method: 'POST', credentials: 'same-origin', cache: 'no-store',
-          headers: {'Content-Type': 'application/json', 'X-Welcome-CSRF': session.csrf}, body: '{}'});
+        const result = await fetch('/api/welcome/auth/logout', {method: 'POST', credentials: 'same-origin', cache: 'no-store',
+          headers: {'Content-Type': 'application/json', 'X-Welcome-CSRF': session.csrf}, body: '{}', signal: request.controller.signal});
         if (request.epoch !== epoch || paused) return false;
         if (result.status === 401) { revoke('welcome_session_401'); return false; }
         if (!result.ok) throw new Error('logout_failed');
+        const data = await result.json();
         if (request.epoch !== epoch || paused) return false;
         if (data.authenticated !== false || data.scope !== 'welcome_subject' || data.business_requests_revoked !== true) throw new Error('logout_unverified');
         update({auth_subject: null, user: null, entry_experience_account: null, logout_status: 'complete', error: null});

@@ -13,6 +13,8 @@ beautifulsoup4==4.14.3
 cryptography>=46.0,<47
 # AA私有图片凭证真实解码、去除元信息；不走模型或外部存储
 Pillow>=11,<13
+# 本地向量检索与特征计算（tests/local_knowledge）；纯本地，不联网。
+numpy>=2.0,<3
 # Agent 完整请求的本地计数；与固定官方模板及词表共同校验。
 tokenizers==0.23.3
 # 受限 WAT 纯计算 worker；不启用 WASI、宿主 imports 或金融执行。
