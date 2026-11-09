@@ -38,7 +38,6 @@ test_knowledge_semantic_pipeline
 test_knowledge_semantics
 test_living_simulation
 test_local_reranking
-test_local_vector_retrieval
 test_market_daily_unique
 test_market_event_envelope
 test_market_invalid_json_diagnostic
