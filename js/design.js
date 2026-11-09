@@ -10,8 +10,28 @@ window.NavrenDesign = (() => {
   }
   const accountReady=()=>typeof Storage.accountReady==='function'&&Storage.accountReady()===true;
   const paintThemeKey='navren:paint-theme:v1';
-  let currentTheme=normalizeTheme({id:document.documentElement.dataset.theme}),mode='classic',accountEpoch=0,themeWrite=null,modeWrite=null,presentationReady=false,controlObserver=null;
+  const paintLayoutKey='navren:paint-layout:v1';
+  function readPaintLayout(){
+    try{
+      const value=JSON.parse(localStorage.getItem(paintLayoutKey)||'null');
+      if(value&&Object.hasOwn(MODE_DEFAULT_FONT,value.mode)&&Number.isInteger(value.fontSize)&&value.fontSize>=14&&value.fontSize<=24)
+        return {mode:value.mode,fontSize:value.fontSize};
+    }catch(_){}
+    return null;
+  }
+  const paintLayout=readPaintLayout();
+  let lastPaintLayout=paintLayout?JSON.stringify(paintLayout):null;
+  let currentTheme=normalizeTheme({id:document.documentElement.dataset.theme}),mode=paintLayout?.mode||'classic',accountEpoch=0,themeWrite=null,modeWrite=null,presentationReady=false,controlObserver=null;
   const usable=()=>presentationReady&&accountReady();
+  function rememberPaintLayout(pixels){
+    if(!usable())return;
+    if(pixels===undefined)pixels=fontSizeInPixels(getModeFont(mode));
+    if(!Object.hasOwn(MODE_DEFAULT_FONT,mode)||!Number.isInteger(pixels)||pixels<14||pixels>24)return;
+    const value=JSON.stringify({mode,fontSize:pixels});
+    if(value===lastPaintLayout)return;
+    try{localStorage.setItem(paintLayoutKey,value);lastPaintLayout=value;}catch(_){}
+  }
+  window.addEventListener('navren:font-size',event=>rememberPaintLayout(event.detail?.pixels));
   function showTheme(value,remember=false) {
     currentTheme=normalizeTheme(value);
     const root=document.documentElement;
@@ -45,10 +65,15 @@ window.NavrenDesign = (() => {
   function restoreAccount(){
     if(!accountReady())return suspendAccount();
     presentationReady=true;
-    showTheme(Storage.get(STORAGE_KEYS.THEME),true);showMode(Storage.get(STORAGE_KEYS.MODE));syncTools();
+    showTheme(Storage.get(STORAGE_KEYS.THEME),true);showMode(Storage.get(STORAGE_KEYS.MODE));rememberPaintLayout();syncTools();
   }
-  function suspendAccount(){accountEpoch++;presentationReady=false;themeWrite=modeWrite=null;showMode('classic',false);syncTools();}
-  function resetAccount(){suspendAccount();try{localStorage.removeItem(paintThemeKey);}catch(_){}showTheme(themes[0]);}
+  // 身份尚未核对时只锁住控件；保留 head 已恢复的展示尺寸，避免两栏先缩回默认再撑开。
+  function suspendAccount(){accountEpoch++;presentationReady=false;themeWrite=modeWrite=null;syncTools();}
+  function resetAccount(){
+    suspendAccount();lastPaintLayout=null;
+    try{localStorage.removeItem(paintThemeKey);localStorage.removeItem(paintLayoutKey);}catch(_){}
+    showMode('classic',false);showTheme(themes[0]);
+  }
   function saveFailed(label){if(typeof showToast==='function')showToast(window.NavrenI18n?.language==='en'?({外观:'Appearance',语言:'Language',阅读方式:'Reading mode'}[label]||label)+' could not be saved. Please try again.':label+'未保存，请重试。');}
   async function applyTheme(value,persist=true){
     if(!persist){showTheme(usable()?value:currentTheme);return true;}
@@ -86,10 +111,11 @@ window.NavrenDesign = (() => {
   }
   function mountSettings(target) {
     if(!target||target.dataset.mounted||document.getElementById('navrenThemeButton'))return;target.dataset.mounted='true';
-    const tools=document.createElement('div');tools.className='shell-tools'+(target.matches('.header,.welcome-page')?'':' settings-tools');
+    const slot=target.querySelector('[data-navren-shell-tools]');
+    const tools=slot||document.createElement('div');tools.className='shell-tools'+(target.matches('.header,.welcome-page')?'':' settings-tools');
     tools.dataset.i18nSkip='';
     tools.innerHTML=`<div class="shell-theme-anchor"><button type="button" class="shell-tool" id="navrenThemeButton" title="选择外观模式" aria-label="选择外观模式" aria-expanded="false" aria-controls="navrenThemeMenu"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 1 0 0 18h1.5a2.5 2.5 0 0 0 1.2-4.7 1.2 1.2 0 0 1 .6-2.3H17a4 4 0 0 0 4-4c0-4.1-4-7-9-7Z"/><circle cx="7" cy="11" r=".9"/><circle cx="10" cy="7.5" r=".9"/><circle cx="14.5" cy="7.5" r=".9"/><circle cx="17" cy="11" r=".9"/></svg><span class="shell-tool-label">外观</span></button><section class="shell-theme-menu" id="navrenThemeMenu" hidden role="dialog" aria-label="选择外观模式"><div class="shell-theme-options" role="radiogroup" aria-label="选择外观模式"></div></section></div><button type="button" class="shell-tool shell-language" id="navrenLanguageButton" aria-label="切换至 English"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18-3-3-3-15 0-18Z"/></svg><span data-language-label translate="no">中文</span></button>`;
-    target.append(tools);
+    if(!slot)target.append(tools);
     const themeButton=tools.querySelector('#navrenThemeButton'),menu=tools.querySelector('#navrenThemeMenu'),group=tools.querySelector('.shell-theme-options');
     for(const theme of themes){
       const choice=document.createElement('button');choice.type='button';choice.className='shell-theme-choice';choice.dataset.themeChoice=theme.id;choice.role='radio';
@@ -118,6 +144,8 @@ window.NavrenDesign = (() => {
     syncTools();
   }
   showTheme(currentTheme);
+  // 无预绘制缓存时才用默认尺寸；有缓存时由 head 保持其首帧布局，随后等账户快照覆盖。
+  if(!paintLayout)showMode('classic',false);
   suspendAccount();
   if(document.querySelector('.app'))document.documentElement.classList.add('navren-shell');
   async function switchMode(next) {

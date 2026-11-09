@@ -1,0 +1,470 @@
+/* Navren 对话详情。开放边界、紧凑行和语义字重；继承消息字号。 */
+details.ncp-panel {
+  --ncp-text: calc(var(--font-size-msg, 16px) * .9375);
+  --ncp-small: calc(var(--font-size-msg, 16px) * .875);
+  --ncp-title: calc(var(--font-size-msg, 16px) * .96875);
+  --ncp-value: var(--font-size-msg, 16px);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 10px 0;
+  padding: 0;
+  border: 0;
+  border-block: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--ncp-text);
+  font-weight: 400;
+  line-height: 1.6;
+  text-align: start;
+  text-indent: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.ncp-panel *,
+.ncp-panel *::before,
+.ncp-panel *::after { box-sizing: border-box; }
+
+.ncp-panel > summary.ncp-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px 0;
+  border-radius: 0;
+  color: var(--ink);
+  list-style: none;
+  cursor: pointer;
+  transition: background-color .16s ease;
+}
+
+.ncp-panel > .ncp-summary::-webkit-details-marker,
+.ncp-panel .ncp-question-summary::-webkit-details-marker { display: none; }
+
+.ncp-panel > .ncp-summary::marker,
+.ncp-panel .ncp-question-summary::marker { content: ''; }
+
+.ncp-panel .ncp-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  gap: 0 10px;
+  min-width: 0;
+}
+
+.ncp-panel .ncp-title {
+  display: block;
+  color: var(--ink);
+  font-size: var(--ncp-title);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.ncp-panel .ncp-description {
+  display: block;
+  color: var(--ink-70);
+  font-size: var(--ncp-small);
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.ncp-panel .ncp-toggle,
+.ncp-panel .ncp-answer-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  gap: 8px;
+  color: var(--ink-50);
+  font-size: var(--ncp-small);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.ncp-panel .ncp-toggle > .ncp-label-close,
+.ncp-panel .ncp-answer-toggle > .ncp-label-close { display: none; }
+.ncp-panel[open] > .ncp-summary .ncp-toggle > .ncp-label-open,
+.ncp-panel .ncp-question[open] > .ncp-question-summary .ncp-answer-toggle > .ncp-label-open { display: none; }
+.ncp-panel[open] > .ncp-summary .ncp-toggle > .ncp-label-close,
+.ncp-panel .ncp-question[open] > .ncp-question-summary .ncp-answer-toggle > .ncp-label-close { display: inline; }
+
+.ncp-panel .ncp-toggle::after,
+.ncp-panel .ncp-answer-toggle::after {
+  display: block;
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-inline-end: 2px;
+  border-inline-end: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  content: '';
+  transform: translateY(-1px) rotate(45deg);
+  transition: transform .16s ease;
+}
+
+.ncp-panel[open] > .ncp-summary .ncp-toggle::after,
+.ncp-panel .ncp-question[open] > .ncp-question-summary .ncp-answer-toggle::after {
+  transform: translateY(2px) rotate(225deg);
+}
+
+.ncp-panel > .ncp-body {
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 0 10px;
+}
+
+/* 保留 details 的原生收起行为，不动画高度、裁切正文或改变阅读位置。 */
+.ncp-panel:not([open]) > .ncp-body { display: none; }
+
+.ncp-panel .ncp-block { min-width: 0; }
+.ncp-panel .ncp-block + .ncp-block {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.ncp-panel h3.ncp-block-title {
+  margin: 0 0 6px;
+  padding: 0;
+  color: var(--ink);
+  font-size: var(--ncp-text);
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-indent: 0;
+}
+
+.ncp-panel p.ncp-text,
+.ncp-panel p.ncp-detail,
+.ncp-panel p.ncp-note,
+.ncp-panel p.ncp-answer {
+  margin: 0;
+  padding: 0;
+  font-size: var(--ncp-text);
+  font-weight: 400;
+  line-height: 1.65;
+  text-align: start;
+  text-indent: 0;
+  white-space: pre-wrap;
+}
+
+.ncp-panel p.ncp-text + p.ncp-text { margin-top: .65em; }
+.ncp-panel .ncp-label { color: var(--ink-70); }
+.ncp-panel .ncp-detail { color: var(--ink-70); }
+
+.ncp-panel p.ncp-note,
+.message-body.message-prose .ncp-panel li > p.ncp-note {
+  margin-top: 5px;
+  color: var(--ink-70);
+  font-size: var(--ncp-small);
+  line-height: 1.55;
+}
+
+/* 三个以内的要点共享一组轴线，不为每个数值叠加卡片。 */
+.ncp-panel .ncp-metrics-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+  min-width: 0;
+}
+
+.ncp-panel .ncp-metric { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 7px; min-width: 0; max-width: 100%; }
+.ncp-panel .ncp-metric > .ncp-note { flex-basis: 100%; }
+.ncp-panel .ncp-metric > .ncp-label {
+  display: block;
+  font-size: var(--ncp-small);
+  line-height: 1.55;
+}
+
+.ncp-panel strong.ncp-value {
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ncp-panel .ncp-metric > strong.ncp-value {
+  display: inline;
+  margin-top: 0;
+  color: var(--primary-deep);
+  font-size: var(--ncp-value);
+  line-height: 1.35;
+}
+
+.ncp-panel small.ncp-unit {
+  margin-inline-start: .25em;
+  color: var(--ink-70);
+  font-size: var(--ncp-small);
+  font-weight: 600;
+}
+
+.ncp-panel ul.ncp-timeline-list,
+.ncp-panel ul.ncp-checklist-list,
+.ncp-panel ul.ncp-measure-list {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ncp-panel li.ncp-timeline-item,
+.ncp-panel li.ncp-checklist-item,
+.ncp-panel li.ncp-measure-item {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  text-indent: 0;
+}
+
+/* 时间与内容各占一列；长日期和六行说明均自然扩展。 */
+.ncp-panel li.ncp-timeline-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 6em) minmax(0, 1fr);
+  column-gap: 18px;
+  row-gap: 0;
+  padding-bottom: 8px;
+}
+
+.ncp-panel .ncp-timeline-item::before {
+  position: absolute;
+  inset-inline-start: calc(6em + 6px);
+  top: .6em;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--ink-50);
+  border-radius: 50%;
+  background: var(--surface-card);
+  content: '';
+}
+
+.ncp-panel .ncp-timeline-item:not(:last-child)::after {
+  position: absolute;
+  inset-inline-start: calc(6em + 8.5px);
+  top: calc(.6em + 9px);
+  bottom: -4px;
+  width: 1px;
+  background: var(--border);
+  content: '';
+}
+
+.ncp-panel li.ncp-timeline-item:last-child { padding-bottom: 0; }
+.ncp-panel .ncp-at {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  color: var(--ink);
+  font-size: var(--ncp-small);
+  font-weight: 650;
+  line-height: 1.65;
+  font-variant-numeric: tabular-nums;
+}
+
+.ncp-panel strong.ncp-item-title {
+  display: block;
+  color: var(--ink);
+  font-size: var(--ncp-text);
+  font-weight: 650;
+  line-height: 1.6;
+}
+
+.ncp-panel .ncp-timeline-item > .ncp-item-title,
+.ncp-panel .ncp-timeline-item > .ncp-detail { grid-column: 2; }
+.message-body.message-prose .ncp-panel li > p.ncp-detail { margin: 0; }
+
+/* 复选框只为本次阅读核对；完整文字作为点击区。 */
+.ncp-panel li.ncp-checklist-item + li.ncp-checklist-item {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+
+.ncp-panel label.ncp-checklist-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding-block: 2px;
+  cursor: pointer;
+}
+
+.ncp-panel input.ncp-checkbox {
+  flex: 0 0 auto;
+  width: 1.1em;
+  height: 1.1em;
+  min-height: 0;
+  margin: .25em 0 0;
+  padding: 0;
+  accent-color: var(--primary-deep);
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.ncp-panel .ncp-checklist-copy {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+.ncp-panel .ncp-checklist-copy > .ncp-item-title { grid-column: 1; }
+.ncp-panel .ncp-checklist-copy > .ncp-detail {
+  display: block;
+  grid-column: 1 / -1;
+  white-space: pre-wrap;
+}
+
+.ncp-panel small.ncp-due {
+  grid-column: 2;
+  align-self: baseline;
+  max-width: 12em;
+  color: var(--ink-50);
+  font-size: var(--ncp-small);
+  font-weight: 400;
+  line-height: 1.7;
+}
+
+.ncp-panel .ncp-checkbox:checked + .ncp-checklist-copy > .ncp-item-title {
+  color: var(--ink-70);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--ink-50);
+}
+
+/* 数值和可访问的原生 progress 同时存在；不以动效传递结果。 */
+.ncp-panel li.ncp-measure-item + li.ncp-measure-item { margin-top: 10px; }
+.ncp-panel .ncp-measure-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  min-width: 0;
+}
+
+.ncp-panel .ncp-measure-heading > .ncp-label { flex: 1 1 8em; }
+.ncp-panel .ncp-measure-heading > strong.ncp-value {
+  max-width: 100%;
+  font-size: var(--ncp-text);
+  line-height: 1.6;
+}
+
+.ncp-panel progress.ncp-meter {
+  display: block;
+  appearance: none;
+  width: 100%;
+  max-width: 100%;
+  height: 5px;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 99px;
+  background: var(--border);
+  color: var(--primary-deep);
+  accent-color: var(--primary-deep);
+  overflow: hidden;
+}
+
+.ncp-panel progress.ncp-meter::-webkit-progress-bar {
+  border-radius: inherit;
+  background: var(--border);
+}
+
+.ncp-panel progress.ncp-meter::-webkit-progress-value {
+  border-radius: inherit;
+  background: var(--primary-deep);
+}
+
+.ncp-panel progress.ncp-meter::-moz-progress-bar {
+  border-radius: inherit;
+  background: var(--primary-deep);
+}
+
+.ncp-panel progress.ncp-bars-meter { height: 7px; }
+
+/* 问答沿同一阅读轴展开，避免嵌套成一摞卡片。 */
+.ncp-panel .ncp-quiz-list { min-width: 0; }
+.ncp-panel details.ncp-question + details.ncp-question { border-top: 1px solid var(--border); }
+.ncp-panel summary.ncp-question-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 0;
+  border-radius: 5px;
+  color: var(--ink);
+  list-style: none;
+  cursor: pointer;
+  transition: color .16s ease;
+}
+
+.ncp-panel .ncp-question-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 650;
+  line-height: 1.6;
+}
+
+.ncp-panel .ncp-answer-toggle { align-self: center; }
+.ncp-panel p.ncp-answer {
+  margin: 0 0 8px;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--border);
+  color: var(--ink-70);
+}
+
+.ncp-panel .ncp-question:not([open]) > .ncp-answer { display: none; }
+.ncp-panel .ncp-quiz-list > .ncp-question:first-child > .ncp-question-summary { padding-top: 2px; }
+.ncp-panel .ncp-quiz-list > .ncp-question:last-child:not([open]) > .ncp-question-summary { padding-bottom: 0; }
+.ncp-panel .ncp-quiz-list > .ncp-question:last-child > .ncp-answer { margin-bottom: 0; }
+
+.ncp-panel > .ncp-summary:focus-visible,
+.ncp-panel .ncp-question-summary:focus-visible,
+.ncp-panel .ncp-checkbox:focus-visible {
+  outline: 1px solid var(--ink-50);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .ncp-panel > .ncp-summary:hover .ncp-title { color: var(--primary-deep); }
+  .ncp-panel .ncp-question-summary:hover { color: var(--primary-deep); }
+}
+
+@media (max-width: 480px) {
+  .ncp-panel > summary.ncp-summary { gap: 10px; padding: 8px 0; }
+  .ncp-panel > .ncp-body { padding: 2px 0 10px; }
+  .ncp-panel .ncp-metrics-grid { gap: 6px 18px; }
+  .ncp-panel .ncp-checklist-copy { grid-template-columns: minmax(0, 1fr); }
+  .ncp-panel small.ncp-due { grid-column: 1; max-width: 100%; }
+}
+
+@media (max-width: 380px) {
+  .ncp-panel li.ncp-timeline-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    padding-inline-start: 16px;
+  }
+  .ncp-panel .ncp-timeline-item::before { inset-inline-start: 0; }
+  .ncp-panel .ncp-timeline-item:not(:last-child)::after { inset-inline-start: 2.5px; }
+  .ncp-panel .ncp-at { grid-column: 1; grid-row: auto; }
+  .ncp-panel .ncp-timeline-item > .ncp-item-title,
+  .ncp-panel .ncp-timeline-item > .ncp-detail { grid-column: 1; }
+  .ncp-panel .ncp-toggle,
+  .ncp-panel .ncp-answer-toggle { gap: 5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ncp-panel > .ncp-summary,
+  .ncp-panel .ncp-question-summary,
+  .ncp-panel .ncp-toggle::after,
+  .ncp-panel .ncp-answer-toggle::after { transition: none; }
+}

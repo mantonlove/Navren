@@ -4,13 +4,13 @@ window.NavrenPersonalProfile = (() => {
   const keys=['nickname','full_name','phone','email','city','occupation','company','birthday','gender','bio','avatar'];
   const words={'个人资料':'Personal profile','编辑资料':'Edit profile','编辑个人资料':'Edit personal profile','基本资料':'Basic information','联系信息':'Contact information','工作与简介':'Work and biography','昵称':'Display name','姓名':'Full name','生日':'Birthday','性别':'Gender','联系邮箱':'Contact email','联系手机':'Contact phone','所在城市':'City','职业':'Occupation','公司 / 学校':'Company / school','个人简介':'About you','未填写':'Not provided','不设置':'Not set','女':'Female','男':'Male','不便透露':'Prefer not to say','更换头像':'Change photo','移除头像':'Remove photo','取消':'Cancel','保存修改':'Save changes','保存中…':'Saving…','处理图片…':'Processing image…','关闭':'Close','重新读取':'Reload','放弃修改并读取最新':'Discard changes and reload','沿用原昵称和头像':'Use previous name and photo','除了昵称，其余信息均可按需填写。':'All fields except the display name are optional.','联系信息不会修改登录凭据。':'Contact details do not change your sign-in credentials.','资料暂时无法读取，请重试。':'Your profile could not be loaded. Please retry.','个人资料已保存':'Profile saved','请输入昵称。':'Enter a display name.','请输入有效的联系邮箱。':'Enter a valid contact email.','请输入有效的联系手机，允许国际区号。':'Enter a valid phone number; international prefixes are supported.','生日不能晚于今天。':'Your birthday cannot be in the future.','请选择 5 MB 以内的 PNG、JPEG、WebP 或 GIF 图片。':'Choose a PNG, JPEG, WebP or GIF image smaller than 5 MB.','图片无法读取，请换一张图片。':'This image could not be read. Try another image.','图片处理失败，请换一张图片。':'This image could not be processed. Try another image.','资料已在其他页面更新，请读取最新资料后重新编辑。':'Your profile changed elsewhere. Reload the latest profile before editing.','保存失败，请稍后重试。':'Changes could not be saved. Please retry.','账户已变化，请重新打开资料。':'Your account changed. Reopen your profile.','正在读取资料…':'Loading profile…','资料响应无法核对，请重新读取。':'Profile data could not be verified. Please reload.'};
   words['旧资料待确认']='Previous profile needs confirmation';words['旧资料存在冲突，需本人确认']='Previous profile data conflicts. Confirm your own information.';
-  Object.assign(words,{'模拟角色资料':'Simulated persona','本人资料':'Your personal profile','模拟联系邮箱':'Simulated contact email','模拟联系手机':'Simulated contact phone','以下为虚构体验角色资料，模拟联系方式仅用于展示。':'These are fictional persona details. Simulated contacts are for display only.','本人资料可通过“编辑资料”自行填写。':'You can enter your own details using Edit profile.'});
+  Object.assign(words,{'账户资料':'Account details','本人资料':'Your personal profile','联系邮箱':'Contact email','联系手机':'Contact phone','以下为虚构体验角色资料，模拟联系方式仅用于展示。':'These are fictional persona details. Simulated contacts are for display only.','本人资料可通过“编辑资料”自行填写。':'You can enter your own details using Edit profile.'});
   const t=value=>window.NavrenI18n?.language==='en'?(words[value]||value):value;
   const node=(tag,text,cls)=>{const e=document.createElement(tag);if(text!=null)e.textContent=t(text);if(cls)e.className=cls;return e;};
   const copy=(tag,text,cls)=>{const e=node(tag,text,cls);e.dataset.ppCopy=text;return e;};
   const blank=()=>Object.fromEntries(keys.map(key=>[key,'']));
   const validAvatar=value=>value===''||typeof value==='string'&&value.length<=546176&&/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(value);
-  let profile=null,identity=null,simulationProfile=null,epoch=0,accountCheck=0,readPromise=null,dialog=null,editor=null,hidden=false,needsConfirmation=false;
+  let profile=null,identity=null,simulationProfile=null,epoch=0,accountCheck=0,readPromise=null,readCompletion=null,dialog=null,editor=null,hidden=false,needsConfirmation=false;
   const channel=typeof BroadcastChannel==='function'?new BroadcastChannel('navren-personal-profile'):null;
   const bindingFields=['registered_user_id','workspace_id','account_id','privacy_revision','auth_subject','session_generation','csrf','auth_expires_at','lease_expires_at'];
   const registered=value=>typeof value==='string'&&/^[a-f0-9]{32}$/.test(value);
@@ -40,12 +40,23 @@ window.NavrenPersonalProfile = (() => {
     for(const [label,value]of rows){const field=node('div',null,'pp-summary-item'),dd=node('dd');dd.textContent=value||t('未填写');if(value){dd.setAttribute('translate','no');dd.dataset.i18nSkip='';}dd.classList.toggle('pp-unfilled',!value);field.append(copy('dt',label),dd);dl.append(field);}
     return dl;
   }
+  // Only the selected account summary uses this display projection; source values remain unchanged.
+  function personaSummaryDisplay(value){
+    const fullName=String(value.full_name||'').replace(/（模拟）$/, '').replace(/\(模拟\)$/, '');
+    const phoneTail=/(\d{4})$/.exec(String(value.simulation_contact_phone||''));
+    const email=String(value.email||''),at=email.lastIndexOf('@');
+    const bio=String(value.bio||'').replace(/^虚构体验角色。/, '')
+      .replace('演示中区分', '区分')
+      .replace('演示工资、租金和物业支出的不同用途', '分别安排工资、租金和物业支出')
+      .replace('演示养老金、家庭支出与门店周转资金的分别管理', '分别管理养老金、家庭支出与门店周转资金');
+    return {fullName,email:at>0?email.slice(0,at)+'@••••':email,phone:phoneTail?'•••• '+phoneTail[1]:'未填写',bio};
+  }
   function renderSimulatedSummary(host){
     if(!live()||!simulationProfile||!sameBinding(identity,window.BankClient?.identity()))return false;
-    const value=simulationProfile.profile,section=node('section');section.dataset.profileScope='simulated-persona';
-    const heading=node('div',null,'pp-summary-bio');heading.append(copy('span','模拟角色资料'),node('p',value.nickname));section.append(heading,copy('p','以下为虚构体验角色资料，模拟联系方式仅用于展示。','pp-field-note'));
-    section.append(summaryGrid([['姓名',value.full_name],['模拟联系邮箱',value.email],['模拟联系手机',value.simulation_contact_phone],['所在城市',value.city],['职业',value.occupation],['生日',value.birthday]]));
-    const bio=node('div',null,'pp-summary-bio');bio.append(copy('span','个人简介'),node('p',value.bio));section.append(bio);host.append(section);return true;
+    const value=simulationProfile.profile,display=personaSummaryDisplay(value),section=node('section');section.dataset.profileScope='simulated-persona';
+    const heading=node('div',null,'pp-summary-bio');heading.append(copy('span','账户资料'),node('p',value.nickname));section.append(heading);
+    section.append(summaryGrid([['姓名',display.fullName],['联系邮箱',display.email],['联系手机',display.phone],['所在城市',value.city],['职业',value.occupation],['生日',value.birthday]]));
+    const bio=node('div',null,'pp-summary-bio');bio.append(copy('span','个人简介'),node('p',display.bio));section.append(bio);host.append(section);return true;
   }
   function confirmationRequired(state){return state.migration?.legacy_profile==='conflict'&&!state.initialized_sections.includes('profile');}
   function ownedLegacyInfo(snapshot){
@@ -88,10 +99,10 @@ window.NavrenPersonalProfile = (() => {
   function readError(error){const summary=document.getElementById('personalProfileSummary');renderSummary();if(!summary)return;const row=node('div',null,'pp-read-error'),text=node('p','资料暂时无法读取，请重试。'),retry=copy('button','重新读取','pp-text-button');retry.type='button';retry.onclick=()=>refresh();row.append(text,retry);summary.replaceChildren(row);const name=document.getElementById('profileName');if(name)name.textContent=t('个人资料');}
   async function refresh(){
     if(readPromise)return readPromise;if(hidden)return null;
-    const token=++epoch;
+    const token=++epoch,completion={token,binding:window.BankClient?.identity()?{...BankClient.identity()}:null,promise:null};
     // 先安装本次 promise，再进入可能同步抛错的依赖，确保失败后可重新读取。
     const task=Promise.resolve().then(async()=>{try{
-      const session=await BankClient.ensure();if(token!==epoch||hidden)return null;
+      const session=await BankClient.ensure();if(token!==epoch||hidden)return null;completion.binding={...session};
       const snapshot={...session},guard=BankClient.guard(),state=await Storage.ready();
       if(!same(token,snapshot)||!guard.valid()||!Storage.accountReady())return null;
       const canonical=accountProfile(state,snapshot),confirmation=confirmationRequired(state),data=await BankClient.get('/personal-profile');
@@ -102,7 +113,13 @@ window.NavrenPersonalProfile = (() => {
       window.dispatchEvent(new CustomEvent('navren:personal-profile-loaded',{detail:{registered_user_id:identity.registered_user_id,workspace_id:identity.workspace_id,account_revision:profile.revision}}));
       return needsConfirmation?null:{...profile};
     }catch(error){if(token===epoch&&!hidden){profile=identity=simulationProfile=null;needsConfirmation=false;readError(error);}return null;}finally{if(token===epoch)readPromise=null;}});
-    readPromise=task;return task;
+    completion.promise=task;readCompletion=completion;readPromise=task;return task;
+  }
+  function whenReady(){
+    if(hidden||!document.getElementById('personalProfileSummary'))return Promise.resolve(null);
+    const completion=readCompletion;
+    if(!completion||completion.token!==epoch||completion.binding&&!sameBinding(completion.binding,window.BankClient?.identity()))return Promise.resolve(null);
+    return completion.promise;
   }
   function dateToday(){const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const get=type=>parts.find(part=>part.type===type).value;return get('year')+'-'+get('month')+'-'+get('day');}
   function draftValue(){const draft={...editor.draft};for(const [key,input]of editor.inputs)draft[key]=input.value.trim();return draft;}
@@ -175,7 +192,7 @@ window.NavrenPersonalProfile = (() => {
     }
     form.append(body,footer);dialog.append(form);document.body.append(dialog);dialog.addEventListener('cancel',event=>{event.preventDefault();close();});dialog.addEventListener('click',event=>{if(event.target===dialog){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)close();}});dialog.showModal();window.NavrenFormControls?.enhance(dialog);if(needsConfirmation)setEditorStatus('旧资料存在冲突，需本人确认');updateSave();editor.inputs.get(options.field||'nickname')?.focus({preventScroll:true});
   }
-  function invalidate(){epoch++;accountCheck++;readPromise=null;profile=identity=simulationProfile=null;needsConfirmation=false;close(true);renderSummary();}
+  function invalidate(){epoch++;accountCheck++;readPromise=null;readCompletion=null;profile=identity=simulationProfile=null;needsConfirmation=false;close(true);renderSummary();}
   async function syncAccountProfile(){
     const token=++accountCheck;let snapshot;
     if(hidden||!Storage.accountReady())return;
@@ -189,7 +206,7 @@ window.NavrenPersonalProfile = (() => {
       if(editor?.saving)return;
       if(dialog){if(confirmation){needsConfirmation=true;renderSummary();}dialog.querySelector('.pp-legacy-import')?.remove();setEditorStatus('资料已在其他页面更新，请读取最新资料后重新编辑。',true);editor.reload.hidden=false;return;}
       // 只采用适配器已核验的同一 canonical profile；不再发 GET 或触发 ready 循环。
-      epoch++;readPromise=null;profile=current;simulationProfile=nextSimulation;identity={...snapshot};needsConfirmation=confirmation;renderSummary();
+      epoch++;readPromise=null;readCompletion=null;profile=current;simulationProfile=nextSimulation;identity={...snapshot};needsConfirmation=confirmation;renderSummary();
       window.dispatchEvent(new CustomEvent('navren:personal-profile-loaded',{detail:{registered_user_id:identity.registered_user_id,workspace_id:identity.workspace_id,account_revision:profile.revision}}));
     }catch(error){if(token===accountCheck&&!hidden&&sameBinding(snapshot,window.BankClient?.identity?.())){invalidate();readError(error);}}
   }
@@ -207,5 +224,5 @@ window.NavrenPersonalProfile = (() => {
     Storage.ready({refresh:true}).then(()=>syncAccountProfile()).catch(()=>{});
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-  return {refresh,open,upload,renderSummary,decorateAvatar,invalidate,current:()=>!needsConfirmation&&live()?{...live()}:null};
+  return {refresh,whenReady,open,upload,renderSummary,decorateAvatar,invalidate,current:()=>!needsConfirmation&&live()?{...live()}:null};
 })();

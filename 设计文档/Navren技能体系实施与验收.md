@@ -1,8 +1,6 @@
 # Navren 技能体系实施与验收
 
-> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
-
-实施日期：2026-10-05。正式代码位置：`项目根目录`。
+实施日期：2026-10-05。正式代码位置：`/Users/manton/CC/projects/Navren`。
 
 本轮把“诊断 → 目标规划 → 产品研究 → 资产配置 → 落实 → 投后复核”拆成应用内可按需加载的技能，并为另一个窗口正在建设的 RAG 建立消费接口。沿用 `ConversationAgent` 的主模型工具循环、独立 GLM 审核和现有业务后端，不另建一套账本。
 
@@ -119,7 +117,7 @@ canonical 必需包含：citation_id、release_id、document_id、document_versi
 复现本轮协议测试：
 
 ```bash
-# 在克隆后的 Navren 项目根目录执行
+cd /Users/manton/CC/projects/Navren
 .venv/bin/python -m unittest discover -s tests -p 'test_skill*.py' -v
 .venv/bin/python -m unittest discover -s tests -p 'test_knowledge_retrieval.py' -v
 .venv/bin/python -m unittest discover -s tests -p 'test_native_conversation.py' -v

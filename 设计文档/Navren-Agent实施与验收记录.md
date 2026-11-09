@@ -1,7 +1,5 @@
 # Navren Agent 实施与验收记录
 
-> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
-
 2026-10-04。本次将本地正常对话切换为 Agent 主导架构；运行环境为本机合成模拟银行。没有接入真实银行交易接口，也没有重建客户数据库。
 
 ## 已落地
@@ -50,8 +48,8 @@
 ## 本地运行
 
 ```bash
-# 在克隆后的 Navren 项目根目录执行
-env NAVREN_PORT=18767 NAVREN_SIM_DB=/tmp/navren-qa-20261004.sqlite3 .venv/bin/python server.py
+cd /Users/manton/CC/projects/Navren
+/Users/manton/CC/services/cc-secrets/cc-with-secrets env NAVREN_PORT=18767 NAVREN_SIM_DB=/tmp/navren-qa-20261004.sqlite3 .venv/bin/python server.py
 ```
 
 密钥沿用钥匙串加载器，不新增 `.env`。DeepSeek走官方原生接口，GLM审核走Aiping。端口18767已运行最新 `navren-684ed143e49d` 版本；最后重启前后账户、订单、工作区哈希再次一致。测试入口为 `/chat.html?mode=youth`；三种界面模式使用相同事实和权限。

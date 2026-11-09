@@ -304,7 +304,7 @@ async function run() {
   for (const file of ['js/insurance_needs.js', 'js/discover_insurance.js', 'css/discover_insurance.css', 'js/discover_workspace.js', 'recommend.html', 'tests/ui_window/test_insurance_preview.js']) hashes[file] = crypto.createHash('sha256').update(read(file)).digest('hex');
   const result = { passed: failures.length === 0, checks: suite.length, passed_checks: suite.filter(t => t.passed).length,
     failed_checks: failures.length, scope: '严格绑定虚拟合同夹具 + 真实选择器及 UI 的离线 DOM 交互',
-    command: 'NODE_PATH=/path/to/node_modules node tests/ui_window/test_insurance_preview.js',
+    command: 'NODE_PATH=/Users/manton/CC/projects/deepseek-harness/node_modules/.pnpm/jsdom@29.1.1_@noble+hashes@2.3.0/node_modules node tests/ui_window/test_insurance_preview.js',
     network_requests: 0, database_access: 0, model_calls: 0, real_transactions: 0,
     limits: ['没有执行实际 HTTP 请求或主体切换服务', 'JSDOM 不检查实际卡片布局、屏幕空间、触屏或键盘焦点视觉', '合成夹具不代表现实投保资格、真实保障缺口或实际承保可用性'],
     hashes, tests: suite, failures };

@@ -37,8 +37,43 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
   let authenticated = false, phoneVerified = false, registeredUserId = '', authSubject = '';
   const allowedViews = new Set(['login', 'register', 'experience', 'bind']);
   let smsConfigured = false, smsRegistrationRequired = true, smsConfigurationKnown = false, loginMethod = 'password';
-  let smsChallenge = null, smsSending = false, smsTimer = null, resendAt = 0;
+  let smsChallenge = null, smsSending = false, smsTimer = null;
+  const smsResendDeadlines = new Map();
   let currentEntry;
+  let disposed = false, paused = false, requestEpoch = 0;
+  const requests = new Set();
+  const requestCurrent = turn => !disposed && !paused && turn === requestEpoch;
+  async function requestJSON(url, options = {}) {
+    const turn = requestEpoch, controller = new window.AbortController();
+    if (!requestCurrent(turn)) throw new Error('本次验证已中断，请重新核对。');
+    let rejectInterrupted;
+    const interrupted = new Promise((_, reject) => { rejectInterrupted = reject; });
+    const request = {cancel() { rejectInterrupted(new Error('本次验证已中断，请重新核对。')); controller.abort(); }};
+    const timeout = window.setTimeout(() => {
+      rejectInterrupted(new Error('请求超时，结果尚未确认，请重新核对后重试。'));
+      controller.abort();
+    }, 15000);
+    requests.add(request);
+    try {
+      const result = await Promise.race([(async () => {
+        const response = await fetch(url, {...options, signal: controller.signal});
+        return {response, data: await response.json()};
+      })(), interrupted]);
+      if (!requestCurrent(turn) || controller.signal.aborted) throw new Error('本次验证已中断，请重新核对。');
+      return result;
+    } finally { window.clearTimeout(timeout); requests.delete(request); }
+  }
+  function interruptRequests() { requestEpoch++; for (const request of requests) request.cancel(); requests.clear(); }
+  function pauseRequests() {
+    paused = true; interruptRequests(); smsSending = false;
+    password.value = ''; if (passwordConfirmation) passwordConfirmation.value = '';
+    clearSms(); clearInterval(smsTimer); smsTimer = null; setBusy(false);
+  }
+  function resumeRequests() {
+    if (disposed || !paused) return;
+    paused = false; watchSmsDeadline();
+    sessionPromise = loadSession({preserveStatus: true});
+  }
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let entryAnimations = [], entering = false, entryRun = 0;
 
@@ -97,9 +132,8 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
   }
 
   async function session({ preserveStatus = false } = {}) {
-    const response = await fetch('/api/welcome/auth/session', { credentials: 'same-origin', cache: 'no-store' });
+    const {response, data} = await requestJSON('/api/welcome/auth/session', { credentials: 'same-origin', cache: 'no-store' });
     if (!response.ok) throw new Error('登录服务暂时不可用，请稍后重试。');
-    const data = await response.json();
     csrf = data.csrf || '';
     applyIdentity(data);
     smsConfigured = data.sms?.configured === true && !!smsField;
@@ -108,7 +142,15 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
     if (!busy && (mode !== 'experience' || requireExperienceIdentity())) renderMode(preserveStatus);
     return data;
   }
-  sessionPromise = session().catch(() => null);
+  function loadSession(options = {}) {
+    const turn = requestEpoch;
+    return session(options).catch(error => {
+      if (requestCurrent(turn) && (!options.preserveStatus || !status.textContent))
+        status.textContent = error.message || '登录服务暂时无法核对，请稍后重试。';
+      return null;
+    });
+  }
+  sessionPromise = loadSession();
 
   function setPasswordVisible(visible) {
     password.type = visible ? 'text' : 'password';
@@ -192,9 +234,8 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
   async function clearAuthenticatedSession() {
     if (!authenticated) return;
     const previousSubject = authSubject;
-    const response = await fetch('/api/welcome/auth/logout', { method: 'POST', credentials: 'same-origin',
+    const {response, data} = await requestJSON('/api/welcome/auth/logout', { method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-Welcome-CSRF': csrf }, body: '{}' });
-    const data = await response.json();
     if (!response.ok || data.authenticated !== false || data.scope !== 'welcome_subject' || data.business_requests_revoked !== true)
       throw new Error('登录状态未能更新，请稍后重试。');
     applyIdentity({}); csrf = ''; clearSms();
@@ -202,24 +243,36 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
     accountInputs.forEach(input => { input.checked = false; });
     delete panel.dataset.selectedAccount;
     try { const channel = new BroadcastChannel('navren-welcome-auth'); channel.postMessage({ action: 'logout', auth_subject: previousSubject }); channel.close(); } catch (_) {}
-    sessionPromise = session({ preserveStatus: true }).catch(() => null);
+    sessionPromise = loadSession({ preserveStatus: true });
     const refreshed = await sessionPromise;
     if (!refreshed || authenticated || !csrf) throw new Error('登录状态未能更新，请刷新后重试。');
   }
+  function smsResendKey() { return `${mode}:${phone.value.trim()}`; }
+  function smsResendAt() { return smsResendDeadlines.get(smsResendKey()) || 0; }
   function clearSms() {
     smsChallenge = null;
     if (smsCode) smsCode.value = '';
-    if (Date.now() >= resendAt) { clearInterval(smsTimer); smsTimer = null; }
+    if (Date.now() >= smsResendAt()) { clearInterval(smsTimer); smsTimer = null; }
     refreshSmsButton();
   }
   function refreshSmsButton() {
     if (!smsSend) return;
-    const wait = Math.max(0, Math.ceil((resendAt-Date.now())/1000));
-    smsSend.disabled = busy || smsSending || wait > 0 || !smsConfigured;
+    const wait = Math.max(0, Math.ceil((smsResendAt()-Date.now())/1000));
+    smsSend.disabled = disposed || paused || busy || smsSending || wait > 0 || !smsConfigured;
     smsSend.textContent = smsSending ? '发送中' : wait ? `${wait}秒后重发` : '发送验证码';
   }
+  function watchSmsDeadline() {
+    clearInterval(smsTimer);
+    if (Date.now() >= smsResendAt() && !smsChallenge) { smsTimer = null; return; }
+    smsTimer = setInterval(() => {
+      refreshSmsButton();
+      if (smsChallenge && Date.now() >= smsChallenge.expiresAt) clearSms();
+      if (!smsChallenge && Date.now() >= smsResendAt()) { clearInterval(smsTimer); smsTimer = null; }
+    }, 1000);
+  }
   async function sendSms() {
-    if (busy || smsSending || !ready || !needsSms() || !smsConfigured || Date.now() < resendAt) return;
+    const turn = requestEpoch;
+    if (!requestCurrent(turn) || busy || smsSending || !ready || !needsSms() || !smsConfigured || Date.now() < smsResendAt()) return;
     const number = phone.value.trim();
     if (!/^1[3-9][0-9]{9}$/.test(number)) { status.textContent = '请输入正确的11位手机号。'; phone.focus(); return; }
     if (mode === 'bind' && password.value.length < 8) { status.textContent = '请先输入原密码。'; password.focus(); return; }
@@ -231,28 +284,24 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
       await sessionPromise;
       if (!csrf) await session();
       if (purpose === 'login' || purpose === 'register') await clearAuthenticatedSession();
-      if (purpose !== mode || number !== phone.value.trim()) return;
+      if (!requestCurrent(turn) || purpose !== mode || number !== phone.value.trim()) return;
       const payload = { phone: number, purpose };
       if (purpose === 'bind') payload.password = password.value;
-      const response = await fetch('/api/welcome/auth/sms/send', { method:'POST', credentials:'same-origin',
+      smsResendDeadlines.set(`${purpose}:${number}`, Date.now() + 60000);
+      watchSmsDeadline(); refreshSmsButton();
+      const {response, data} = await requestJSON('/api/welcome/auth/sms/send', { method:'POST', credentials:'same-origin',
         headers:{'Content-Type':'application/json','X-Welcome-CSRF':csrf}, body:JSON.stringify(payload) });
-      const data = await response.json();
       if (!response.ok) throw new Error(data.error || '短信发送未成功，请稍后再试。');
-      if (purpose !== mode || number !== phone.value.trim()) return;
+      if (!requestCurrent(turn) || purpose !== mode || number !== phone.value.trim()) return;
       if (data.source !== 'provider' || !/^[a-f0-9]{32}$/.test(data.challenge_id) || !Number.isFinite(data.expires_at))
         throw new Error('短信验证资料无法核对，请重新发送。');
       smsChallenge = { id:data.challenge_id, phone:number, purpose, expiresAt:data.expires_at*1000 };
-      resendAt = Date.now() + 60000;
       status.textContent = '验证码已提交发送，请填写手机收到的六位验证码。';
-      clearInterval(smsTimer);
-      smsTimer = setInterval(() => {
-        refreshSmsButton();
-        if (smsChallenge && Date.now() >= smsChallenge.expiresAt) clearSms();
-        if (!smsChallenge && Date.now() >= resendAt) { clearInterval(smsTimer); smsTimer = null; }
-      },1000);
+      watchSmsDeadline();
       smsCode.focus();
-    } catch (error) { status.textContent = error.message || '短信暂时不可用。'; }
+    } catch (error) { if (requestCurrent(turn)) status.textContent = error.message || '短信暂时不可用。'; }
     finally {
+      if (!requestCurrent(turn)) return;
       smsSending = false; refreshSmsButton();
       if (smsCode) smsCode.readOnly = busy;
       methodButtons.forEach(tab => { tab.disabled = busy; });
@@ -382,6 +431,8 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
   }
 
   async function authenticate(path, payload) {
+    const turn = requestEpoch;
+    if (!requestCurrent(turn)) return;
     setBusy(true);
     status.textContent = '';
     const testing = mode === 'experience';
@@ -391,12 +442,13 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
       await sessionPromise;
       if (!csrf) await session();
       if (path === 'login' || path === 'register') await clearAuthenticatedSession();
-      const response = await fetch('/api/welcome/auth/' + path, {
+      if (!requestCurrent(turn)) return;
+      const {response, data} = await requestJSON('/api/welcome/auth/' + path, {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Welcome-CSRF': csrf },
         body: JSON.stringify(payload)
       });
-      const data = await response.json();
+      if (!requestCurrent(turn)) return;
       if (data.csrf) csrf = data.csrf;
       if (!response.ok || data.authenticated !== true) throw new Error(data.error || '登录未成功，请检查手机号和密码。');
       applyIdentity(data);
@@ -424,17 +476,20 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
       try { const channel = new BroadcastChannel('navren-welcome-auth'); channel.postMessage({ action: 'login',registered_user_id:registeredUserId }); channel.close(); } catch (_) { /* Focus checks also refresh other same-origin tabs. */ }
       location.assign('/chat.html');
     } catch (error) {
+      if (!requestCurrent(turn)) return;
       status.textContent = error.message || '连接失败，请稍后重试。';
       activeLabel.textContent = testing ? '进入所选画像' : mode === 'register' ? '创建账户' : '登录';
       setBusy(false);
       csrf = '';
-      sessionPromise = session({ preserveStatus: true }).catch(() => null);
+      sessionPromise = loadSession({ preserveStatus: true });
+    } finally {
+      delete payload.verification_code; delete payload.password; delete payload.password_confirmation;
     }
   }
 
   async function submit(event) {
     event.preventDefault();
-    if (!ready || busy || smsSending) return;
+    if (!requestCurrent(requestEpoch) || !ready || busy || smsSending) return;
     if (mode === 'experience') { if (selectedAccount) await authenticate('experience', { user_id: selectedAccount }); return; }
     status.textContent = '';
     if (needsSms() && !smsConfigured) {
@@ -530,6 +585,8 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
   listeners.forEach(([target, type, handler]) => target.addEventListener(type, handler));
   window.addEventListener('popstate', restoreView);
   window.addEventListener('resize', settleEntryTransition);
+  window.addEventListener('pagehide', pauseRequests);
+  window.addEventListener('pageshow', resumeRequests);
   reducedMotion.addEventListener?.('change', settleEntryTransition);
   // 固定同源入口只恢复已认可的选择界面，不选择账户、不建立业务身份。
   const entryView = viewFromURL();
@@ -539,14 +596,17 @@ export function createWelcomeLogin({ canvas, onPhaseChange = () => {}, onTransit
     if (!busy) showView(viewFromURL());
   });
   return { depart, get started() { return started; }, dispose() {
+    if (disposed) return; disposed = true; paused = true; interruptRequests();
     password.value = '';
     if (passwordConfirmation) passwordConfirmation.value = '';
-    resendAt = 0;
+    smsResendDeadlines.clear();
     clearSms();
     cancelEntryTransition();
     listeners.forEach(([target, type, handler]) => target.removeEventListener(type, handler));
     window.removeEventListener('popstate', restoreView);
     window.removeEventListener('resize', settleEntryTransition);
+    window.removeEventListener('pagehide', pauseRequests);
+    window.removeEventListener('pageshow', resumeRequests);
     reducedMotion.removeEventListener?.('change', settleEntryTransition);
   } };
 }

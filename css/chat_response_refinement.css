@@ -1,0 +1,304 @@
+/* 回复的过程、数据与操作：共用阅读轴，不增加外层消息卡片。 */
+body[data-page="chat"] .chat-messages .runtime-panel.runtime-activity-panel {
+  width:min(100%,780px);
+  min-width:0;
+  margin:0;
+  padding:0;
+  border:0;
+  background:transparent;
+  font-size:var(--font-size-sm,14px);
+}
+body[data-page="chat"] .runtime-activity-panel > .runtime-activity-current {
+  gap:9px;
+  min-height:28px;
+  color:var(--ink-70);
+  font-size:max(14px,1em);
+  line-height:1.55;
+}
+body[data-page="chat"] .runtime-activity-current::before {
+  width:5px;
+  height:5px;
+  flex-basis:5px;
+  background:var(--chat-accent,var(--primary-deep));
+}
+body[data-page="chat"] .runtime-activity-panel > .runtime-activity-list {
+  max-height:188px;
+  margin-top:8px;
+  padding:3px 0;
+  border-top:1px solid var(--chat-line,var(--border));
+  border-bottom:1px solid var(--chat-line,var(--border));
+  scrollbar-color:var(--border-emphasis) transparent;
+  scrollbar-width:thin;
+}
+body[data-page="chat"] .runtime-activity-list > .runtime-step {
+  grid-template-columns:4.5em minmax(0,1fr) auto;
+  gap:2px 10px;
+  align-items:baseline;
+  margin:0;
+  padding:8px 2px;
+  border-bottom:1px solid color-mix(in srgb,var(--chat-line,var(--border)) 65%,transparent);
+  font-size:1em;
+  line-height:1.5;
+}
+body[data-page="chat"] .runtime-activity-list > .runtime-step:last-child {border-bottom:0;}
+body[data-page="chat"] .runtime-step > .runtime-activity-kind {
+  grid-column:1;
+  color:var(--chat-muted,var(--ink-50));
+  font-size:.86em;
+}
+body[data-page="chat"] .runtime-step > .runtime-activity-label {
+  grid-column:2;
+  color:var(--ink-70);
+  font-size:max(14px,1em);
+  font-weight:500;
+}
+body[data-page="chat"] .runtime-step.running > .runtime-activity-label {color:var(--chat-accent,var(--primary-deep));}
+body[data-page="chat"] .runtime-step > .runtime-activity-state {
+  grid-column:3;
+  grid-row:1;
+  font-size:.86em;
+  color:var(--chat-muted,var(--ink-50));
+}
+body[data-page="chat"] .runtime-step.rejected > .runtime-activity-state {color:var(--state-warning);}
+body[data-page="chat"] .runtime-step > .runtime-activity-name {
+  display:none;
+}
+body[data-page="chat"] .runtime-step > .runtime-activity-data {
+  grid-column:2 / -1;
+  font-size:.86em;
+  color:var(--chat-muted,var(--ink-50));
+  line-height:1.45;
+}
+body[data-page="chat"] .runtime-activity-count {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:22px;
+  min-height:18px;
+  margin-inline-start:7px;
+  padding:0 5px;
+  border:1px solid var(--chat-line,var(--border));
+  border-radius:5px;
+  color:var(--chat-muted,var(--ink-50));
+  font-size:.82em;
+  font-weight:500;
+  line-height:1.35;
+  font-variant-numeric:tabular-nums;
+  vertical-align:1px;
+}
+body[data-page="chat"] .chat-messages .runtime-panel.runtime-activity-notice {
+  margin:0 0 13px;
+  padding:0;
+  color:var(--state-warning);
+  font-size:max(14px,var(--font-size-sm,14px));
+  line-height:1.5;
+}
+
+/* 失败时只展示真实取得的账户快照，不把余额排成可安排资金合计。 */
+body[data-page="chat"] .message .bubble .reply-ledger-preview {
+  width:min(100%,760px);
+  min-width:0;
+  margin:14px 0 18px;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:var(--ink);
+  font-size:.94em;
+  line-height:1.55;
+}
+body[data-page="chat"] .reply-ledger-preview > header {
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:6px 18px;
+  padding:0 0 10px;
+  border-bottom:1px solid var(--chat-line,var(--border));
+}
+body[data-page="chat"] .reply-ledger-preview > header > strong {font-size:1em;font-weight:650;}
+body[data-page="chat"] .reply-ledger-preview > header > span {
+  color:var(--chat-muted,var(--ink-50));
+  font-size:.86em;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+body[data-page="chat"] .reply-ledger-preview > dl {margin:0;padding:0;}
+body[data-page="chat"] .reply-ledger-row {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:8px 20px;
+  align-items:baseline;
+  min-width:0;
+  padding:10px 0;
+  border-bottom:1px solid color-mix(in srgb,var(--chat-line,var(--border)) 65%,transparent);
+}
+body[data-page="chat"] .reply-ledger-row > dt {
+  min-width:0;
+  margin:0;
+  color:var(--ink-70);
+  overflow-wrap:anywhere;
+}
+body[data-page="chat"] .reply-ledger-row > dd {
+  display:flex;
+  align-items:baseline;
+  justify-content:flex-end;
+  gap:5px;
+  min-width:0;
+  margin:0;
+  text-align:end;
+  font-variant-numeric:tabular-nums;
+}
+body[data-page="chat"] .reply-ledger-row > dd strong {font-size:1.06em;font-weight:650;letter-spacing:-.015em;}
+body[data-page="chat"] .reply-ledger-row > dd small {color:var(--chat-muted,var(--ink-50));font-size:.86em;}
+body[data-page="chat"] .reply-ledger-preview > .reply-ledger-note {
+  margin:9px 0 0;
+  color:var(--chat-muted,var(--ink-50));
+  font-size:.86em;
+  line-height:1.6;
+}
+body[data-page="chat"] .reply-ledger-preview > header + .reply-ledger-note {
+  margin:8px 0 0;
+  text-align:end;
+}
+
+/* 一条操作底栏：左边是本条答复的业务动作，右边只放收藏和朗读。 */
+body[data-page="chat"] .chat-messages .message-tools {
+  --message-tool-size:34px;
+  --message-tool-icon-size:19px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-end;
+  flex-wrap:nowrap;
+  gap:5px;
+  width:100%;
+  min-width:0;
+  margin:15px 0 0;
+  padding:0;
+}
+body[data-page="chat"] .chat-messages .message-tools:empty,
+body[data-page="chat"] .chat-messages .message-tool-actions:empty {display:none;}
+body[data-page="chat"] .chat-messages .message-tool-actions {
+  display:flex;
+  align-items:center;
+  flex:1 1 auto;
+  flex-wrap:wrap;
+  gap:6px 10px;
+  min-width:0;
+  overflow:visible;
+}
+body[data-page="chat"] .chat-messages .message-tools .message-action-group {
+  display:contents;
+}
+body[data-page="chat"] .chat-messages .message-tools .message-action {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  min-height:34px;
+  max-width:100%;
+  margin:0;
+  padding:6px 10px;
+  border:1px solid transparent;
+  border-radius:8px;
+  background:transparent;
+  box-shadow:none;
+  color:var(--chat-accent,var(--primary-deep));
+  font:inherit;
+  font-size:max(14px,var(--font-size-sm,14px));
+  font-weight:500;
+  line-height:1.4;
+  text-decoration:none;
+  white-space:nowrap;
+  cursor:pointer;
+}
+body[data-page="chat"] .chat-messages .message-tools .message-action.chat-retry {
+  border-color:var(--primary-border);
+  background:var(--primary-soft);
+  font-weight:550;
+}
+body[data-page="chat"] .chat-messages .message-tools .message-action:hover:enabled {
+  border-color:var(--primary-border);
+  background:var(--primary-soft);
+  color:var(--chat-accent,var(--primary-deep));
+}
+body[data-page="chat"] .chat-messages .message-tools :is(.message-bookmark-control,.message-audio-control) {
+  position:static;
+  inset:auto;
+  flex:0 0 var(--message-tool-size);
+  width:var(--message-tool-size);
+  height:var(--message-tool-size);
+  min-height:var(--message-tool-size);
+  padding:7px;
+  border-radius:8px !important;
+}
+body[data-page="chat"] .chat-messages .message-tools :is(.message-bookmark-control,.message-audio-control) svg {
+  width:var(--message-tool-icon-size);
+  height:var(--message-tool-icon-size);
+  stroke-width:1.7;
+}
+body[data-page="chat"] .chat-messages .message-tools :is(.message-action,.message-bookmark-control,.message-audio-control):focus-visible {
+  outline:1px solid var(--ink-40);
+  outline-offset:2px;
+}
+@media(max-width:620px) {
+  body[data-page="chat"] .runtime-activity-list > .runtime-step {grid-template-columns:4.1em minmax(0,1fr) auto;column-gap:7px;}
+  body[data-page="chat"] .runtime-activity-panel > .runtime-activity-list {max-height:174px;}
+  body[data-page="chat"] .reply-ledger-preview > header {flex-wrap:wrap;gap:3px 12px;}
+  body[data-page="chat"] .reply-ledger-row {gap:7px 12px;padding-block:10px;}
+  body[data-page="chat"] .reply-ledger-row > dt {font-size:1em;}
+  body[data-page="chat"] .reply-ledger-row > dd strong {font-size:1em;}
+  body[data-page="chat"] .chat-messages .message-tools {--message-tool-size:40px;gap:2px;}
+  body[data-page="chat"] .chat-messages .message-tool-actions {gap:4px 5px;}
+  body[data-page="chat"] .chat-messages .message-tools .message-action {min-height:40px;padding:7px 9px;font-size:max(14px,var(--font-size-sm,14px));}
+}
+body[data-page="chat"].mode-senior .chat-messages .message-tools {--message-tool-size:44px;}
+body[data-page="chat"].mode-senior .chat-messages .message-tools .message-action {min-height:44px;}
+
+/* 维度加一至两个方案仍是同轴比较；仅更多方案沿用原来的窄屏重排。 */
+@media(max-width:480px) {
+  body[data-page="chat"] .message .bubble .ncc-component.ncc-compare:is(.ncc-columns-2,.ncc-columns-3) .ncc-table {
+    display:table;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    table-layout:fixed;
+    border-collapse:collapse;
+    font-size:1em;
+  }
+  body[data-page="chat"] .message .bubble .ncc-component.ncc-compare:is(.ncc-columns-2,.ncc-columns-3) .ncc-table-head {
+    display:table-header-group;
+    position:static;
+    width:auto;
+    height:auto;
+    overflow:visible;
+    clip-path:none;
+    white-space:normal;
+  }
+  body[data-page="chat"] .message .bubble .ncc-component.ncc-compare:is(.ncc-columns-2,.ncc-columns-3) .ncc-table-body {display:table-row-group;}
+  body[data-page="chat"] .message .bubble .ncc-component.ncc-compare:is(.ncc-columns-2,.ncc-columns-3) .ncc-compare-row {
+    display:table-row;
+    margin:0;
+    padding:0;
+    border:0;
+  }
+  body[data-page="chat"] .message .bubble .ncc-component.ncc-compare:is(.ncc-columns-2,.ncc-columns-3) .ncc-table .ncc-cell {
+    display:table-cell;
+    padding:9px 8px;
+    border:0;
+    border-bottom:1px solid var(--chat-line,var(--border));
+    line-height:1.6;
+    vertical-align:top;
+  }
+  body[data-page="chat"] .message .bubble .ncc-component.ncc-compare:is(.ncc-columns-2,.ncc-columns-3) .ncc-table tr > .ncc-cell:first-child {
+    width:30%;
+    padding-inline-start:0;
+    color:var(--ink-70);
+    font-weight:500;
+  }
+  body[data-page="chat"] .message .bubble .ncc-component.ncc-compare:is(.ncc-columns-2,.ncc-columns-3) .ncc-table-head .ncc-cell {
+    color:var(--chat-accent,var(--primary-deep));
+    font-size:1em;
+    font-weight:650;
+  }
+  body[data-page="chat"] .message .bubble .ncc-component.ncc-compare:is(.ncc-columns-2,.ncc-columns-3) .ncc-mobile-label {display:none;}
+}

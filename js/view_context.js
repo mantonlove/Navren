@@ -60,21 +60,25 @@ const page=c.page||document.body.dataset.page;return {...metadata(c),page,view:a
     const active=document.activeElement;context.focustarget=active?.id||null;
     history.replaceState({...history.state,navren:clone(context)},'',location.href);
   }
-  async function render(c,restore=false){
-    generation++;const turn=generation;
-    context=normalize(c);const identity=window.BankClient?.identity();
-    if(identity)Object.assign(context,{workspace_id:identity.workspace_id,privacy_revision:identity.privacy_revision});
-    saveHistorical(context);
-    referenceValue=null;
-    window.dispatchEvent(new CustomEvent('navren:view',{detail:clone(context)}));
-    await renderers.get(context.page)?.(clone(context));
-    if(turn!==generation)return;
-    requestAnimationFrame(()=>{
+  async function render(c,restore=false,loading=null){
+    generation++;const turn=generation,pageLoad=loading||window.NavrenPageLoad?.begin();
+    try{
+      context=normalize(c);const identity=window.BankClient?.identity();
+      if(identity)Object.assign(context,{workspace_id:identity.workspace_id,privacy_revision:identity.privacy_revision});
+      saveHistorical(context);
+      referenceValue=null;
+      window.dispatchEvent(new CustomEvent('navren:view',{detail:clone(context)}));
+      await renderers.get(context.page)?.(clone(context));
       if(turn!==generation)return;
       if(scrollRoot())scrollRoot().scrollTop=restore?(context.scrollposition||0):0;
-      const focus=restore&&context.focustarget?document.getElementById(context.focustarget):document.querySelector('[data-view-heading]');
-      if(focus&&!focus.closest('[hidden]')){if(!focus.hasAttribute('tabindex'))focus.tabIndex=-1;focus.focus({preventScroll:true});}
-    });
+      const revealed=await pageLoad?.ready();
+      if(turn!==generation||revealed===false)return;
+      requestAnimationFrame(()=>{
+        if(turn!==generation)return;
+        const focus=restore&&context.focustarget?document.getElementById(context.focustarget):document.querySelector('[data-view-heading]');
+        if(focus&&!focus.closest('[hidden]')){if(!focus.hasAttribute('tabindex'))focus.tabIndex=-1;focus.focus({preventScroll:true});}
+      });
+    }catch(error){if(turn===generation)pageLoad?.fail(error);throw error;}
   }
   async function open(view,meta={},options={}){
     restoreRequest++;savePosition();let next=normalize({page:document.body.dataset.page,view,...meta});
@@ -103,7 +107,7 @@ const page=c.page||document.body.dataset.page;return {...metadata(c),page,view:a
     return session;
   }
   async function restore(){
-    const request=++restoreRequest;
+    const request=++restoreRequest,pageLoad=window.NavrenPageLoad?.begin();
     generation++;referenceValue=null;
     const root=scrollRoot();document.documentElement.classList.add('navren-private-locked');if(root)root.setAttribute('aria-busy','true');
     try{
@@ -117,10 +121,11 @@ const page=c.page||document.body.dataset.page;return {...metadata(c),page,view:a
       const next=staleHistory?normalize({page:document.body.dataset.page,view:'home'}):valid?saved:requested;
       if(next.page==='account'&&next.view==='public'){NavrenApp.navigate(urlFor({page:'recommend',view:'research'}));return;}
       history.replaceState({...history.state,navren:{...next,workspace_id:identity.workspace_id,privacy_revision:identity.privacy_revision}},'',urlFor(next));
-      await render(next,valid);
+      await render(next,valid,pageLoad);
       if(request===restoreRequest){document.documentElement.classList.remove('navren-private-locked');document.getElementById('navrenIdentityGate')?.remove();}
     }catch(e){
       if(request!==restoreRequest)return;
+      pageLoad?.fail(e);
       if(document.body.dataset.page==='recommend'&&new URLSearchParams(location.search).has('time_view')){
         const target=document.getElementById('discoverSubview');if(target){target.hidden=false;document.getElementById('discoverHome')?.setAttribute('hidden','');window.MarketUI?.historyUnavailable(target,{},e);}
       }

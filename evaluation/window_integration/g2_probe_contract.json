@@ -1,13 +1,12 @@
 {
   "schema_version": 1,
-  "publication_note": "2026-10-10 本发布版本仅清理本机路径；路径以仓库根目录为基准。outputs 中原始材料未随源码发布，须另行取得并核验。以下原冻结日期、预期、未运行状态和历史结果保留原版本含义；本次未运行金融、模型或 E2E 验收，不继承旧版本通过结论。",
   "stage": "G2",
   "status": "FROZEN_NOT_RUN",
   "frozen_at": "2026-10-05T20:18:45.122401+00:00",
-  "approved_increment_plan": "outputs/window-progress/finance/solution-review/solution-v2.md",
+  "approved_increment_plan": "/Users/manton/CC/projects/Navren/outputs/window-progress/finance/solution-review/solution-v2.md",
   "plan_sha256": "7e3ffe6996588cdd55733926ae294fff72a6e6b23454134ee9fa0708d2f100e8",
   "original_finance_dataset": {
-    "path": "evaluation/navren_skill_semantic_cases.json",
+    "path": "/Users/manton/CC/projects/Navren/evaluation/navren_skill_semantic_cases.json",
     "sha256": "f92627f6dcd96a979d17d805dc5a219a47fcacc0a9e647c6f6e1a421f62ec0e6"
   },
   "public_probes": {

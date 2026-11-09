@@ -10,7 +10,7 @@
   "original_C16_adapter_passed": false,
   "formal_46_passed": false,
   "input_sha256": {
-    "evaluation/window_integration/finance_adapter_oracles.json": "91cfb1dc3f3cfbe99d39785535bd2d1861b10273e1a337b006357f96b2ebee6b",
+    "evaluation/window_integration/finance_adapter_oracles.json": "04dde7576f4dec85ddf3ac2e0ecbc0940de16a3a52ef32c7bd79625ab513bb14",
     "tests/window_integration/test_finance_adapter_handoff.py": "673a32ce981e568418673c15b80f6bcbdb6c90d4669b368ace66d0532f5ae351",
     "outputs/window-progress/finance/implementation/adapter-contract.md": "4cce2b7a8f03db6ef8c9139419ba9ab9c82d847cc286f59b22c83e1eedc9da30",
     "outputs/window-progress/finance/solution-review/solution-v2.md": "7e3ffe6996588cdd55733926ae294fff72a6e6b23454134ee9fa0708d2f100e8",

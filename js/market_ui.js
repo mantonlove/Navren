@@ -501,7 +501,6 @@ window.MarketUI=(()=>{
       const signature=JSON.stringify([data.report,data.expected_period,data.status,data.history,data.coverage?.state,data.coverage?.schedule?.streams?.weekly]);if(signature===weeklySignature)return;
       const focus=document.activeElement?.closest('#weeklyReport [data-weekly-action]')?.dataset.weeklyAction;
       weeklySignature=signature;root.replaceChildren();const w=data.report;
-      if(!weeklyReadable(w)||w.period!==data.expected_period)root.append(weeklyState(data));
       if(weeklyReadable(w))root.append(weeklyCard(data));
       if(data.history?.length){const archive=el('details',undefined,'market-weekly-archive');archive.append(el('summary','历史周报'));const select=el('select');select.setAttribute('aria-label','历史周报');const placeholder=el('option','选择历史期号');placeholder.value='';select.append(placeholder);for(const h of data.history){const option=el('option',h.period+' · 第'+h.version+'版'+(h.status==='published'?' · '+t('可读'):' · '+t(weeklyReasons[h.status]||'未通过当前发布核验。')));option.value=JSON.stringify({object_kind:'weekly',object_id:h.period,object_version:h.version,time_view:'historical_audit'});select.append(option);}select.onchange=()=>{if(select.value)openHistory(JSON.parse(select.value));select.value='';};archive.append(select);root.append(archive);}
       if(focus)root.querySelector('[data-weekly-action="'+focus+'"]')?.focus({preventScroll:true});

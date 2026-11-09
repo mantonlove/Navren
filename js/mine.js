@@ -684,9 +684,9 @@ window.togglePref = async function(key, el) {
 
 // ── Account Actions ──
 async function createIndependentDemoAccount() {
-  if (!confirm('创建一个独立的本机演示账户？原工作区的数据仍保留，新账户不继承原账户的权限、目标或记忆。')) return;
+  if (!confirm('创建一个独立账户？原账户资料仍保留，新账户不继承原账户的权限、目标或记忆。')) return;
   try { await BankClient.post('/session/reset', {confirmed:true}); window.dispatchEvent(new Event('navren:privacy-reset')); NavrenApp.navigate('chat.html'); }
-  catch (error) { showToast('独立演示账户未创建：' + error.message); }
+  catch (error) { showToast('独立账户未创建：' + error.message); }
 }
 
 // 旧本机档案只维护自己的历史，不清空有效对话，也不写入新画像。

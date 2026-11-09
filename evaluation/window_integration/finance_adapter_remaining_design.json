@@ -1,7 +1,7 @@
 {
   "schema": "navren.finance-adapter-remaining.design/1",
   "status": "FROZEN_NOT_RUN",
-  "oracle_sha256": "91cfb1dc3f3cfbe99d39785535bd2d1861b10273e1a337b006357f96b2ebee6b",
+  "oracle_sha256": "04dde7576f4dec85ddf3ac2e0ecbc0940de16a3a52ef32c7bd79625ab513bb14",
   "remaining_case_count": 34,
   "new_test_case_count": 29,
   "uncovered_case_count": 5,
@@ -174,7 +174,7 @@
     "A passed diagnostic binds its actual source SHA only; does not stabilize WIP or authorize cloud"
   ],
   "input_sha256": {
-    "evaluation/window_integration/finance_adapter_oracles.json": "91cfb1dc3f3cfbe99d39785535bd2d1861b10273e1a337b006357f96b2ebee6b",
+    "evaluation/window_integration/finance_adapter_oracles.json": "04dde7576f4dec85ddf3ac2e0ecbc0940de16a3a52ef32c7bd79625ab513bb14",
     "tests/window_integration/test_finance_adapter_handoff.py": "673a32ce981e568418673c15b80f6bcbdb6c90d4669b368ace66d0532f5ae351",
     "tests/test_base_financial_methods.py": "783a91e86856585a935b1e7f48cc4c93348a5d60519e13717d7db0d53a7a86e0",
     "tests/test_base_returns_adapter.py": "26b4e10c7d99de68af78c6d25d4556ab160e0f5b4fd1e3f8888dd7f6bf80d74d",

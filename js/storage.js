@@ -734,6 +734,7 @@ function applyFontSize(size) {
   document.documentElement.style.setProperty('--fs-sm', (pxi-1)+'px');
   document.documentElement.style.setProperty('--fs-lg', (pxi+4)+'px');
   document.documentElement.style.setProperty('--fs-xl', (pxi+10)+'px');
+  window.dispatchEvent(new CustomEvent('navren:font-size',{detail:{pixels:pxi}}));
 }
 
 // 百炼 Qwen-Audio-3.1 系统音色；沿用旧偏好 ID，保持已有选择。

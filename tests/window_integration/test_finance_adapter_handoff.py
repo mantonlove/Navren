@@ -21,10 +21,10 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE_PATH = ROOT / "evaluation/window_integration/finance_adapter_oracles.json"
-ORACLE_SHA256 = "91cfb1dc3f3cfbe99d39785535bd2d1861b10273e1a337b006357f96b2ebee6b"
+ORACLE_SHA256 = "04dde7576f4dec85ddf3ac2e0ecbc0940de16a3a52ef32c7bd79625ab513bb14"
 CONTRACT_PATH = ROOT / "outputs/window-progress/finance/implementation/adapter-contract.md"
 RISK_SOURCE_CONTRACT_PATH = ROOT / "evaluation/window_integration/finance_adapter_capability_design.json"
-RISK_SOURCE_CONTRACT_SHA256 = "e3fd3e1fcb0778abe76647871d17660e38f8c8bf6396d441780af6c337d43d42"
+RISK_SOURCE_CONTRACT_SHA256 = "1855e9b811b8bdbb0499cb737def56763f8f92ba5e4db084db3791606ce05915"
 OUTPUT_ROOT = ROOT / "outputs/window-progress/integration/finance-adapter-handoff"
 ORACLE = json.loads(ORACLE_PATH.read_text())
 CASES = {case["case_id"]: case for case in ORACLE["cases"]}

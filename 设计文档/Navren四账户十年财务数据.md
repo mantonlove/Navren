@@ -1,12 +1,10 @@
 # Navren 四账户十年个人财务数据
 
-> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
-
 本轮只构造财务数据，账户称号为：A市首富、种粮大户、坚持上班的包租婆、退休后重新创业的阿姨。没有人物背景、口头禅、预设对话或故事文本。
 
 ## 文件与覆盖范围
 
-主文件：financial_data.sqlite3（历史资料未随仓库发布）。输出目录：contest-finances（历史资料未随仓库发布）。
+主文件：[financial_data.sqlite3](/Users/manton/CC/projects/Navren/outputs/contest-finances/financial_data.sqlite3)。输出目录：[contest-finances](/Users/manton/CC/projects/Navren/outputs/contest-finances)。
 
 日期为 **2016-10-04—2026-10-03，闭区间，精确十年、3652天**，与当前模拟银行参考日期一致。每账户有3652份日终快照；覆盖121个日历月桶及11个日历年桶，首尾月、首尾年明确标记为不完整期间。不能把2016或2026的局部期间当作全年比较。
 
@@ -59,7 +57,7 @@
 
 ## 复现与审计
 
-生成参数：[contest_profiles.json](../simulated_bank/fixtures/contest_profiles.json)，固定随机种子为20261005。
+生成参数：[contest_profiles.json](/Users/manton/CC/projects/Navren/simulated_bank/fixtures/contest_profiles.json)，固定随机种子为20261005。
 
 ```sh
 python3 scripts/generate_contest_finances.py
@@ -86,7 +84,7 @@ python3 -m unittest discover -s tests -p test_contest_finances.py -v
 
 13项回归测试全部通过，包括正常数据验证和故意破坏分录、余额、成本、汇总、现金腿、用户归属及日期后的失败检测；运行时将 Python 警告作为错误处理。
 
-打包文件：Navren四账户十年财务数据.zip（历史资料未随仓库发布），包含四用户数据、SQLite数据库、参数、字段合同、审计结果、说明和生成／审计脚本。压缩包中的 `manifest.json` 记录文件SHA-256校验值。
+打包文件：[Navren四账户十年财务数据.zip](/Users/manton/CC/projects/Navren/outputs/contest-finances/Navren四账户十年财务数据.zip)，包含四用户数据、SQLite数据库、参数、字段合同、审计结果、说明和生成／审计脚本。压缩包中的 `manifest.json` 记录文件SHA-256校验值。
 
 解压后如需重新生成，明确指定参数文件：
 

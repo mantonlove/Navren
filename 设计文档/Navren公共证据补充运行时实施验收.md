@@ -1,10 +1,8 @@
 # Navren 公共证据补充运行时实施与验收
 
-> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
-
 本次落实的是“本地核验并固定本轮证据，再交给云端模型；共享库正式发布异步完成”。它不把模型生成的回答当作金融原件，也不以完成入库、HTTP 200 或审核模型批准证明金融结论正确。现役 18767 未重启，测试使用隔离副本、数据库和临时端口。
 
-最新接线增量见 提交后异常与真实慢客户端验收（历史资料未随仓库发布）。最新冻结的 97 项检查全部通过，真实外层与子进程退出均为 0；下文 `offline-07` 的 191 项和 `implementation-summary.json` 是此前版本的证据，保留原件，不推广到新源码或整个当前工作树。真实云端联合验收仍未完成。
+最新接线增量见 [提交后异常与真实慢客户端验收](/Users/manton/CC/projects/Navren/outputs/evidence-runtime-20261006/postcommit-history/delivery.md)。最新冻结的 97 项检查全部通过，真实外层与子进程退出均为 0；下文 `offline-07` 的 191 项和 `implementation-summary.json` 是此前版本的证据，保留原件，不推广到新源码或整个当前工作树。真实云端联合验收仍未完成。
 
 ## 已实现的路径
 
@@ -85,9 +83,9 @@ Agent 此后已稳定交付公共工具视图与完整审核证据的无损去�
 复现命令使用新的输出目录，避免旧报告掩盖新失败：
 
 ```sh
-# 在克隆后的 Navren 项目根目录执行
+cd /Users/manton/CC/projects/Navren
 .venv/bin/python -B scripts/verify_evidence_runtime.py --mode offline --out /绝对路径/新目录
-.venv/bin/python -B scripts/verify_evidence_runtime.py --mode cloud --out /绝对路径/另一个新目录
+/Users/manton/CC/services/cc-secrets/cc-with-secrets .venv/bin/python -B scripts/verify_evidence_runtime.py --mode cloud --out /绝对路径/另一个新目录
 ```
 
 `--mode official` 只读取登记的固定来源并记录准入结果，不发布。启动服务本身不自动联网。云模式须显式选择；密钥由统一加载器从钥匙串提供，不写项目、日志或验收产物。

@@ -50,7 +50,7 @@ node --test tests/test_*.js      # 需要 npm ci 先装 jsdom
 
 ## 门禁实际跑什么
 
-`scripts/run_ci_tests.py` 在本地实测：80 个模块、1466 个测试，约 195 s，0 failures / 0 errors（其中一次有 1 个 skip）。
+`scripts/run_ci_tests.py` 在本地实测：80 个模块、1470 个测试，约 160–195 s，0 failures / 0 errors（其中 1 个 skip）。
 
 已知不稳定项：`tests/test_knowledge_resolver_performance.py` 使用 `TemporaryDirectory` 时，首轮组合运行出现过 2 次 `OSError: [Errno 66] Directory not empty`（临时目录清理竞态），重跑不复现；已给该文件的临时目录加上 `ignore_cleanup_errors=True`，清理失败不再让用例报错。
 
@@ -79,6 +79,13 @@ node --test tests/test_xxx.js               # 前端逐个确认后改清单
 ```
 
 新增清单条目必须能在**无状态、无密钥、无出网**的环境通过；需要真实模型、短信通道或封存数据库的用例留在全量报告里，不放进门禁。
+
+## 本机独有内容并入（2026-11-09）
+
+- 并入 47 项：7 个会话组件 CSS、`js/conversation_components.js`、`js/conversation_panels.js`、`skills/conversation-components/`、5 个通过的 JS 测试、2 个 Python 测试（`test_conversation_component_contract.py` 4 tests、`test_panel_speech.py` 20 tests）、26 个设计文档。
+- 这批 CSS/JS 尚未接到 `chat.html`：上游页面没有引用它们，本机接线留在本机工作树。所以它们目前是「已入库但未上线」的组件，前端白名单测试只覆盖组件自身契约。
+- `tests/test_chat_attachment_turn_lock.js` 与 `tests/ui_window/test_reply_response_refinement.js` 未并入：前者依赖的 `newConversationStarting` 只存在于本机旧版 `js/chat.js`（上游已重构掉），后者的夹具与当前页面不一致，两者在本机也跑不过。
+- `tests/test_chat_documents.py`、`tests/test_chat_document_consumer.py` 已入库但不入门禁：它们需要独立财务库，干净树里只会报 `DATABASE_UNAVAILABLE`，与既有 84 个同类失败一致。
 
 ## 已知未做
 

@@ -1,7 +1,5 @@
 # Navren 本地向量检索实施与验收
 
-> 设计与实施记录不代表当前整体已验收；本机原始收据不随仓库发布，当前入口见仓库 README。
-
 日期：2026-10-10。状态：本地检索模块通过，独立双审通过；现役服务待采用。技术候选的送审快照见 outputs/local-vector/reviewed-design-snapshot.md，最终留证见 outputs/local-vector/acceptance.json。
 
 ## 用户要求与实现

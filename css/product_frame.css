@@ -1,0 +1,188 @@
+/* 本地审核版：保留全部路由、表单及数据合同，只重组视觉角色。 */
+:root {
+  --ink:#22313f;--ink-70:#465564;--ink-50:#71808b;--ink-40:#80909c;
+  --ink-30:#a4adb4;--ink-15:#e4e8eb;
+  --surface:#f6f7f8;--surface-card:#fff;--surface-raised:#eef1f4;--surface-hover:#f1f4f7;
+  --border:#e2e7eb;--border-emphasis:#c9d3dc;
+  --primary:#326c97;--primary-deep:#245778;--primary-soft:#eaf1f6;--primary-border:#d8e4ed;
+  --accent-water:#2c8187;--on-primary:#fff;
+  --r-sm:10px;--r-md:16px;--r-lg:20px;
+  --shadow-xs:0 1px 2px #142c4004;--shadow-sm:0 3px 12px #142c4006;
+  --shadow-md:0 12px 40px #142c400c;--shadow-lg:0 20px 70px #142c401c;
+  --content-width:1240px;
+  --product-sidebar:176px;--product-sidebar-surface:#fcfcfd;
+}
+html[data-theme="dark"] {
+  --ink:#e3eaf0;--ink-70:#bdcbd5;--ink-50:#92a6b4;--ink-40:#8ca0af;
+  --ink-30:#667988;--ink-15:#2c3a47;
+  --surface:#111a24;--surface-card:#17232e;--surface-raised:#1d2c38;--surface-hover:#22333f;
+  --border:#293945;--border-emphasis:#435764;
+  --primary:#91bedf;--primary-deep:#abd0e9;--primary-soft:#203746;--primary-border:#314c5e;
+  --on-primary:#14222d;--accent-water:#8ac4c5;--product-sidebar-surface:#141f2a;
+}
+body {font-feature-settings:"ss01"; -webkit-font-smoothing:antialiased;}
+html.navren-shell body .sidebar {
+  width:var(--product-sidebar);min-width:var(--product-sidebar);max-width:var(--product-sidebar);
+  padding:0 12px;gap:6px;background:var(--product-sidebar-surface);border-right:1px solid var(--border);
+}
+html.navren-shell body .sidebar .logo {
+  display:flex;align-items:center;justify-content:flex-start;gap:10px;
+  width:calc(100% - 16px);height:42px;min-height:42px;margin:20px 8px 34px;
+  padding:0;background:transparent;border:0;border-radius:0;box-shadow:none;
+}
+html.navren-shell body .sidebar .logo img {width:30px;height:30px;object-fit:contain;border-radius:8px;}
+html[data-theme="dark"].navren-shell body .sidebar .logo img {filter:brightness(1.35) saturate(.9);}
+html.navren-shell body .sidebar .logo::after {
+  content:"Navren";font-size:23px;line-height:1;font-weight:500;letter-spacing:-.055em;color:var(--ink);
+}
+html.navren-shell body .sidebar .nav-item,
+html.navren-shell body .sidebar .shell-settings-entry {
+  position:relative;display:flex;flex-direction:row;align-items:center;justify-content:flex-start;
+  gap:13px;width:100%;height:46px;min-height:46px;margin:0;padding:0 16px;
+  border-radius:10px;border:0;background:transparent;box-shadow:none;color:var(--ink-50);
+  font-size:15px;font-weight:500;text-decoration:none;
+}
+html.navren-shell body .sidebar .nav-item svg,
+html.navren-shell body .sidebar .shell-settings-entry svg {width:20px;height:20px;stroke-width:1.65;}
+html.navren-shell body .sidebar .nav-label {font-size:15px;line-height:1.4;letter-spacing:.02em;}
+html.navren-shell body .sidebar .nav-item.active {color:var(--primary-deep);background:var(--primary-soft);}
+html.navren-shell body .sidebar .nav-item.active::before {
+  content:"";position:absolute;left:0;top:15px;width:3px;height:16px;border-radius:3px;background:var(--primary);
+}
+html.navren-shell body .sidebar :is(.nav-item,.shell-settings-entry):hover {background:var(--surface-raised);color:var(--ink);}
+html.navren-shell body .sidebar .shell-settings-entry {margin:auto 0 18px;}
+html.navren-shell body .main {margin-left:var(--product-sidebar);width:calc(100% - var(--product-sidebar));background:var(--surface);}
+html.navren-shell body .header {
+  height:64px;min-height:64px;max-height:64px;padding:8px 36px;
+  background:var(--surface);border-bottom:1px solid var(--border);box-shadow:none;
+}
+html.navren-shell body .header-identity {gap:0;}
+html.navren-shell body .header-identity > .brand {display:none;}
+html.navren-shell body .header-location {padding:0;border:0;font-size:16px;font-weight:550;letter-spacing:.025em;color:var(--ink-70);}
+html.navren-shell body .header .shell-tools {gap:4px;}
+html.navren-shell body .header .shell-tool {font-size:13px;color:var(--ink-50);}
+html.navren-shell body .header .shell-tool svg {width:18px;height:18px;stroke-width:1.6;}
+html.navren-shell body .header .shell-tool:hover {color:var(--ink);background:var(--surface-raised);}
+html.navren-shell body .page-scroll {scrollbar-color:var(--border-emphasis) transparent;}
+html.navren-shell body :is(.rec-page,.mine-page) {max-width:1240px;margin-inline:auto;padding-inline:36px;}
+html.navren-shell body :is(.modal,.dialog-card,dialog) {border-radius:18px;box-shadow:var(--shadow-lg);border-color:var(--border);}
+html.navren-shell body :is(.modal-head,.dialog-head) {border-color:var(--border);}
+html.navren-shell body .navren-page-loader {background:var(--surface);}
+html.navren-shell body .npl-chat-sheet {box-shadow:none;border-color:var(--border);}
+
+/* 对话沿开放画布展开；文字、资料与操作各有明确重量。 */
+body[data-page="chat"] {
+  --chat-canvas:var(--surface);--chat-paper:var(--surface-card);--chat-soft:var(--surface-raised);
+  --chat-line:var(--border);--chat-muted:var(--ink-50);--chat-accent:var(--primary-deep);
+  --chat-workspace-width:1160px;
+}
+html[data-theme="dark"] body[data-page="chat"] {
+  --chat-canvas:var(--surface);--chat-paper:var(--surface-card);--chat-soft:var(--surface-raised);
+  --chat-line:var(--border);--chat-muted:var(--ink-50);--chat-accent:var(--primary-deep);
+}
+html.navren-shell body[data-page="chat"] .main {
+  background:radial-gradient(ellipse at 10% 100%,color-mix(in srgb,var(--accent-water) 4%,transparent),transparent 64%),var(--surface);
+}
+body[data-page="chat"] .chat-messages {gap:34px;}
+body[data-page="chat"] .message-body.message-prose {letter-spacing:.005em;}
+body[data-page="chat"] .chat-messages .message.user > .bubble {background:var(--primary-soft);border:0;border-radius:16px 16px 4px 16px;}
+body[data-page="chat"] .message-body.message-prose > p.prose-section-label {letter-spacing:.025em;color:var(--primary-deep);}
+body[data-page="chat"] .message-body.message-prose > :is(p,ul,ol,blockquote) strong {background:none;font-weight:680;}
+body[data-page="chat"] .chat-input-area .input-row {
+  min-height:64px;border-radius:18px;border:1px solid var(--border-emphasis);background:var(--surface-card);
+  box-shadow:0 6px 24px #162c3c07,0 1px 2px #162c3c04;
+}
+html[data-theme="dark"] body[data-page="chat"] .chat-input-area .input-row {background:var(--surface-card);box-shadow:0 8px 28px #0002;}
+body[data-page="chat"] .chat-input-area .input-row > .ib-btn:first-of-type {background:transparent;border-radius:10px;}
+body[data-page="chat"] .chat-input-area .input-row .send-btn {border-radius:12px;}
+body[data-page="chat"] .chat-input-area .input-row .send-btn:disabled {background:var(--surface-raised);color:var(--ink-30);}
+body[data-page="chat"] .chat-input-area .input-row textarea {padding-inline:3px;font-size:var(--font-size-base,16px);}
+body[data-page="chat"] .chat-input-area .input-row textarea::placeholder {color:var(--ink-40);}
+.chat-intro {position:absolute;z-index:1;top:34%;left:max(76px,calc((100% - 1060px)/2));right:60px;transform:translateY(-28%);max-width:740px;}
+.chat-intro[hidden],
+.main:has(.chat-messages > .message) > .chat-intro,
+.main:has(.chat-history[data-expanded="true"] .message) > .chat-intro {display:none;}
+.chat-intro-mark {width:40px;height:40px;object-fit:contain;margin-bottom:22px;}
+.chat-intro h2 {font-size:clamp(28px,2.3vw,36px);font-weight:550;letter-spacing:-.035em;line-height:1.4;margin:0 0 12px;color:var(--ink);}
+.chat-intro p {margin:0;color:var(--ink-50);font-size:var(--font-size-base,16px);line-height:1.8;}
+.chat-intro-links {display:flex;flex-wrap:wrap;gap:10px;margin-top:30px;}
+.chat-intro-links a {display:flex;gap:18px;align-items:center;min-height:44px;padding:10px 16px;border:1px solid var(--border);border-radius:10px;font-size:14px;color:var(--ink-70);background:var(--surface-card);transition:border-color .18s,background-color .18s;}
+.chat-intro-links a::after {content:"↗";font-size:16px;color:var(--primary);}
+.chat-intro-links a:hover {border-color:var(--border-emphasis);background:var(--primary-soft);}
+html[lang="en"] .chat-intro [lang="zh-CN"],html:not([lang="en"]) .chat-intro [lang="en"] {display:none;}
+
+/* 登录与账户选择保持原有流程，收紧表单节奏。 */
+body[data-page="index"] {background:var(--surface);}
+body[data-page="index"] .welcome-auth-card {border-radius:20px;}
+body[data-page="index"] #welcomeLoginTitle {font-weight:600;letter-spacing:-.04em;}
+body[data-page="index"] #welcomeLoginMethods {border:1px solid var(--border);border-radius:12px;background:var(--surface-raised);padding:4px;gap:4px;}
+body[data-page="index"] #welcomeLoginMethods [role="tab"] {border:0;border-radius:8px;min-height:40px;font-weight:550;}
+body[data-page="index"] #welcomeLoginMethods [aria-selected="true"] {background:var(--surface-card);box-shadow:var(--shadow-xs);}
+body[data-page="index"] #welcomeLoginMethods [role="tab"]::after {display:none;}
+
+@media(max-width:1100px) and (min-width:769px) {
+  :root {--product-sidebar:144px;}
+  html.navren-shell body .sidebar {padding-inline:10px;}
+  html.navren-shell body .sidebar .logo {gap:7px;margin-inline:4px;}
+  html.navren-shell body .sidebar .logo::after {font-size:21px;}
+  html.navren-shell body .sidebar .logo img {width:26px;height:26px;}
+  html.navren-shell body .sidebar :is(.nav-item,.shell-settings-entry) {padding-inline:13px;gap:11px;}
+  html.navren-shell body :is(.rec-page,.mine-page) {padding-inline:26px;}
+  .chat-intro {left:72px;right:36px;}
+}
+@media(max-width:768px) {
+  html.navren-shell body .sidebar {
+    width:100%;min-width:0;max-width:none;inset:auto 0 0;height:auto;min-height:64px;
+    padding:4px 6px calc(4px + env(safe-area-inset-bottom));gap:2px;flex-direction:row;overflow:visible;
+    background:var(--product-sidebar-surface);border-right:0;border-top:1px solid var(--border);
+  }
+  html.navren-shell body .sidebar .logo {display:none;}
+  html.navren-shell body .sidebar .nav-item,
+  html.navren-shell body .sidebar .shell-settings-entry {flex-direction:column;justify-content:center;gap:4px;width:auto;flex:1;min-width:0;height:52px;min-height:52px;padding:4px;margin:0;border-radius:10px;}
+  html.navren-shell body .sidebar .nav-label {font-size:11px;}
+  html.navren-shell body .sidebar .nav-item.active::before {display:none;}
+  html.navren-shell body .sidebar .shell-settings-entry {flex:0 0 38px;}
+  html.navren-shell body .sidebar .shell-settings-entry span {display:none;}
+  html.navren-shell body .main {margin:0;width:100%;}
+  html.navren-shell body .header {padding:8px 18px;}
+  html.navren-shell body .header-identity > .brand {display:flex;}
+  html.navren-shell body .header-identity {gap:14px;}
+  html.navren-shell body :is(.rec-page,.mine-page) {padding-inline:18px;}
+  .chat-intro {top:30%;left:28px;right:26px;transform:translateY(-15%);}
+  .chat-intro h2 {font-size:28px;}
+  .chat-intro p {font-size:14px;max-width:22em;}
+  .chat-intro-mark {width:34px;height:34px;margin-bottom:16px;}
+  .chat-intro-links {gap:8px;margin-top:24px;}
+  .chat-intro-links a {padding:8px 12px;font-size:13px;gap:12px;}
+}
+@media(prefers-reduced-motion:reduce) {.chat-intro-links a {transition:none;}}
+
+/* 资产组成同排，净值与负债另起一层；总额承担品牌阅读锚点。 */
+html.navren-shell body[data-page="account"] #accountHome #assetOverview {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:24px;row-gap:20px!important;
+}
+html.navren-shell body[data-page="account"] #accountHome .ah-total {
+  grid-column:1/-1;position:relative;padding:18px 22px 20px;border:0;border-radius:4px 14px 14px 4px;
+  background:linear-gradient(105deg,var(--primary-soft),color-mix(in srgb,var(--primary-soft) 16%,transparent));
+}
+html.navren-shell body[data-page="account"] #accountHome .ah-total>.ah-amount {color:var(--ink);}
+html.navren-shell body[data-page="account"] #accountHome .ah-stats {display:contents;}
+html.navren-shell body[data-page="account"] #accountHome .ah-stat:nth-child(2) {grid-column:1;grid-row:2;}
+html.navren-shell body[data-page="account"] #accountHome .ah-stat:nth-child(3) {grid-column:2;grid-row:2;}
+html.navren-shell body[data-page="account"] #accountHome .ah-available {
+  grid-column:3;grid-row:2;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;
+  gap:8px;padding:0;border:0;
+}
+html.navren-shell body[data-page="account"] #accountHome .ah-available>.ah-amount {text-align:start;color:var(--ink);font-weight:580;}
+html.navren-shell body[data-page="account"] #accountHome .ah-stat:is(:first-child,:last-child) {
+  grid-row:3;padding-top:16px;border-top:1px solid var(--border);
+}
+html.navren-shell body[data-page="account"] #accountHome .ah-stat:first-child {grid-column:1/3;}
+html.navren-shell body[data-page="account"] #accountHome .ah-stat:last-child {grid-column:3;}
+html.navren-shell body[data-page="account"] #accountHome .ah-stat:is(:first-child,:last-child)>.ah-amount {font-size:max(18px,var(--font-size-base));color:var(--ink-70);}
+@media(max-width:600px) {
+  html.navren-shell body[data-page="account"] #accountHome #assetOverview {column-gap:14px;}
+  html.navren-shell body[data-page="account"] #accountHome .ah-total {padding:18px;}
+  html.navren-shell body[data-page="account"] #accountHome :is(.ah-stat:nth-child(2),.ah-stat:nth-child(3),.ah-available)>.ah-amount {font-size:max(16px,var(--font-size-base));}
+  html.navren-shell body[data-page="account"] #accountHome .ah-stat:is(:first-child,:last-child)>.ah-amount {font-size:var(--font-size-base);}
+}

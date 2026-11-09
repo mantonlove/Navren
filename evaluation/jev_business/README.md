@@ -11,7 +11,7 @@ FinanceGateway 使用新的系统临时路径及演示 seed，账户 oracle 独�
 ```bash
 python3 scripts/run_jev_business_ab.py --freeze --out outputs/jev-iteration-20261007/NEW-P01-PILOT --case-subset P01 --reps 1 --baseline-pilot-only --overlay-root outputs/jev-iteration-20261007/candidate-overlay --pricing-json outputs/jev-iteration-20261007/pricing-frozen.json
 python3 scripts/run_jev_business_ab.py --preflight --out outputs/jev-iteration-20261007/NEW-P01-PILOT
-${NAVREN_SECRET_LOADER} python3 scripts/run_jev_business_ab.py --collect --out outputs/jev-iteration-20261007/NEW-P01-PILOT
+/Users/manton/CC/services/cc-secrets/cc-with-secrets python3 scripts/run_jev_business_ab.py --collect --out outputs/jev-iteration-20261007/NEW-P01-PILOT
 ```
 
 P01 单次基线 pilot 只是链路确认，不能称 AB 或开发门已过。后续 P04/P08 各 1 次配对 pilot：新目录、新冻结，`--case-subset P04 P08 --reps 1`，去掉 `--baseline-pilot-only`；默认两组的随机顺序和相邻重复 AB/BA 反转固定。6 题×2 重复的完整开发门仍缺 P05，上述 pilot 不替代它。

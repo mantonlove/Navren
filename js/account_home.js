@@ -13,7 +13,7 @@ window.NavrenAccountHome = (() => {
     '我的资产':'My assets','银行卡':'Bank cards','转账':'Transfers','资产月报':'Monthly assets','交易记录':'Transactions',
     '总资产':'Total assets','资产':'Assets','现金':'Cash','净资产':'Net assets','现金余额':'Cash balance','持仓本金':'Investment principal','待结算赎回':'Pending redemption',
     '负债':'Liabilities','可安排资金':'Arrangeable funds','本金口径':'Principal basis','资金口径':'Funds basis',
-    '查看全部资产':'All assets','管理卡片':'Manage cards','借记卡':'Debit card','信用卡':'Credit card','SIM 虚拟卡':'SIM virtual card','银行卡类型待核实':'Card type unverified',
+    '查看全部资产':'All assets','管理卡片':'Manage cards','借记卡':'Debit card','信用卡':'Credit card','虚拟卡':'Virtual card','银行卡类型待核实':'Card type unverified',
     '尾号':'Ending in','本期待还':'Outstanding balance','账户现金':'Account cash','关联持仓':'Linked investments','关联账户尚未取得':'Linked account unavailable',
     '尚未取得银行卡资料':'Card records unavailable','未关联银行卡的资金账户':'Accounts without a linked debit card',
     '查看持仓':'View investments','查看账户':'View account','查看完整月报':'Full monthly report','全部交易':'All transactions',
@@ -32,7 +32,7 @@ window.NavrenAccountHome = (() => {
     '现金账户月结资料暂未取得。':'Cash statement unavailable.', '所选月份没有已记录流水，不代表没有发生交易。':'No transactions recorded for this month; this does not imply no activity.',
     '历史记录':'Historical records','截至':'Through','本月':'This month','笔交易':'transactions','有效':'Active','已挂失':'Lost',
     '已过期':'Expired','状态待核实':'Status unverified','报告月份':'Report month','交易月份':'Transaction month',
-    '资产与负债按当前账本本金展示，不包含市场估值。':'Current assets and liabilities use ledger principal, excluding market valuation.',
+    '资产与负债按当前账户本金展示，不包含市场估值。':'Current assets and liabilities use ledger principal, excluding market valuation.',
     '可安排资金已扣除应急保留、近期到期款和生效预留，不与总资产相加。':'Arrangeable funds exclude reserves and due payments; they are not added to total assets.'
   };
   const t = value => window.NavrenI18n?.language === 'en' ? (en[value] || window.NavrenI18n?.t?.(value) || value) : value;
@@ -57,7 +57,7 @@ window.NavrenAccountHome = (() => {
     '请选择用途':'Select a purpose','生活支出':'Living expenses','家庭往来':'Family payment','货款／服务费':'Goods / services','借款归还':'Loan repayment','其他':'Other',
     '大写':'Chinese uppercase','请输入金额':'Enter an amount','金额格式有误':'Invalid amount','核对汇款信息':'Review remittance','清空':'Clear','返回修改':'Edit details',
     '银行汇款渠道未接入':'Banking transfer service is not connected',
-    '模拟处理：实时汇款确认后处理，普通汇款 2 小时后处理，次日汇款次日 09:00 处理（北京时间）。':'Simulation: real-time remittances process after confirmation, ordinary remittances after 2 hours, and next-day remittances at 09:00 the next day (Beijing time).',
+    '处理规则：实时汇款确认后处理，普通汇款 2 小时后处理，次日汇款次日 09:00 处理（北京时间）。':'Processing: real-time remittances process after confirmation, ordinary remittances after 2 hours, and next-day remittances at 09:00 the next day (Beijing time).',
     '请填写有效金额，最多两位小数。':'Enter a valid amount with up to two decimal places.','金额必须大于零。':'Amount must be greater than zero.',
     '金额超出可填写范围。':'Amount is outside the supported input range.','账号须为10至32位数字。':'Account numbers must contain 10–32 digits.',
     '请输入有效联系电话。':'Enter a valid contact phone.',
@@ -69,7 +69,7 @@ window.NavrenAccountHome = (() => {
     '待发起':'Draft','待收款':'Awaiting payment','已完成':'Completed','已取消':'Cancelled','已发起':'Requested'
   });
   Object.assign(en,{'付款银行卡':'Payment bank card','选择付款银行卡':'Choose a payment card','暂无可选借记卡':'No eligible debit cards','正在核对银行卡…':'Checking bank cards…','借记卡资料暂未取得':'Debit card records unavailable','请选择有效的付款银行卡。':'Select an eligible payment card.'});
-  Object.assign(en,{'模拟汇款':'Simulated remittance','确认汇款':'Confirm remittance','取消汇款':'Cancel remittance','正在准备汇款…':'Preparing remittance…','处理中…':'Processing…','查询汇款状态':'Check remittance status','查看汇款回执':'View remittance receipt','汇款记录':'Remittance history','查看回执':'View receipt','关闭':'Close','尚未取得汇款状态，请查询原操作，勿重复提交。':'Remittance status unavailable. Check the original operation before submitting again.','待本人确认，尚未扣款':'Awaiting confirmation; no debit','预约已受理，尚未扣款':'Scheduled; not yet debited','汇款已完成':'Remittance completed','已取消，未扣款':'Cancelled; no debit','汇款失败，未扣款':'Failed; no debit','确认已过期':'Confirmation expired','账户已变化，请重新核对':'Account changed; review again','执行日期':'Execution date','付款后账户余额':'Account balance after remittance','业务编号':'Receipt number','交易流水编号':'Transaction number','模拟额外验证码':'Simulation verification code','查看演示验证码':'View simulation code','本次只更新模拟账本，不会向真实银行发起汇款。':'Updates the simulation ledger only; no transfer is sent to a real bank.','尚未取得汇款记录':'Remittance history unavailable'});
+  Object.assign(en,{'汇款':'Remittance','确认汇款':'Confirm remittance','取消汇款':'Cancel remittance','正在准备汇款…':'Preparing remittance…','处理中…':'Processing…','查询汇款状态':'Check remittance status','查看汇款回执':'View remittance receipt','汇款记录':'Remittance history','查看回执':'View receipt','关闭':'Close','尚未取得汇款状态，请查询原操作，勿重复提交。':'Remittance status unavailable. Check the original operation before submitting again.','待本人确认，尚未扣款':'Awaiting confirmation; no debit','预约已受理，尚未扣款':'Scheduled; not yet debited','汇款已完成':'Remittance completed','已取消，未扣款':'Cancelled; no debit','汇款失败，未扣款':'Failed; no debit','确认已过期':'Confirmation expired','账户已变化，请重新核对':'Account changed; review again','执行日期':'Execution date','付款后账户余额':'Account balance after remittance','业务编号':'Receipt number','交易流水编号':'Transaction number','额外确认码':'Confirmation code','查看确认码':'View confirmation code','请核对付款账户、收款人和汇款金额后确认。':'Review the payment account, recipient, and amount before confirming.','尚未取得汇款记录':'Remittance history unavailable'});
   function n(tag, text, cls) { const el = document.createElement(tag); if (text != null) el.textContent = t(String(text)); if (cls) el.className = cls; return el; }
   const validMinor = Number.isSafeInteger;
   function sum(values) { if (!values.every(validMinor)) return null; const value = values.reduce((a,b) => a + BigInt(b), 0n); return value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(value) : null; }
@@ -226,7 +226,7 @@ window.NavrenAccountHome = (() => {
         const frame=n('article',null,'ah-bank-card');frame.dataset.cardId=card.card_id;frame.dataset.bankTheme=cardTheme(bank);frame.dataset.cardType=card.card_type;
         const physical=n('div',null,'ah-card-physical'),wave=n('span',null,'ah-card-wave');wave.setAttribute('aria-hidden','true');physical.append(wave);
         const head=n('div',null,'ah-card-head'),identity=n('div',null,'ah-card-bank');identity.append(cardIcon('bank'),n('span',bank));
-        head.append(identity,n('span',card.card_type==='virtual'?'SIM 虚拟卡':card.card_type==='credit'?'信用卡':card.card_type==='debit'?'借记卡':'银行卡类型待核实','ah-card-type'),n('span',t('尾号')+' '+tail,'ah-card-peek'));physical.append(head);
+        head.append(identity,n('span',card.card_type==='virtual'?'虚拟卡':card.card_type==='credit'?'信用卡':card.card_type==='debit'?'借记卡':'银行卡类型待核实','ah-card-type'),n('span',t('尾号')+' '+tail,'ah-card-peek'));physical.append(head);
         const body=n('div',null,'ah-card-body'),chipRow=n('div',null,'ah-card-chip-row'),chipGroup=n('span',null,'ah-card-chip-group'),chip=n('span',null,'ah-card-chip');chip.setAttribute('aria-hidden','true');chipGroup.append(chip,cardIcon('nfc'));
         const number=n('span','**** **** **** '+tail,'ah-card-number');number.setAttribute('aria-label',t('尾号')+' '+tail);chipRow.append(chipGroup,number);body.append(chipRow);
         const credit=card.card_type==='credit',facility=credit?s.credit_facilities?.find(item=>item.facility_id===card.facility_id):null;
@@ -382,7 +382,7 @@ window.NavrenAccountHome = (() => {
     disposePayer=()=>{abort.abort();menu.remove();refreshPayer=null;};paint();wrap.append(caption,input,trigger,balance);
     return {wrap,reset(){selected=items.find(item=>item.account.id.endsWith('-main'))||items[0];paint();close();}};
   }
-  Object.assign(en,{'未提供':'Not provided','汇款未受理':'Remittance rejected','汇款已受理，资金已冻结，等待处理':'Accepted; funds held, awaiting processing','预计处理时间':'Estimated processing time','账本记账日':'Ledger posting date','已冻结金额':'Funds held','当前可用余额':'Current available balance','处理到期汇款':'Process due remittances','确认处理':'Confirm processing','取消':'Cancel'});
+  Object.assign(en,{'未提供':'Not provided','汇款未受理':'Remittance rejected','汇款已受理，资金已冻结，等待处理':'Accepted; funds held, awaiting processing','预计处理时间':'Estimated processing time','记账日期':'Posting date','已冻结金额':'Funds held','当前可用余额':'Current available balance','处理到期汇款':'Process due remittances','确认处理':'Confirm processing','取消':'Cancel'});
   const remittanceStatuses={pending_confirmation:'待本人确认，尚未扣款',scheduled:'汇款已受理，资金已冻结，等待处理',succeeded:'汇款已完成',cancelled:'已取消，未扣款',failed:'汇款失败，未扣款',expired:'确认已过期',invalidated:'账户已变化，请重新核对'};
   function remittanceDay(value){return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;}
   function remittanceTime(record){
@@ -428,7 +428,7 @@ window.NavrenAccountHome = (() => {
         content.replaceChildren();const banner=n('div',null,'ah-review-amount');banner.append(n('strong',money(record.amount_minor,'CNY')));content.append(banner);
         const entries=[['收款人姓名',record.recipient_name],['收款账号',record.recipient_account],['开户银行',record.recipient_bank]];
         if(record.mode)entries.push(['汇款方式',t(record.mode==='realtime'?'实时汇款':record.mode==='next_day'?'次日汇款':'普通汇款')]);
-        if(state==='scheduled')entries.push(['预计处理时间',remittanceTime(record)]);else if(remittanceDay(record.business_on))entries.push(['账本记账日',record.business_on]);
+        if(state==='scheduled')entries.push(['预计处理时间',remittanceTime(record)]);else if(remittanceDay(record.business_on))entries.push(['记账日期',record.business_on]);
         if(state==='scheduled'&&validMinor(record.held_minor))entries.push(['已冻结金额',money(record.held_minor,'CNY')]);
         if(validMinor(record.available_minor))entries.push(['当前可用余额',money(record.available_minor,'CNY')]);
         if(record.remittance_id)entries.push(['业务编号',record.remittance_id]);if(record.transaction_id)entries.push(['交易流水编号',record.transaction_id]);
@@ -440,9 +440,9 @@ window.NavrenAccountHome = (() => {
             if(busy||unknown||!active())return;advance.disabled=true;
             const from=captured.state?.as_of,businessDay=record.execute_business_on;
             const days=remittanceDay(from)&&remittanceDay(businessDay)?Math.max(1,Math.round((Date.parse(businessDay+'T00:00:00Z')-Date.parse(from+'T00:00:00Z'))/86400000)):null;
-            if(!Number.isSafeInteger(days)||days>30){advanceConfirm.textContent='请先查询当前模拟日期与执行日期。';advance.disabled=false;return;}
+            if(!Number.isSafeInteger(days)||days>30){advanceConfirm.textContent='请先查询当前业务日期与执行日期。';advance.disabled=false;return;}
             const day=new Date(Date.parse(from+'T00:00:00Z')+days*86400000).toISOString().slice(0,10);
-            advanceConfirm.replaceChildren(n('p','将模拟日期推进至 '+day+'，处理全部到期汇款及其他到期模拟业务。'));
+            advanceConfirm.replaceChildren(n('p','将业务日期推进至 '+day+'，处理全部到期汇款及其他到期账户业务。'));
             const yes=n('button','确认处理','ah-action-button is-primary'),no=n('button','取消','ah-action-button');yes.type=no.type='button';
             no.onclick=()=>{advanceConfirm.replaceChildren();advance.disabled=false;};
             yes.onclick=async()=>{if(busy||unknown||!active())return;setBusy(true);yes.disabled=no.disabled=true;try{await BankClient.post('/simulation/advance',{days,confirmed:true});if(!active())return;await readStatus();await refresh();}catch(failure){await recover(failure);}finally{if(active()){setBusy(false);paint();}}};
@@ -498,7 +498,7 @@ window.NavrenAccountHome = (() => {
     dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
     dialog.addEventListener('close',()=>{verification?.dispose();dialog.remove();if(remittanceReview===dialog)remittanceReview=null;if(trigger?.isConnected)trigger.focus();if(current===captured&&captured.isCurrent())BankUI.load().catch(()=>{});},{once:true});
     dialog.addEventListener('click',event=>{if(event.target===dialog&&!busy){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)dialog.close();}});
-    document.body.append(dialog);dialog.showModal();paintPreview();dialog.append(n('p','本次只更新模拟账本，不会向真实银行发起汇款。','ah-form-note'));
+    document.body.append(dialog);dialog.showModal();paintPreview();dialog.append(n('p','请核对付款账户、收款人和汇款金额后确认。','ah-form-note'));
     (async()=>{setBusy(true);try{if(!attempt.operationId){const prepared=await BankClient.post('/remittances/prepare',attempt.payload);if(!active())return;preparedView(prepared);}else{await readStatus();}if(active()){unknown=false;attempt.unknown=false;paint();}}catch(failure){await recover(failure);}finally{if(active()){setBusy(false);paint();if(unknown){confirm.hidden=cancel.hidden=true;query.hidden=false;edit.disabled=false;}}}})();
   }
   function reviewRemittance(captured,form,trigger) {
@@ -545,9 +545,9 @@ window.NavrenAccountHome = (() => {
     const savedMethod=remittanceDraft.method==='deferred'?remittanceDraft.deferred||'ordinary':remittanceDraft.method||'realtime';
     for(const [value,label,timing]of [['realtime','实时汇款','确认后处理'],['ordinary','普通汇款','2小时后处理'],['next_day','次日汇款','次日09:00处理']]){const wrap=n('label',null,'ah-method-choice'),input=n('input'),copy=n('span',null,'ah-method-copy');input.type='radio';input.name='method';input.required=true;input.value=value;input.checked=value===savedMethod;copy.append(n('span',label),n('small',timing));wrap.append(input,copy);choices.append(wrap);}method.append(choices);form.append(method);
     field('附言（选填）','message','text','',false).input.maxLength=128;
-    const hint=n('p','处理时间为北京时间；当前使用模拟汇款。','ah-form-note ah-full-row');form.append(hint);
+    const hint=n('p','处理时间为北京时间，请核对汇款方式与预计处理时间。','ah-form-note ah-full-row');form.append(hint);
     const error=n('p','', 'ah-form-error');error.setAttribute('role','alert');
-    const footer=n('div',null,'ah-form-footer'),buttons=n('div',null,'ah-form-buttons'),reset=n('button','清空','ah-action-button'),submit=n('button','核对汇款信息','ah-action-button is-primary');reset.type='button';submit.type='submit';submit.disabled=!accounts.length;if(remittanceAttempt?.view?.operation&&remittanceAttempt.view.operation.state!=='pending_confirmation')submit.textContent=t('查看汇款回执');buttons.append(reset,submit);footer.append(n('span','模拟汇款','ah-form-note'),buttons);form.append(error,footer);host.append(form);
+    const footer=n('div',null,'ah-form-footer'),buttons=n('div',null,'ah-form-buttons'),reset=n('button','清空','ah-action-button'),submit=n('button','核对汇款信息','ah-action-button is-primary');reset.type='button';submit.type='submit';submit.disabled=!accounts.length;if(remittanceAttempt?.view?.operation&&remittanceAttempt.view.operation.state!=='pending_confirmation')submit.textContent=t('查看汇款回执');buttons.append(reset,submit);footer.append(n('span','汇款','ah-form-note'),buttons);form.append(error,footer);host.append(form);
     function updateAmount(cursor=false) {
       const input=amount.input,start=input.selectionStart,before=start==null?null:input.value.slice(0,start).replaceAll(',','').length,result=remittanceAmount(input.value);
       if(!result.error){input.value=result.formatted;if(cursor&&before!==null){let pos=0,count=0;while(pos<input.value.length&&count<before){if(input.value[pos]!==',')count++;pos++;}input.setSelectionRange(pos,pos);}}
@@ -746,7 +746,12 @@ window.NavrenAccountHome = (() => {
     document.querySelectorAll('#accountHome [data-ah-text]').forEach(el=>el.textContent=t(el.dataset.ahText));
     const connected=async()=>{try{const envelope=await NavrenConnectedAssets.overview({fresh:true});if(!alive(token,options))return;if(options.validateConnectedEnvelope&&!options.validateConnectedEnvelope(envelope))return;current.connected=envelope;current.connectedError=false;assets();cards();transfer();splitPayments();if(options.state&&options.state.version!==envelope.version){BankUI.load().catch(()=>{});}}catch(error){if(alive(token,options)){current.connected=null;current.connectedError=true;transfer();for(const id of ['assetOverview','accountCardsPreview','accountRecentTransactions'])loadError(document.getElementById(id),error,()=>{NavrenConnectedAssets.clear();BankUI.load().catch(()=>{});});showPaymentDirectory('unknown');}}};
     const history=async()=>{try{const envelope=await NavrenFinancialData.overview();if(!alive(token,options))return;current.financial=envelope;}catch(error){if(alive(token,options)){current.financial=null;loadError(document.getElementById('accountMonthlyReport'),error,()=>{NavrenFinancialData.clear();render(options);});}}};
-    await Promise.allSettled([connected(),history()]);if(alive(token,options)){configureMonths();if(current.financial)renderMonthly();if(current.connected)renderTransactions(true);scheduleSync();}
+    await Promise.allSettled([connected(),history()]);
+    if(alive(token,options)){
+      configureMonths();
+      await Promise.allSettled([current.financial?renderMonthly():null,current.connected?renderTransactions(true):null]);
+      if(alive(token,options))scheduleSync();
+    }
   }
   async function refresh(options) {
     const captured=current,token=epoch,request=++renderRequest,previousState=captured.state,previous=captured.connected,history=captured.financial,month=accountMonth;

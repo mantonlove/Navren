@@ -82,8 +82,14 @@ class SmsChallenges:
         day_start = datetime.combine(china_now.date(), day_time(), china_now.tzinfo).timestamp()
         with self.auth.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            latest = db.execute('SELECT MAX(created_at) FROM sms_challenges WHERE phone=?', (phone,)).fetchone()[0]
-            if latest is not None and now-latest < 60:
+            recent = db.execute('SELECT purpose,principal FROM sms_challenges '
+                'WHERE phone=? AND created_at>?', (phone, now-60)).fetchall()
+            # 同一浏览器的登录/注册各有独立冷却；切页不清除已发送用途的限额。
+            # 其他浏览器、绑定及金融操作仍遵守原号码级60秒间隔。
+            auth_switch = (purpose in ('login', 'register') and all(
+                row['purpose'] in ('login', 'register') and row['principal'] == principal
+                for row in recent))
+            if recent and (not auth_switch or any(row['purpose'] == purpose for row in recent)):
                 raise SmsFailure('SMS_RATE_LIMITED', '请间隔60秒后再发送验证码。', 429)
             total = db.execute('SELECT COUNT(*) FROM sms_challenges WHERE created_at>=?', (day_start,)).fetchone()[0]
             phone_total = db.execute('SELECT COUNT(*) FROM sms_challenges WHERE phone=? AND created_at>=?',

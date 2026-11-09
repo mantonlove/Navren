@@ -1,7 +1,5 @@
 # Navren 中英文界面修复验收
 
-> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
-
 日期：2026-10-05。本轮已修改应用共享代码，服务直接从当前 Navren 目录读取静态资源。
 
 ## 修复范围
@@ -27,8 +25,8 @@
 
 截图：
 
-- 英文账户桌面（历史资料未随仓库发布）
-- 英文账户手机（历史资料未随仓库发布）
+- [英文账户桌面](/Users/manton/CC/projects/Navren/outputs/i18n/account-en-desktop.png)
+- [英文账户手机](/Users/manton/CC/projects/Navren/outputs/i18n/account-en-mobile.png)
 
 ## 实际边界
 

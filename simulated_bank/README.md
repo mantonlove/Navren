@@ -12,7 +12,7 @@
 python3 -m simulated_bank serve --port 18766
 ```
 
-服务只监听 `127.0.0.1`，健康接口为 `http://127.0.0.1:18766/health`。默认数据库保存在本机状态目录，也可用 `--db /绝对路径/bank.sqlite3` 或 `QINGZHOU_SIM_DB` 指定。数据库应始终位于现有静态网站目录之外。
+服务只监听 `127.0.0.1`，健康接口为 `http://127.0.0.1:18766/health`。默认数据库位于 `~/Library/Application Support/Qingzhou/simulated-bank.sqlite3`，也可用 `--db /绝对路径/bank.sqlite3` 或 `QINGZHOU_SIM_DB` 指定。数据库应始终位于现有静态网站目录之外。
 
 ```sh
 python3 -m unittest discover -s tests -p test_simulated_bank.py -v

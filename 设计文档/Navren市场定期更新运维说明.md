@@ -1,10 +1,6 @@
 # Navren 每日精选与市场周报定期更新
 
-下列 `/数据目录`、`/日志目录` 是部署路径占位，运行时需替换为自己的配置；示例命令执行前应在环境中配置所需密钥。
-
-> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
-
-现役目录：`项目根目录`。用户已明确：服务器尚未完成备案、暂不可用，当前继续在本机运行；后续上服务器时必须迁移本项能力。
+现役目录：`/Users/manton/CC/projects/Navren`。用户已明确：服务器尚未完成备案、暂不可用，当前继续在本机运行；后续上服务器时必须迁移本项能力。
 
 ## 产品责任与运行方式
 
@@ -23,9 +19,9 @@ Codex 心跳不承担产品采集、维护或恢复。用户于 2026-10-19 另�
 | 失败补跑 | 15、30 分钟后 | 热点每个时段最多 3 次；周报每天最多 3 次，次日 08:30 再补跑 |
 | 任务监控 | 后台运行时 | Navren 的任务记录与运行日志；用户另行授权的 Codex 心跳仅做下一次真实时段与页面验收 |
 
-本机采集任务每 5 分钟检查到期状态，另在每日三个时段触发。拿到共享库文件锁后再次核对计划。已完成时段或期号不重复调用模型，无新增内容不发布新版本。
+采集任务复用 `com.manton.navren.market`，每 5 分钟检查到期状态，另在每日三个时段触发。拿到共享库文件锁后再次核对计划。已完成时段或期号不重复调用模型，无新增内容不发布新版本。
 
-公开资讯唯一写入目标为部署配置指定的市场数据库。当前普通页面服务只读同一公开库，因此数据更新不需要重启对话服务。它与个人账户、模拟银行时钟及私人记忆库分离。
+公开资讯唯一写入目标：`/Users/manton/Library/Application Support/Navren/market.sqlite3`。当前普通页面服务只读同一公开库，因此数据更新不需要重启对话服务。它与个人账户、模拟银行时钟及私人记忆库分离。
 
 ## 本轮补齐
 
@@ -49,10 +45,10 @@ Codex 心跳不承担产品采集、维护或恢复。用户于 2026-10-19 另�
 ## 运维入口
 
 - 安装或恢复同一任务：`.venv/bin/python scripts/install_market_refresh.py`。
-- 到期补跑：先在环境中配置凭据和数据路径，再执行 `.venv/bin/python scripts/refresh_market.py --scheduled --backfill-weeks 1 --database '/数据目录/market.sqlite3' --report '/日志目录/market-refresh-latest.json'`。
-- 最新运行报告：`/日志目录/market-refresh-latest.json`。
-- 采集日志：`/日志目录/market-refresh.log`、`market-refresh-error.log`。
-- 加载状态：将占位文字替换为任务配置中的 `Label` 后执行 `launchctl print "gui/$(id -u)/<配置的任务标识>"`。
+- 到期补跑：使用 `/Users/manton/CC/services/cc-secrets/cc-with-secrets` 加载 `.venv/bin/python scripts/refresh_market.py --scheduled --backfill-weeks 1 --database '/Users/manton/Library/Application Support/Navren/market.sqlite3' --report '/Users/manton/Library/Logs/Navren/market-refresh-latest.json'`。
+- 最新运行报告：`/Users/manton/Library/Logs/Navren/market-refresh-latest.json`。
+- 采集日志：`/Users/manton/Library/Logs/Navren/market-refresh.log`、`market-refresh-error.log`。
+- 加载状态：`launchctl print gui/$(id -u)/com.manton.navren.market`。
 
 不得通过反复模型测试、重新采集 30 日历史或重启服务来证明任务已启用。
 
@@ -65,8 +61,8 @@ Codex 心跳不承担产品采集、维护或恢复。用户于 2026-10-19 另�
 3. **接入核对**：目前 `market_editor.py` 和默认主模型仍有 DeepSeek 官方直连，GLM 走 AiPing；`jev_client.py` 是 TypeSafe 接口，市场流程尚未接入 Jev。这是现状，不能声称已完成三个模型统一接入。迁移时按用户指定的 AiPing 配置核对 DeepSeek、GLM 的实际模型 ID，并确认 Jev 的可用入口和结构化接口合同；不能凭空拼出 AiPing 的 Jev 地址或偷偷引入第四种模型。
 4. **工具和技能**：Navren Agent 调用来源发现、文字正文读取、事件去重、历史查询、证据校验、入库和发布工具。抓取新闻事实、时区计算、金额计算、事务和权限仍由程序执行；模型不得自行编造新闻、链接、价格或跳过审核。工具、技能、来源、版本和模型调用均写入任务运行记录。
 5. **数据迁移**：迁移公开资讯库中的报道正文证据、事件版本、每日版次、近月历史、周报和任务记录，保留原始日期及版本关系。路径改为服务器持久卷配置，不继续使用 macOS 用户目录。保留既有个人金融数据隔离和加密边界。
-6. **凭据与依赖**：服务器通过环境变量或服务器密钥管理加载凭据，按目标环境配置凭据注入方式；开发环境同样通过密钥管理加载凭据，禁止把密钥写入镜像、Git、日志或前端。
+6. **凭据与依赖**：服务器通过环境变量或服务器密钥管理加载凭据，不依赖 macOS 钥匙串与 `cc-with-secrets`。本机开发继续使用统一加载器，禁止把密钥写入镜像、Git、日志或前端。
 7. **并发与恢复**：单服务器复用互斥锁及事务；多个工作进程或多个节点时改用共享数据库租约锁、期号/时段幂等键及心跳，避免多个节点重复付费和重复发布。服务器重启后依据持久任务状态补跑，失败保留最近合格版本。
-8. **切换与回退**：先准备一致性备份与迁移记录；切换时只允许服务器任务成为发布写入方，再停用本机采集任务。失败回退先停服务器写入，再恢复本机，避免两端同时处理同一时段。Codex 心跳不得作为恢复入口。
+8. **切换与回退**：先准备一致性备份与迁移记录；切换时只允许服务器任务成为发布写入方，再停用本机 `com.manton.navren.market`。失败回退先停服务器写入，再恢复本机，避免两端同时处理同一时段。Codex 心跳不得作为恢复入口。
 
 迁移完成以服务器实际后台任务、三模型配置、原文证据和历史版次可用为依据；备案完成、代码上传或页面可打开均不能代替这些结果。具体部署与必要检查遵循用户当时授权，当前不启动服务器部署或付费模型验收。
