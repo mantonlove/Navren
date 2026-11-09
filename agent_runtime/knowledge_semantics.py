@@ -447,11 +447,18 @@ def _answer_time_basis_status(text, number, unit, excludes_t):
         prefix = re.split(r'[，,。；;！!\n]', normalized[:match.start()])[-1]
         assertion = (prefix + normalized[match.start():match.start('tail')]
                      + re.split(r'[，,]', match.group('tail'))[0])
+        unit_tail = match.group('tail')
+        if unit == '工作日':
+            # Only a complete local comparison clause negates the other unit.
+            # Keep later affirmative units and all original origin checks.
+            unit_tail = re.sub(
+                r'(^|[，,])\s*(?:并非|不是)\s*自然日(?=\s*(?:[，,]|$))',
+                r'\1', unit_tail)
         if (int(match.group('ordinal')) != int(number)
                 or match.group('unit') != unit
                 or _TIME_UNASSERTED.search(assertion)
                 or re.search(r'未知|不明|未明确', assertion)
-                or set(re.findall(r'工作日|自然日', match.group('tail'))) - {unit}):
+                or set(re.findall(r'工作日|自然日', unit_tail)) - {unit}):
             return 'missing'
         units.add(match.group('unit'))
         numbered_origins.update(_time_origin_states(match.group('tail')))

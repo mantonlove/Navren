@@ -18,8 +18,8 @@
 
 首版为新增合同，不替换旧服务的字段/函数。基座应添加受限映射、调用、结果适配并验证兼容；Agent绑定指标解释，UI原样显示，集成验收独立复算。合同变动更新版本，不静默改变单位、成本政策或期间。
 
-详细口径、手算、限制和接线清单曾记录在本地交付报告中，原报告未随仓库发布。可在项目根目录运行随仓库发布的纯计算回归：
+详细口径、手算、限制和接线清单见 [交付报告](/Users/manton/CC/projects/Navren/outputs/window-progress/finance/report.md)。在项目目录复现：
 
 ```sh
-python3 -B -m unittest discover -s tests -p 'test_financial_methods_*.py'
+python3 -B outputs/window-progress/finance/run_checks.py
 ```

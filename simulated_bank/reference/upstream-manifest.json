@@ -4,6 +4,7 @@
     "commit": "4684c663805560d5b6948045224440441fa4485c",
     "path": "LICENSE_SOURCE",
     "url": "https://raw.githubusercontent.com/apache/fineract/4684c663805560d5b6948045224440441fa4485c/LICENSE_SOURCE",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/apache/LICENSE_SOURCE",
     "sha256": "7e3b13f42d05b1da02165c5b0e200c9496a3e22f5642afa6b6909f3b1298cc98",
     "bytes": 12315
   },
@@ -12,6 +13,7 @@
     "commit": "4684c663805560d5b6948045224440441fa4485c",
     "path": "NOTICE_SOURCE",
     "url": "https://raw.githubusercontent.com/apache/fineract/4684c663805560d5b6948045224440441fa4485c/NOTICE_SOURCE",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/apache/NOTICE_SOURCE",
     "sha256": "3e9b097df85708ed2f323ec56c2692e2dcce686a5e30969c5c096caae6fd05ca",
     "bytes": 169
   },
@@ -20,6 +22,7 @@
     "commit": "4684c663805560d5b6948045224440441fa4485c",
     "path": "fineract-provider/src/main/resources/sql/migrations/sample_data/barebones_db.sql",
     "url": "https://raw.githubusercontent.com/apache/fineract/4684c663805560d5b6948045224440441fa4485c/fineract-provider/src/main/resources/sql/migrations/sample_data/barebones_db.sql",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/apache/barebones_db.sql",
     "sha256": "5a0432a21bb86551943227f2872acfed63d1969b4396bdb31201349d975ea398",
     "bytes": 534613
   },
@@ -28,6 +31,7 @@
     "commit": "4684c663805560d5b6948045224440441fa4485c",
     "path": "fineract-provider/src/main/resources/sql/migrations/sample_data/load_sample_data.sql",
     "url": "https://raw.githubusercontent.com/apache/fineract/4684c663805560d5b6948045224440441fa4485c/fineract-provider/src/main/resources/sql/migrations/sample_data/load_sample_data.sql",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/apache/load_sample_data.sql",
     "sha256": "132b4aa1e43fd15909352d274c4eddc17b6ea6740f6a8dea87cdf8d4501d14f5",
     "bytes": 584080
   },
@@ -36,6 +40,7 @@
     "commit": "484a1795680d9852600247878b9fd2bfe584c0aa",
     "path": "README.md",
     "url": "https://raw.githubusercontent.com/OpenBankingUK/read-write-api-specs/484a1795680d9852600247878b9fd2bfe584c0aa/README.md",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/OpenBankingUK/README.md",
     "sha256": "649cd75cc443c8dab404eaec8877585c7e531d0e4ea46b1b8bace99660318ab3",
     "bytes": 1670
   },
@@ -44,6 +49,7 @@
     "commit": "484a1795680d9852600247878b9fd2bfe584c0aa",
     "path": "dist/openapi/account-info-openapi.json",
     "url": "https://raw.githubusercontent.com/OpenBankingUK/read-write-api-specs/484a1795680d9852600247878b9fd2bfe584c0aa/dist/openapi/account-info-openapi.json",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/OpenBankingUK/account-info-openapi.json",
     "sha256": "51afc7e4ff3ea1e9f216c17b11860e2cd34b49a46883959a77497c57e0d23c16",
     "bytes": 668612
   },
@@ -52,6 +58,7 @@
     "commit": "484a1795680d9852600247878b9fd2bfe584c0aa",
     "path": "dist/openapi/payment-initiation-openapi.json",
     "url": "https://raw.githubusercontent.com/OpenBankingUK/read-write-api-specs/484a1795680d9852600247878b9fd2bfe584c0aa/dist/openapi/payment-initiation-openapi.json",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/OpenBankingUK/payment-initiation-openapi.json",
     "sha256": "c02efa09f0ea1baaffd5ae0d4e68d7f3f996b94ac3ec66752e7bf5ec5cee3285",
     "bytes": 589568
   },
@@ -60,6 +67,7 @@
     "commit": "484a1795680d9852600247878b9fd2bfe584c0aa",
     "path": "dist/openapi/vrp-openapi.json",
     "url": "https://raw.githubusercontent.com/OpenBankingUK/read-write-api-specs/484a1795680d9852600247878b9fd2bfe584c0aa/dist/openapi/vrp-openapi.json",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/OpenBankingUK/vrp-openapi.json",
     "sha256": "aad3a137f671e2d0cef7c4a8925992da80347f51092129d08a95dd8e3fb0a4e6",
     "bytes": 118711
   },
@@ -68,6 +76,7 @@
     "commit": "59351d2efd7ebbf690bb33c6c3de76ca079e8a64",
     "path": "LICENSE",
     "url": "https://raw.githubusercontent.com/OpenBankProject/OBP-API/59351d2efd7ebbf690bb33c6c3de76ca079e8a64/LICENSE",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/OpenBankProject/LICENSE",
     "sha256": "57c8ff33c9c0cfc3ef00e650a1cc910d7ee479a8bc509f6c9209a7c2a11399d6",
     "bytes": 34520
   },
@@ -76,6 +85,7 @@
     "commit": "59351d2efd7ebbf690bb33c6c3de76ca079e8a64",
     "path": "NOTICE",
     "url": "https://raw.githubusercontent.com/OpenBankProject/OBP-API/59351d2efd7ebbf690bb33c6c3de76ca079e8a64/NOTICE",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/OpenBankProject/NOTICE",
     "sha256": "a5c2846f7bd8b9671ae47f6179c22f2bf1e18ba7dde533960e4ec0a06177e971",
     "bytes": 967
   },
@@ -84,6 +94,7 @@
     "commit": "59351d2efd7ebbf690bb33c6c3de76ca079e8a64",
     "path": "obp-api/src/main/scala/code/api/sandbox/example_data/example_import.json",
     "url": "https://raw.githubusercontent.com/OpenBankProject/OBP-API/59351d2efd7ebbf690bb33c6c3de76ca079e8a64/obp-api/src/main/scala/code/api/sandbox/example_data/example_import.json",
+    "local_path": "/Users/manton/CC/projects/qingzhou/outputs/模拟银行验收/第三方调研/OpenBankProject/example_import.json",
     "sha256": "1945bc602a8e35fe079fb23930c74984db75c223de517ee09ff73d3a75296b0f",
     "bytes": 323825
   },

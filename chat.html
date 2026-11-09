@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="navren-shell" data-navren-page-load="loading">
 <head>
 <meta charset="UTF-8">
+<script src="js/page_load.js?v=chat-ready-20261027"></script>
 <script data-navren-theme-bootstrap>
 (() => {
   try {
@@ -9,7 +10,7 @@
     if(theme!=='light'&&theme!=='dark')return;
     const root=document.documentElement;
     root.dataset.theme=theme;root.style.colorScheme=theme;
-    root.style.backgroundColor=theme==='dark'?'#0d1725':'#edf3fa';
+    root.style.backgroundColor=theme==='dark'?'#111a24':'#f6f7f8';
   } catch(_) {}
 })();
 </script>
@@ -26,11 +27,20 @@
 <link rel="stylesheet" href="css/account_switcher.css">
 <link rel="stylesheet" href="css/task_components.css">
 <link rel="stylesheet" href="css/chat_reading.css?dq=d49a5f3453de">
+<link rel="stylesheet" href="css/conversation_components.css?v=faf9362deb30">
+<link rel="stylesheet" href="css/conversation_panels.css?v=bfad0b42b6a7">
 <link rel="stylesheet" href="css/reply_components.css?dq=89a19ec1dd60">
 <link rel="stylesheet" href="css/reply_interactions.css?dq=51143333bf16">
   <link rel="stylesheet" href="css/navigation_gestures.css?ui=dc4db77b8cb5">
 <link rel="stylesheet" href="css/form_controls.css?dq=546db5bc506d">
+  <link rel="stylesheet" href="css/page_load.css?v=chat-ready-20261027">
+  <link rel="stylesheet" href="css/chat_composition.css">
+<link rel="stylesheet" href="css/chat_component_system.css">
+<link rel="stylesheet" href="css/product_frame.css?v=local-20261028">
+<link rel="stylesheet" href="css/product_surfaces.css?v=local-20261028">
+<link rel="stylesheet" href="css/chat_response_refinement.css?v=local-20261028">
   <link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
+<link rel="stylesheet" href="css/chat_history.css?v=history-entry-20261027">
 </head>
 <body data-page="chat">
 <a class="skip-link" href="#mainContent">跳到主要内容</a>
@@ -41,16 +51,29 @@
     <a class="nav-item active" href="chat.html" aria-current="page"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="nav-label">对话</span></a>
     <a class="nav-item" href="account.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 9h18m-5 5h3"/></svg><span class="nav-label">账户</span></a>
     <a class="nav-item" href="recommend.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M16 3a8 8 0 0 1 5 5h-5z"/></svg><span class="nav-label">发现</span></a>
+    <a class="nav-item" href="messages.html" data-navren-messages><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg><span class="nav-label" data-i18n-skip>消息</span></a>
     <a class="nav-item" href="mine.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="nav-label">我的</span></a>
+    <a id="navrenSettings" class="shell-settings-entry" href="mine.html?view=settings#settings" aria-label="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 5 .6-2h4.4l.6 2 1.8 1.1 2-.5 2.2 3.8-1.4 1.5v2.2l1.4 1.5-2.2 3.8-2-.5-1.8 1.1-.6 2H9.8l-.6-2-1.8-1.1-2 .5-2.2-3.8 1.4-1.5V9.9L3.2 8.4l2.2-3.8 2 .5Z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></a>
   </nav>
 
   <main class="main" id="mainContent" tabindex="-1">
     <header class="header">
       <div class="header-identity"><a class="brand" href="chat.html" aria-label="Navren首页"><img class="brand-wordmark" src="assets/brand/navren-wordmark.png" width="2172" height="724" alt=""></a><h1 class="header-location">银行与生活助手</h1></div>
 
-    </header>
-    <section id="accountSwitcher" aria-label="演示账户" class="account-switcher" hidden></section>
+    <div class="shell-tools" data-navren-shell-tools></div></header>
+    <section id="accountSwitcher" aria-label="账户切换" class="account-switcher" hidden></section>
 
+    <section class="navren-page-loader" data-npl-page="chat" data-state="loading" data-i18n-skip aria-label="对话加载"><div class="npl-stage npl-chat-stage"><div class="npl-chat-art" aria-hidden="true"><svg class="npl-mark" viewBox="0 0 72 64" aria-hidden="true"><path class="npl-wave npl-wave-back" d="M9 37C19 37 23 30 31 23S46 12 63 12"/><path class="npl-wave npl-wave-front" d="M9 51C25 51 29 43 38 36S51 26 63 26"/></svg><div class="npl-chat-sheet"><i></i><i></i><i></i></div><span class="npl-chat-dot"></span></div><p class="npl-title" role="status" aria-live="polite">正在准备对话</p><p class="npl-description">历史消息与附件就绪后，将一起呈现</p><p class="npl-note"></p><a class="npl-retry" href="">重新加载对话页</a></div></section>
+    <section class="chat-intro" aria-label="开始使用Navren" data-i18n-skip>
+      <img class="chat-intro-mark" src="assets/brand/navren-icon.png" alt="" width="40" height="40">
+      <h2><span lang="zh-CN">从一件具体的事开始。</span><span lang="en">Start with what matters today.</span></h2>
+      <p><span lang="zh-CN">查账户、看收支，或聊聊你的下一步计划。</span><span lang="en">Your accounts, everyday spending and next steps, together.</span></p>
+      <div class="chat-intro-links">
+        <a href="account.html"><span lang="zh-CN">查看我的资产</span><span lang="en">My accounts</span></a>
+        <a href="recommend.html"><span lang="zh-CN">发现与研究</span><span lang="en">Discover &amp; research</span></a>
+        <a href="account.html?view=calendar#calendar"><span lang="zh-CN">财务日历</span><span lang="en">Financial calendar</span></a>
+      </div>
+    </section>
     <div class="chat-messages" id="chatMessages">
       <div class="message ai">
         <div class="avatar"><img class="brand-icon" src="assets/brand/navren-icon.png" width="1254" height="1254" alt=""></div>
@@ -66,32 +89,26 @@
       <h4 id="privacyTitle">隐私与个性化服务说明</h4>
       <p>为提供更贴合你的银行与生活财务服务，Navren会在对话中了解您的投资偏好和资产情况，并建立个人档案。</p>
       <ul>
-        <li>对话与模拟账户记录保存在本机；回答问题所需的账户摘要会发送至 DeepSeek 和 GLM</li>
+        <li>对话与账户记录保存在本机；回答问题所需的账户摘要会发送至 DeepSeek 和 GLM</li>
           <li>使用语音时，录音和待朗读文字发送至阿里云百炼处理；语音消息仅保存在当前浏览器，供你回放</li>
         <li>未经您确认，不会用于其他用途</li>
-        <li>聊天授权在「我的」中管理；模拟风险与资金设置请在「账户」中修改</li>
+        <li>聊天授权在「我的」中管理；风险与资金设置请在「账户」中修改</li>
       </ul>
       <div class="privacy-actions"><button onclick="acceptPrivacy()">我知道了</button></div>
     </div>
 
-    <div class="image-preview-row hidden" id="imagePreview">
-      <img id="previewImg" src="" alt="">
-      <button class="remove-img" onclick="removeImage()">✕</button>
-    </div>
-
     <div class="chat-input-area">
+      <div id="chatAttachmentPreview" class="chat-attachment-preview" hidden aria-label="待发送附件"></div>
       <div class="input-row">
-        <input type="file" id="imageInput" accept="image/*" capture="environment" onchange="handleImageUpload(event)" style="display:none;">
-        <button class="ib-btn" onclick="triggerUpload()" title="上传图片或拍照">
+        <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif,.pdf,.docx,.xlsx,.pptx,.txt,.md,.csv" multiple onchange="handleImageUpload(event)" style="display:none;">
+        <button class="ib-btn" onclick="triggerUpload()" title="添加图片或文档">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
-        <textarea id="userInput" rows="1" placeholder="查账单、安排转账、管理卡片或聊聊你的计划…" onkeydown="handleKeyDown(event)"></textarea>
+        <textarea id="userInput" rows="1" placeholder="输入问题，或聊聊你的计划…" onkeydown="handleKeyDown(event)"></textarea>
         <button class="ib-btn" id="voiceBtn" onclick="toggleVoice()" title="语音输入（说出您的问题）">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         </button>
-        <button class="ib-btn" onclick="triggerHandoff('用户主动请求人工')" title="转接人工理财顾问">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-        </button>
+
         <button class="ib-btn send-btn" onclick="sendMessage()" id="sendBtn" disabled title="发送消息">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </button>
@@ -111,7 +128,7 @@
 <script src="js/router.js?v=7"></script>
 <script src="js/data.js?v=7"></script>
 <script src="js/bank_client.js?v=uss-20261016"></script>
-<script src="js/chat_archive.js?v=uss-20261016"></script>
+<script src="js/chat_archive.js?v=history-entry-20261027"></script>
 <script src="assets/vendor/navren-avatars.min.js?v=navren-personal-flow-3"></script>
 <script src="js/personal_profile.js?v=20261014-avatar-1"></script>
 <script src="js/account_switcher.js"></script>
@@ -124,14 +141,18 @@
 <script src="js/bank_ui.js?dq=ada03283af4a"></script>
 <script src="js/money_input.js?dq=c78b0b27c459"></script>
 <script src="js/aa_payments.js?dq=c6fa7e32f5b4"></script>
-<script src="js/api.js?dq=uss-20261016"></script>
+<script src="js/api.js?dq=attachments-20261027"></script>
 <script src="js/voice_messages.js?v=uss-20261016"></script>
 <script src="assets/vendor/chat-markdown/marked.umd.js"></script>
 <script src="assets/vendor/chat-markdown/purify.min.js"></script>
-<script src="js/chat_markdown.js"></script>
+<script src="js/conversation_panels.js?v=ae8efab29447"></script>
+<script src="js/conversation_components.js?v=8d5508069ad8"></script>
+<script src="js/chat_markdown.js?v=7d4fae0b9142"></script>
 <script src="js/reply_components.js?dq=e9d7aa06afd1"></script>
 <script src="js/reply_interactions.js?dq=9aa29f5f6bdb"></script>
-<script src="js/chat.js?dq=uss-20261016"></script>
+<script src="js/chat_attachments.js?v=clipboard-20261027"></script>
+<script src="js/chat_history_view.js?v=history-entry-20261027"></script>
+<script src="js/chat.js?v=history-entry-20261027"></script>
   <script src="js/navigation_gestures.js?ui=acce6603cf27"></script>
 <script src="js/form_controls.js?dq=b4539a70b618"></script>
 </body>

@@ -6,12 +6,11 @@ HTTP records and the owned temporary DB; it does not mutate browser state.
 import hashlib
 import json
 from pathlib import Path
-import os
 import sqlite3
 import subprocess
 from evaluation.product_insurance.run_joint_matrix import Client, OUT, ROOT
 
-CLI=os.environ.get('PLAYWRIGHT_CLI','playwright-cli')
+CLI='/Users/manton/.codex/skills/playwright/scripts/playwright_cli.sh'
 
 
 def main():

@@ -756,6 +756,13 @@ class FinancialMetrics:
                 refs=tuple('accounts/'+a['id'] for a in state['accounts'] if a['currency']==currency)
                 emit(workspace,'settled_cash_total',value,currency,'same_currency_workspace_cash_total',
                      'tools.account_cash_total/1',refs,on=state['as_of'],excluded=('credit_limit_is_not_cash',))
+            reserve=state['profile'].get('reserve_minor')
+            reserve_currency=self.bank.capabilities().get('currency')
+            if type(reserve)is int and reserve>=0 and isinstance(reserve_currency,str):
+                emit(workspace,'profile_emergency_reserve',reserve,reserve_currency,
+                     'formal_profile_emergency_requirement_not_account_allocation',
+                     'tools.profile_emergency_reserve/1',('bank_emergency_requirement_record',),on=state['as_of'],
+                     excluded=('not_extra_cash','not_assigned_account_floor','adequacy_not_established'))
             for row in principal.values():
                 for field,basis in (('holding_principal_minor','holding_book_principal_not_market_value'),
                                     ('pending_redemption_minor','pending_redemption_not_settled_cash')):

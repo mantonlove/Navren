@@ -27,10 +27,10 @@ OUTPUT_ROOT = ROOT / "outputs/window-progress/integration/finance-adapter-capabi
 ORACLE_PATH = ROOT / "evaluation/window_integration/finance_adapter_oracles.json"
 DESIGN_PATH = ROOT / "evaluation/window_integration/finance_adapter_capability_design.json"
 HELPER_PATH = ROOT / "tests/window_integration/test_finance_adapter_handoff.py"
-ORACLE_SHA256 = "91cfb1dc3f3cfbe99d39785535bd2d1861b10273e1a337b006357f96b2ebee6b"
-DESIGN_SHA256 = "e3fd3e1fcb0778abe76647871d17660e38f8c8bf6396d441780af6c337d43d42"
+ORACLE_SHA256 = "04dde7576f4dec85ddf3ac2e0ecbc0940de16a3a52ef32c7bd79625ab513bb14"
+DESIGN_SHA256 = "1855e9b811b8bdbb0499cb737def56763f8f92ba5e4db084db3791606ce05915"
 # 仅迁移已批准C01夹具出处接线的helper SHA，其读取类和原设计均未变。
-HELPER_INPUT_SHA256 = "d102610d1166f41a26f667562806ad5bb171d4e26ebda3cfd2df494adf471075"
+HELPER_INPUT_SHA256 = "14b69d6deb4649d543580f5e0da43b5be240ca2c3b7cd15ed30282a8a32e57d4"
 
 
 def sha(path):

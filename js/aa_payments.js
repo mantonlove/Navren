@@ -32,7 +32,7 @@ window.NavrenAAPayments = (() => {
     return !control||control.isConnected&&(record.host.contains(control)||record.dialog?.open&&record.dialog.contains(control));
   }
   function source(record,value) {
-    if(!value||value.environment!=='simulation')issue('未取得可核验的模拟资料。');
+    if(!value||value.environment!=='simulation')issue('未取得可核验的账户资料。');
     if(value.workspace_id!=null&&value.workspace_id!==record.identity.workspace_id||value.privacy_revision!=null&&value.privacy_revision!==record.identity.privacy_revision)issue('资料身份已变化，请重新读取。');
     return value;
   }
@@ -186,28 +186,33 @@ window.NavrenAAPayments = (() => {
   function openAttempt(record,attempt,trigger) {
     if(!live(record)||document.querySelector('dialog[open]'))return;
     const dialog=node('dialog',null,'aa-dialog'),title=node('h2',({create:'核对AA账单',pay:'核对本人付款',decline:'核对拒绝份额',cancel:'核对取消账单'})[attempt.kind]),body=node('div'),notice=node('p','正在准备…','aa-status'),error=node('p','','aa-error'),controls=node('div',null,'aa-dialog-actions');record.dialog=dialog;
-    title.id='aaReview-'+(++record.sequence);dialog.setAttribute('aria-labelledby',title.id);notice.setAttribute('role','status');error.setAttribute('role','alert');dialog.append(title,body,notice,error,controls,node('p','仅更新模拟账本，不向外部银行或联系人发送消息。','aa-status'));document.body.append(dialog);dialog.showModal();
-    let busy=false,verification=null;const active=()=>live(record)&&record.dialog===dialog&&dialog.isConnected&&dialog.open;
+    title.id='aaReview-'+(++record.sequence);dialog.setAttribute('aria-labelledby',title.id);notice.setAttribute('role','status');error.setAttribute('role','alert');dialog.append(title,body,notice,error,controls,node('p','请核对账单、分摊份额与付款账户后确认。','aa-status'));document.body.append(dialog);dialog.showModal();
+    let busy=false,verification=null,preserveVerification=true;const active=()=>live(record)&&record.dialog===dialog&&dialog.isConnected&&dialog.open;
     const back=button(record,'返回修改',()=>closeDialog(record)),cancel=button(record,'撤回草稿',()=>change('cancel')),query=button(record,'查询原操作',()=>change('query')),confirm=button(record,'确认',()=>change('confirm'),'aa-primary');controls.append(back,cancel,query,confirm);
-    function paint(){if(!active())return;verification?.dispose();verification=null;record.verification=null;drawReview(record,attempt,body);const op=attempt.view?.operation,pending=op?.state==='pending_confirmation'&&!attempt.unknown&&!attempt.rejected;
+    function paint(){if(!active())return;const previous=verification;verification=null;record.verification=null;drawReview(record,attempt,body);const op=attempt.view?.operation,pending=op?.state==='pending_confirmation'&&!attempt.unknown&&!attempt.rejected;
       notice.textContent=attempt.rejected?'未受理':attempt.unknown?'结果尚未核对，请查询原操作，勿重复提交。':attempt.finished?'操作已完成':op?.state==='cancelled'?'草稿已撤回':pending?'待本人核对，尚未执行':op?'操作未完成，请重新读取账单。':'正在准备…';
       confirm.hidden=!pending||record.options.readOnly===true||record.options.reject===true||attempt.view?.agent_review&&attempt.view.agent_review.status!=='approved';cancel.hidden=!pending||record.options.readOnly===true;query.hidden=!attempt.unknown&&!op;query.textContent=attempt.unknown?'查询原操作':'重新读取状态';back.textContent=pending?'返回修改':'关闭';if(attempt.rejected)back.textContent='返回修改';for(const control of [back,cancel,query,confirm])control.disabled=busy;confirm.disabled=busy||(attempt.evidence?.attachments||[]).some(meta=>!same(record.images?.get(meta.id)?.meta,meta));
       if(record.options.reject===true)notice.textContent='核对后撤回原草稿；不会拒绝或支付任何账单份额。';
-      if(pending&&!record.options.readOnly&&!record.options.reject){verification=BankUI.operationVerification(body,attempt.view,{isCurrent:()=>active()&&!busy,onError:failure=>{error.textContent=failure.message;},onChange:()=>record.reviewRepaint?.()});record.verification=verification;confirm.disabled=confirm.disabled||!verification.canConfirm();}
+      if(pending&&!record.options.readOnly&&!record.options.reject){
+        if(previous){try{previous.update(attempt.view,{preserveChallenge:preserveVerification});verification=previous;verification.mount(body);}catch(failure){previous.dispose();verification=previous;record.verification=previous;attempt.unknown=true;error.textContent=failure.message;notice.textContent='操作资料已变化，请查询原操作，勿重复提交。';confirm.hidden=cancel.hidden=true;query.hidden=false;return;}}
+        else verification=BankUI.operationVerification(body,attempt.view,{isCurrent:active,isBusy:()=>busy||attempt.unknown,onError:failure=>{error.textContent=BankUI.operationVerificationError(failure).message;},onChange:()=>record.reviewRepaint?.()});
+        record.verification=verification;confirm.disabled=confirm.disabled||!verification.canConfirm();verification.refresh();
+      }else if(previous&&op?.state==='pending_confirmation'&&attempt.unknown){previous.clear();verification=previous;record.verification=previous;verification.mount(body);}else previous?.dispose();
     }
     record.reviewRepaint=()=>{if(active())confirm.disabled=busy||!verification?.canConfirm()||(attempt.evidence?.attachments||[]).some(meta=>!same(record.images?.get(meta.id)?.meta,meta));};
     async function prepared(){const value=await request(record,attempt.path,'POST',attempt.body);operation(record,value,attempt);attempt.id=value.operation.id;attempt.aa=preview(record,value,attempt);attempt.view=value;attempt.unknown=false;record.options.onState?.(value.operation);if(value.operation.state!=='pending_confirmation')await readOperation(record,attempt);}
-    async function recover(failure){if(!active())return;error.textContent=failure.message;if(!attempt.id&&!attempt.unknown&&[400,403,404,405,413,415,422].includes(failure.status)&&validText(failure.code)){attempt.rejected=true;if(record.attempt===attempt)record.attempt=null;return;}attempt.unknown=true;if(attempt.id)try{await readOperation(record,attempt);}catch{} }
+    async function recover(failure){if(!active())return;error.textContent=BankUI.operationVerificationError(failure).message;if(!attempt.id&&!attempt.unknown&&[400,403,404,405,413,415,422].includes(failure.status)&&validText(failure.code)){attempt.rejected=true;if(record.attempt===attempt)record.attempt=null;return;}attempt.unknown=true;if(attempt.id)try{await readOperation(record,attempt);}catch{} }
     async function change(kind){if(busy||!active()||attempt.rejected)return;if(kind!=='query'&&(attempt.unknown||attempt.view?.operation?.state!=='pending_confirmation'||record.options.readOnly===true))return;if(kind==='confirm'&&(record.options.reject===true||attempt.view?.agent_review&&attempt.view.agent_review.status!=='approved'))return;
       if(kind==='confirm'&&(attempt.evidence?.attachments||[]).some(meta=>!same(record.images?.get(meta.id)?.meta,meta))){error.textContent='图片内容尚未核对，不能确认。';return;}
       if(kind==='confirm'&&!verification?.canConfirm()){error.textContent=verification?.reason()||'请先完成短信验证。';return;}
       if(kind==='confirm'&&attempt.kind==='pay'&&!attempt.serverCard&&!cards(record).some(c=>c.card_id===attempt.body.card_id&&c.account_id===attempt.body.account_id)){error.textContent='付款银行卡已变化，请重新读取。';return;}
-      const confirmation=kind==='confirm'?verification.payload():null;
-      busy=true;record.writing=kind!=='query'||!attempt.id;for(const control of [back,cancel,query,confirm])control.disabled=true;
-      try{if(kind==='query'){if(attempt.id)await readOperation(record,attempt);else await prepared();}
+      let confirmation=null;preserveVerification=kind==='query'&&!attempt.unknown;
+      try{confirmation=kind==='confirm'?verification.payload():null;
+        busy=true;record.writing=kind!=='query'||!attempt.id;for(const control of [back,cancel,query,confirm])control.disabled=true;verification?.refresh();
+        if(kind==='query'){if(attempt.id)await readOperation(record,attempt);else await prepared();}
         else {const payload=kind==='cancel'?{}:{confirmed:true,confirmation_digest:attempt.view.operation.confirmation_digest,...confirmation};let result;try{result=await request(record,'/operations/'+attempt.id+'/'+kind,'POST',payload);}finally{delete payload.verification_code;delete payload.challenge_id;}operation(record,{...result,environment:result.environment||result.overview?.environment},attempt);await readOperation(record,attempt);}
         if(!active())return;error.textContent='';if(attempt.finished){record.formOpen=false;record.needsHostRefresh=true;if(record.type==='account')await load(record);}
-      }catch(failure){await recover(failure);}finally{if(confirmation){delete confirmation.verification_code;delete confirmation.challenge_id;}verification?.clear();busy=false;record.writing=false;paint();}
+      }catch(failure){preserveVerification=kind==='confirm'&&BankUI.operationVerificationError(failure).retryChallenge;await recover(failure);}finally{if(confirmation){delete confirmation.verification_code;delete confirmation.challenge_id;}verification?.clearCode();busy=false;record.writing=false;paint();}
     }
     dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});dialog.addEventListener('close',async()=>{verification?.dispose();record.verification=null;if(record.dialog===dialog){record.dialog=null;record.reviewRepaint=null;}dialog.remove();if(trigger?.isConnected)trigger.focus();try{if(record.needsHostRefresh&&live(record)){record.needsHostRefresh=false;await record.options.onChange?.();}}catch(failure){if(live(record))status(record,'回执已保留，账户更新暂未完成：'+failure.message,true);}finally{if(record.type==='operation')dispose(record);}},{once:true});
     (async()=>{busy=true;record.writing=!attempt.id;paint();try{if(attempt.id){if(attempt.initial){attempt.initial=false;if(attempt.view.operation.state!=='pending_confirmation')await readOperation(record,attempt);}else await readOperation(record,attempt);}else await prepared();}catch(failure){await recover(failure);}finally{busy=false;record.writing=false;paint();}})();

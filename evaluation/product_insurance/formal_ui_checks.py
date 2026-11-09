@@ -7,14 +7,13 @@ import ast
 import hashlib
 import json
 from pathlib import Path
-import os
 import subprocess
 import time
 
 ROOT=Path(__file__).resolve().parents[2]
 OUT=ROOT/'outputs/product-insurance-implementation-20261018/acceptance'
 ART=OUT/'ui-evidence';ART.mkdir(exist_ok=True)
-CLI=os.environ.get('PLAYWRIGHT_CLI','playwright-cli')
+CLI='/Users/manton/.codex/skills/playwright/scripts/playwright_cli.sh'
 SESSION='pi-root-final'
 runtime=json.loads((OUT.parent/'control/root-browser-runtime.json').read_text())
 assert runtime['is_isolated'] and not runtime.get('stopped')

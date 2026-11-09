@@ -17,9 +17,11 @@ import threading
 import time
 import wave
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from simulated_bank import BankError
+from base_runtime.chat_documents import (DOCUMENT_FIELDS, DOCUMENT_MIMES, MAX_DOCUMENT, MAX_TEXT_CHARS,
+                                         inspect_document, valid_document_fields)
 
 CONTRACT='navren.chat-media/1'
 MAX_IMAGE=10*1024*1024
@@ -32,7 +34,8 @@ MAX_PENDING_BYTES=100*1024*1024
 MAX_TOTAL_BYTES=512*1024*1024
 PENDING_TTL=86400
 MAX_SEND_SECONDS=120
-MIMES=('image/png','image/jpeg','image/webp','image/gif','audio/wav','audio/webm','audio/ogg','audio/mpeg','audio/mp4')
+MIMES=('image/png','image/jpeg','image/webp','image/gif','audio/wav','audio/webm','audio/ogg','audio/mpeg','audio/mp4',
+       *DOCUMENT_MIMES)
 DESCRIPTOR_FIELDS={'contract','media_id','kind','mime_type','bytes','sha256','duration_ms','audio_format',
                    'storage_status','content_url','historical_readonly','execution_authority'}
 MEDIA_SCHEMA='''
@@ -64,6 +67,7 @@ CREATE TRIGGER IF NOT EXISTS chat_media_version_update AFTER UPDATE ON chat_medi
 def fail(code='CHAT_MEDIA_NOT_FOUND',status=404):
     messages={'CHAT_MEDIA_NOT_FOUND':'媒体不存在、尚未绑定或无权读取。','CHAT_MEDIA_CORRUPT':'媒体原件无法完整核验，请保留问题记录。',
               'CHAT_MEDIA_TYPE_INVALID':'文件真实类型不受支持或与声明不符。','CHAT_MEDIA_TOO_LARGE':'媒体超过允许的大小或时长。',
+              'CHAT_DOCUMENT_INVALID':'文档真实类型、文件扩展名或内容不受支持。',
               'CHAT_MEDIA_QUOTA':'媒体存储或上传并发已到上限。','CHAT_MEDIA_STALE':'聊天授权或归档代次已变化，请重新读取。'}
     raise BankError(code,messages.get(code,'聊天媒体校验未通过。'),status)
 
@@ -72,11 +76,15 @@ def ident(value):return type(value) is str and re.fullmatch('[0-9a-f]{64}',value
 def key(value):return type(value) is str and re.fullmatch('[0-9a-f]{32}',value) is not None
 
 def validate_descriptor(value):
-    if (type(value) is not dict or set(value)!=DESCRIPTOR_FIELDS or value['contract']!=CONTRACT
-            or not ident(value['media_id']) or not ident(value['sha256']) or value['kind'] not in ('image','audio')
+    document=type(value) is dict and value.get('kind')=='document'
+    fields=DESCRIPTOR_FIELDS|DOCUMENT_FIELDS if document else DESCRIPTOR_FIELDS
+    if (type(value) is not dict or set(value)!=fields or value['contract']!=CONTRACT
+            or not ident(value['media_id']) or not ident(value['sha256']) or value['kind'] not in ('image','audio','document')
             or value['mime_type'] not in (*MIMES,'audio/pcm') or type(value['bytes']) is not int
             or (value['kind']=='image')!=value['mime_type'].startswith('image/')
-            or not 0<value['bytes']<=(MAX_IMAGE if value['kind']=='image' else MAX_AUDIO)
+            or (value['kind']=='audio')!=value['mime_type'].startswith('audio/')
+            or document!=(value['mime_type'] in DOCUMENT_MIMES)
+            or not 0<value['bytes']<=(MAX_IMAGE if value['kind']=='image' else MAX_DOCUMENT if document else MAX_AUDIO)
             or value['storage_status'] not in ('stored','bound')
             or value['content_url']!='/api/finance/chat-media/'+value['media_id']
             or value['historical_readonly'] is not True or value['execution_authority'] is not False):
@@ -89,6 +97,8 @@ def validate_descriptor(value):
             or type(fmt['channels']) is not int or fmt['channels'] not in (1,2)):
         fail('CHAT_MEDIA_DESCRIPTOR_INVALID',422)
     if (value['mime_type']=='audio/pcm')!=(fmt is not None):fail('CHAT_MEDIA_DESCRIPTOR_INVALID',422)
+    if document and (duration is not None or fmt is not None or not valid_document_fields(value)):
+        fail('CHAT_MEDIA_DESCRIPTOR_INVALID',422)
     return json.loads(packed(value))
 
 def _ebml(data,start=0,end=None):
@@ -238,11 +248,14 @@ def _decode_audio(raw,mime):
         if not 0<duration<=MAX_DURATION:fail('CHAT_MEDIA_TOO_LARGE',413)
         return duration
 
-def inspect_bytes(raw,mime_type,*,audio_format=None,server_pcm=False):
+def inspect_bytes(raw,mime_type,*,audio_format=None,server_pcm=False,file_name=None):
     if type(raw) is not bytes or not raw:fail('CHAT_MEDIA_TYPE_INVALID',415)
     mime=mime_type.split(';',1)[0].strip().lower() if type(mime_type) is str else ''
     mime={'audio/x-wav':'audio/wav','audio/wave':'audio/wav','audio/x-m4a':'audio/mp4'}.get(mime,mime)
     if mime not in MIMES and not (server_pcm and mime=='audio/pcm'):fail('CHAT_MEDIA_TYPE_INVALID',415)
+    if mime in DOCUMENT_MIMES:
+        if audio_format is not None or server_pcm:fail('CHAT_MEDIA_TYPE_INVALID',415)
+        return inspect_document(raw,mime,file_name)[0]
     kind='image' if mime.startswith('image/') else 'audio'
     if len(raw)>(MAX_IMAGE if kind=='image' else MAX_AUDIO):fail('CHAT_MEDIA_TOO_LARGE',413)
     duration=None
@@ -384,8 +397,8 @@ class ChatMediaService:
         row=db.execute('SELECT * FROM chat_media_objects WHERE media_id=?',(media_id,)).fetchone()
         return self._descriptor(row,metadata,False)
 
-    def put_user(self,workspace,raw,mime_type,upload_key,*,bank_db,expected_privacy,expected_epoch):
-        metadata=inspect_bytes(raw,mime_type)
+    def put_user(self,workspace,raw,mime_type,upload_key,*,bank_db,expected_privacy,expected_epoch,file_name=None):
+        metadata=inspect_bytes(raw,mime_type,file_name=file_name)
         with closing(self.store.connect()) as db:
             db.execute('BEGIN IMMEDIATE')
             try:
@@ -452,6 +465,30 @@ class ChatMediaService:
             if parent is None or parent[0]!=scope['archive_epoch']:fail()
             raw,metadata=self._open(row)
             return raw,self._descriptor(row,metadata,True)
+
+    def read_user_attachment(self,workspace,media_id,*,request_id,bank_db):
+        """仅供内部消费本轮用户附件；仍执行原身份、代次、绑定与原件校验。"""
+        if type(request_id) is not str or not 1<=len(request_id)<=160:fail()
+        with closing(self.store.connect()) as db:
+            db.execute('BEGIN');scope=self._scope(workspace,bank_db,db)
+            row,binding=self._row(db,scope,media_id,bound_only=True,role='user')
+            if binding['request_id']!=request_id:fail()
+            parent=db.execute('SELECT archive_epoch FROM agent_user_turn_archive WHERE workspace_id=? AND request_id=?',
+                (workspace,request_id)).fetchone()
+            if parent is None or parent[0]!=scope['archive_epoch']:fail()
+            raw,metadata=self._open(row)
+            return raw,self._descriptor(row,metadata,True)
+
+    def read_document_text(self,workspace,media_id,*,request_id,bank_db):
+        """正文不进入公开descriptor；只有本轮、同身份的已绑定用户原件可提取。"""
+        raw,descriptor=self.read_user_attachment(workspace,media_id,request_id=request_id,bank_db=bank_db)
+        if descriptor['kind']!='document':fail('CHAT_MEDIA_TYPE_INVALID',415)
+        metadata,text=inspect_document(raw,descriptor['mime_type'],descriptor['file_name'])
+        if metadata!={k:descriptor[k] for k in metadata}:fail('CHAT_MEDIA_CORRUPT',503)
+        # PDF提取在隔离进程中发生，结束后重查授权/绑定，不能复用撤销前结果。
+        current_raw,current=self.read_user_attachment(workspace,media_id,request_id=request_id,bank_db=bank_db)
+        if current!=descriptor or current_raw!=raw:fail('CHAT_MEDIA_CHANGED',409)
+        return {'media':descriptor,'extracted_text':text}
 
     def _read_fingerprint(self,db,scope,media_id):
         row=db.execute('''SELECT o.media_id,o.workspace_id,o.registered_user_id,o.archive_epoch,o.media_role,
@@ -540,7 +577,8 @@ class ChatMediaService:
         with self._http_scope(handler) as (workspace,token,db,scope):
             handler._finance_json(200,{'contract':'navren.chat-media-context/1','workspace_binding':workspace,
                 'registered_user_id':scope['registered_user_id'],'privacy_revision':scope['privacy_revision'],'archive_epoch':scope['archive_epoch'],
-                'limits':{'image_bytes':MAX_IMAGE,'audio_bytes':MAX_AUDIO,'media_per_user_turn':MAX_PER_TURN,'mime_types':list(MIMES)}})
+                'limits':{'image_bytes':MAX_IMAGE,'audio_bytes':MAX_AUDIO,'document_bytes':MAX_DOCUMENT,
+                          'document_text_chars':MAX_TEXT_CHARS,'media_per_user_turn':MAX_PER_TURN,'mime_types':list(MIMES)}})
 
     def upload_http(self,handler):
         self.g.origin_check(handler);workspace,token=self.g.identity(handler);self.g.check_csrf(handler,token)
@@ -551,7 +589,13 @@ class ChatMediaService:
             if not re.fullmatch('[0-9]{1,9}',length):fail('CHAT_MEDIA_LENGTH_REQUIRED',411)
             length=int(length);mime=handler.headers.get('Content-Type','').split(';',1)[0].strip().lower()
             if mime not in MIMES and mime not in ('audio/x-wav','audio/wave','audio/x-m4a'):fail('CHAT_MEDIA_TYPE_INVALID',415)
-            if not 0<length<=(MAX_IMAGE if mime.startswith('image/') else MAX_AUDIO):fail('CHAT_MEDIA_TOO_LARGE',413)
+            if not 0<length<=(MAX_IMAGE if mime.startswith('image/') else MAX_DOCUMENT if mime in DOCUMENT_MIMES else MAX_AUDIO):fail('CHAT_MEDIA_TOO_LARGE',413)
+            file_name=None
+            if mime in DOCUMENT_MIMES:
+                encoded_name=handler.headers.get('X-Navren-File-Name','')
+                if not 0<len(encoded_name)<=2160:fail('CHAT_DOCUMENT_INVALID',415)
+                try:file_name=unquote(encoded_name,encoding='utf-8',errors='strict')
+                except (UnicodeError,ValueError):fail('CHAT_DOCUMENT_INVALID',415)
             expected_workspace=handler.headers.get('X-Navren-Expected-Workspace');privacy=handler.headers.get('X-Navren-Privacy-Revision','');epoch=handler.headers.get('X-Navren-Archive-Epoch','')
             if expected_workspace!=workspace:fail('WORKSPACE_CHANGED',409)
             if not re.fullmatch('[0-9]{1,12}',privacy) or not re.fullmatch('[0-9]{1,12}',epoch):fail('CHAT_MEDIA_STALE',409)
@@ -561,7 +605,7 @@ class ChatMediaService:
             if len(raw)!=length:fail('CHAT_MEDIA_LENGTH_MISMATCH',400)
             with self._http_scope(handler) as (_,_,db,scope):
                 result=self.put_user(workspace,raw,handler.headers.get('Content-Type',''),handler.headers.get('X-Navren-Upload-Key',''),
-                    bank_db=db,expected_privacy=int(privacy),expected_epoch=int(epoch))
+                    bank_db=db,expected_privacy=int(privacy),expected_epoch=int(epoch),file_name=file_name)
                 handler._finance_json(201,result)
         except BankError:
             handler.close_connection=True
@@ -593,8 +637,9 @@ class ChatMediaService:
             handler._navren_chat_media_response_started=True
             started=True
             handler.send_response(200)
+            disposition="attachment; filename*=UTF-8''"+quote(descriptor['file_name'],safe='') if descriptor['kind']=='document' else 'inline'
             for name,value in (('Content-Type',descriptor['mime_type']),('Content-Length',str(len(raw))),('X-Content-Type-Options','nosniff'),
-                ('Cache-Control','no-store'),('Content-Disposition','inline'),('Accept-Ranges','none'),('X-Navren-Workspace',workspace),
+                ('Cache-Control','no-store'),('Content-Disposition',disposition),('Accept-Ranges','none'),('X-Navren-Workspace',workspace),
                 ('X-Navren-Privacy-Revision',str(scope['privacy_revision']))):handler.send_header(name,value)
             handler.end_headers()
             for at in range(0,len(raw),65536):

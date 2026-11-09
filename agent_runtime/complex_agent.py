@@ -13,7 +13,8 @@ import uuid
 from simulated_bank import BankError
 from .conversation import ConversationAgent
 from .jev_client import JevClient, JevError, _NoRedirect
-from .model_adapters import (AIPING_PRIMARY_MODEL, AIPING_URL, ModelAdapterError,
+from .model_adapters import (AIPING_PRIMARY_MODEL, AIPING_URL, DEEPSEEK_MODEL, DEEPSEEK_URL,
+                             GLM_OFFICIAL_MODEL, GLM_OFFICIAL_URL, ModelAdapterError,
                              _key_from_sources, _unique_object)
 
 
@@ -24,15 +25,16 @@ def _encode(value):
 
 class _StrictAiPingOpen:
     """候选入口的固定渠道守卫；错误响应仍把合法 usage 交给原计费链。"""
-    def __init__(self, opener, model):
-        self.model = model
+    def __init__(self, opener, model, *, url=AIPING_URL):
+        self.model, self.url = model, url
         self.opener = (urllib.request.build_opener(urllib.request.ProxyHandler({}),
             _NoRedirect()).open if opener is urllib.request.urlopen else opener)
 
     def __call__(self, request, **kwargs):
-        if (request.full_url != AIPING_URL or
+        if (request.full_url != self.url or
                 json.loads(request.data, object_pairs_hook=_unique_object).get('model') != self.model):
-            error = ModelAdapterError('fixed_aiping_request_required', model_id=self.model, attempts=0)
+            code = 'fixed_aiping_request_required' if self.url == AIPING_URL else 'fixed_official_request_required'
+            error = ModelAdapterError(code, model_id=self.model, attempts=0)
             error.request_sent = False
             raise error
         response = self.opener(request, **kwargs)
@@ -368,30 +370,35 @@ class ComplexRoutingClient:
 class ComplexConversationAgent(ConversationAgent):
     """显式候选入口；正式默认服务不因此自动启用 Jev。"""
     def __init__(self, *args, route_provider='off', judge=None,
-                 positive_threshold=.9, negative_threshold=.1, **kwargs):
+                 positive_threshold=.9, negative_threshold=.1, model_route='ai_ping', **kwargs):
+        if model_route not in ('ai_ping', 'official'):
+            raise ValueError('invalid_model_route')
+        if model_route == 'official' and route_provider != 'off':
+            raise ValueError('rag_official_requires_route_off')
+        self.model_route = model_route
         kwargs.setdefault('tool_routing', 'progressive')
         super().__init__(*args, **kwargs)
         if route_provider not in ('off', 'native', 'jev'):
             raise ValueError('invalid_route_provider')
+        official = model_route == 'official'
+        primary_route = ((DEEPSEEK_URL, DEEPSEEK_MODEL, 'deepseek', 'DEEPSEEK_API_KEY', 'CC/DEEPSEEK_API_KEY')
+            if official else (AIPING_URL, AIPING_PRIMARY_MODEL, 'ai_ping', 'AIPING_API_KEY', 'CC/AIPING_GLM_API_KEY'))
+        reviewer_route = ((GLM_OFFICIAL_URL, GLM_OFFICIAL_MODEL, 'zhipu', 'GLM_API_KEY', 'CC/GLM_API_KEY')
+            if official else (AIPING_URL, 'GLM-5.3-Flash', 'ai_ping', 'AIPING_API_KEY', 'CC/AIPING_GLM_API_KEY'))
         if getattr(self.primary,'billing_mode',None)!='unpaid_fixture':
-            if (getattr(self.primary,'endpoint',None)!=AIPING_URL
-                    or self.primary.model_id!=AIPING_PRIMARY_MODEL
-                    or getattr(self.primary,'provider',None)!='ai_ping'
-                    or getattr(self.primary,'env_name',None)!='AIPING_API_KEY'
-                    or getattr(self.primary,'keychain_service',None)!='CC/AIPING_GLM_API_KEY'):
-                raise ValueError('aiping_primary_route_required')
-            self.primary.urlopen = _StrictAiPingOpen(self.primary.urlopen, AIPING_PRIMARY_MODEL)
+            actual = tuple(getattr(self.primary, key, None) for key in
+                ('endpoint', 'model_id', 'provider', 'env_name', 'keychain_service'))
+            if actual != primary_route:
+                raise ValueError('rag_official_primary_route_required' if official else 'aiping_primary_route_required')
+            self.primary.urlopen = _StrictAiPingOpen(self.primary.urlopen, primary_route[1], url=primary_route[0])
         if getattr(self.reviewer,'billing_mode',None)!='unpaid_fixture':
             review_client=getattr(self.reviewer,'client',None)
-            if (getattr(review_client,'url',None)!=AIPING_URL
-                    or self.reviewer.model_id!='GLM-5.3-Flash'
-                    or getattr(review_client,'model_id',None)!='GLM-5.3-Flash'
-                    or getattr(review_client,'provider',None)!='ai_ping'
-                    or getattr(review_client,'env_name',None)!='AIPING_API_KEY'
-                    or getattr(review_client,'keychain_service',None)!='CC/AIPING_GLM_API_KEY'
+            actual = tuple(getattr(review_client, key, None) for key in
+                ('url', 'model_id', 'provider', 'env_name', 'keychain_service'))
+            if (actual != reviewer_route or self.reviewer.model_id != reviewer_route[1]
                     or getattr(review_client,'max_retries',None)!=0):
-                raise ValueError('aiping_reviewer_route_required')
-            review_client.urlopen = _StrictAiPingOpen(review_client.urlopen, 'GLM-5.3-Flash')
+                raise ValueError('rag_official_reviewer_route_required' if official else 'aiping_reviewer_route_required')
+            review_client.urlopen = _StrictAiPingOpen(review_client.urlopen, reviewer_route[1], url=reviewer_route[0])
         self.route_provider = route_provider
         self.judge = judge or (JevClient() if route_provider == 'jev' else
                               AIPingIntentJudge(model_id=self.primary.model_id) if route_provider == 'native' else None)

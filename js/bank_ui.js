@@ -11,27 +11,27 @@ window.BankUI = (() => {
     bankRecovery={workspace_id:event.detail.workspace_id,epoch:identityEpoch};state=null;products=[];
     window.dispatchEvent(new Event('navren:bank-session-revoked'));
   });
-  const statuses = {pending_confirmation:'待确认，尚未执行',succeeded:'已完成模拟操作',pending_settlement:'赎回待结算，尚未到账',settled:'已结算到账',cancelled:'已取消，未执行',expired:'确认已过期',invalidated:'账户已变化，请重新准备',unknown:'操作状态未知，请勿重复提交'};
-  const actions = {purchase:'模拟申购',redeem:'模拟赎回',close_mandate:'关闭银行代扣',card_control:'调整卡片交易控制',report_card_lost:'模拟卡片挂失',unblock_card:'解除模拟挂失',password_change:'修改银行访问密码',request_card_limit:'申请提高信用额度',apply_card:'申请银行卡',transfer:'模拟转账',schedule_transfer:'启用定时转账',cancel_scheduled_payment:'取消定时转账',request_split:'发起AA收款',collect_split_payment:'登记AA模拟收款',cancel_subscription:'取消模拟商户订阅',reserve_funds:'预留任务资金',release_funds:'解除资金预留',book_services:'完成模拟服务预约'};
+  const statuses = {pending_confirmation:'待确认，尚未执行',succeeded:'账户操作已完成',pending_settlement:'赎回待结算，尚未到账',settled:'已结算到账',cancelled:'已取消，未执行',expired:'确认已过期',invalidated:'账户已变化，请重新准备',unknown:'操作状态未知，请勿重复提交'};
+  const actions = {purchase:'申购',redeem:'赎回',close_mandate:'关闭银行代扣',card_control:'调整卡片交易控制',report_card_lost:'卡片挂失',unblock_card:'解除挂失',password_change:'修改交易验证密码',request_card_limit:'申请提高信用额度',apply_card:'申请银行卡',transfer:'账户转账',schedule_transfer:'启用定时转账',cancel_scheduled_payment:'取消定时转账',request_split:'发起AA收款',collect_split_payment:'登记AA收款',cancel_subscription:'取消商户订阅',reserve_funds:'预留任务资金',release_funds:'解除资金预留',book_services:'记录服务预约'};
   const controlNames = {online:'线上交易',overseas:'境外交易',contactless:'非接触支付',single_limit:'单笔限额'};
   function operationStatus(op) {
     if(op.state==='succeeded') {
-      if(op.action==='card_control')return '交易控制已更新（模拟）';
-      if(op.action==='report_card_lost')return '卡片已挂失（模拟）';
-      if(op.action==='unblock_card')return '已解除模拟挂失，交易开关仍关闭';
-      if(op.action==='password_change')return '银行访问密码已更新，需重新验证';
+      if(op.action==='card_control')return '交易控制已更新';
+      if(op.action==='report_card_lost')return '卡片已挂失';
+      if(op.action==='unblock_card')return '已解除挂失，交易开关仍关闭';
+      if(op.action==='password_change')return '交易验证密码已更新，需重新验证';
       if(op.action==='request_card_limit')return '额度申请已提交，等待审核';
-      if(op.action==='apply_card')return op.result?.requested_type==='virtual'&&op.result?.status==='issued'?'SIM 虚拟卡已生成':'办卡申请已提交，等待审核';
-      if(op.action==='close_mandate')return '银行代扣已关闭（模拟）';
-      if(op.action==='transfer')return '转账已记入模拟账本';
-      if(op.action==='schedule_transfer')return '定时转账已启用（模拟）';
+      if(op.action==='apply_card')return op.result?.requested_type==='virtual'&&op.result?.status==='issued'?'虚拟卡已生成':'办卡申请已提交，等待审核';
+      if(op.action==='close_mandate')return '银行代扣已关闭';
+      if(op.action==='transfer')return '转账已记入账户记录';
+      if(op.action==='schedule_transfer')return '定时转账已启用';
       if(op.action==='cancel_scheduled_payment')return '定时转账已取消';
-      if(op.action==='request_split')return 'AA收款请求已记录（模拟）';
-      if(op.action==='collect_split_payment')return 'AA模拟收款已记账';
-      if(op.action==='cancel_subscription')return '模拟商户订阅已取消';
+      if(op.action==='request_split')return 'AA收款请求已记录';
+      if(op.action==='collect_split_payment')return 'AA收款已记录';
+      if(op.action==='cancel_subscription')return '账户中的订阅记录已取消';
       if(op.action==='reserve_funds')return '任务资金已预留（未扣款）';
       if(op.action==='release_funds')return '资金预留已解除';
-      if(op.action==='book_services')return '模拟服务预约已完成';
+      if(op.action==='book_services')return '服务预约已记录';
     }
     return statuses[op.state]||op.state;
   }
@@ -77,12 +77,12 @@ window.BankUI = (() => {
     if(event.reserved_delta_minor)card.append(note('资金预留变化 '+formatTimelineMoney(Math.abs(event.reserved_delta_minor),event.currency)));
     const source=node('details',undefined,'cashflow-source');
     source.append(node('summary','查看来源记录'));
-    source.append(node('code',event.evidence_ref||((event.source_table||'模拟档案')+'/'+(event.evidence_id||'未知记录'))));
+    source.append(node('code',event.evidence_ref||((event.source_table||'账户档案')+'/'+(event.evidence_id||'未知记录'))));
     card.append(source);
     return card;
   }
   function renderCashflowTimeline(timeline) {
-    const root=panel('模拟资金时间轴 · '+timeline.horizon_days+' 天');
+    const root=panel('资金时间轴 · '+timeline.horizon_days+' 天');
     root.classList.add('cashflow-panel');
     const currencies=new Set((timeline.accounts||[]).map(account=>account.currency).filter(Boolean));
     const amountLabel=currencies.size>1?'各账户按原币种展示，不跨币种汇总':currencies.has('CNY')?'金额按元展示':'金额按账户币种展示';
@@ -115,7 +115,7 @@ window.BankUI = (() => {
     if(days.children.length){
       root.append(node('h4','按日查看事项','cashflow-subheading'),days);
     }else root.append(note('此时间范围内没有已登记的未来收支事项；这不代表不会发生其他生活支出。'));
-    root.append(note(timeline.notice||'仅为模拟推演，不是银行余额或支付承诺。'));
+    root.append(note(timeline.notice||'仅为资金推演，不是银行余额或支付承诺。'));
     return root;
   }
   function renderWorkflowEvidence(workflow) {
@@ -142,7 +142,7 @@ window.BankUI = (() => {
       else if(workflow.status!=='approved')root.append(note('未展示资金金额：当前结果尚未通过全部审核步骤。'));
     }
     const steps=node('ol',undefined,'workflow-task-list');
-    const taskNames={account_snapshot:'读取模拟账户快照',cashflow_projection:'推演已确认事项与候选情景'};
+    const taskNames={account_snapshot:'读取账户快照',cashflow_projection:'推演已确认事项与候选情景'};
     (workflow.task_graph||[]).forEach(task=>steps.append(node('li',taskNames[task.capability]||task.capability)));
     if(steps.children.length)root.append(node('h4','执行步骤','cashflow-subheading'),steps);
     const evidenceDetails=node('details',undefined,'workflow-source-list');
@@ -176,7 +176,7 @@ window.BankUI = (() => {
       p.append(note('已结算现金 '+formatTimelineMoney(r.cash_minor,currency)+' − 应急保留 '+formatTimelineMoney(r.reserve_minor,currency)+' − 已知到期 '+formatTimelineMoney(r.upcoming_due_minor,currency)+' − 生效资金预留 '+formatTimelineMoney(r.held_minor,currency)));
       const details=node('details',undefined,'bank-details');
       details.append(node('summary','查看 '+(r.commitments||[]).length+' 项近期支出'),table(['已知到期事项','金额','日期'],(r.commitments||[]).map(c=>[c.name,formatTimelineMoney(c.amount_minor,currency),c.due_on])));
-      p.append(details,note('参考日期 '+r.as_of+' · 账本版本 '+r.version),note(s.notice));
+      p.append(details,note('参考日期 '+r.as_of+' · 资料版本 '+r.version),note(s.notice));
     }).catch(e=>{if(p.isConnected&&guard.valid())showError(p,e,()=>{const replacement=budgetPanel(state);p.replaceWith(replacement);});});
     return p;
   }
@@ -184,11 +184,11 @@ window.BankUI = (() => {
   async function load() {
     const banner=document.getElementById('bankBanner');
     try {
-      if(bankRecovery)throw Object.assign(Error('银行访问会话已失效，请用银行访问密码恢复。'),{code:'BANK_RELOGIN_REQUIRED'});
+      if(bankRecovery)throw Object.assign(Error('交易验证已失效，请使用交易验证密码恢复。'),{code:'BANK_RELOGIN_REQUIRED'});
       const session=await B.ensure();
       [state,products]=await Promise.all([B.get('/overview'),B.get('/products')]);
-      banner?.replaceChildren(node('strong','模拟银行'),node('span','业务日期 '+state.as_of),button('刷新',()=>load()));
-      if(banner)banner.title='模拟账户 '+session.workspace_id.slice(0,8)+' · 账本版本 '+state.version;
+      banner?.replaceChildren(node('strong','资金账户'),node('span','业务日期 '+state.as_of),button('刷新',()=>load()));
+      if(banner)banner.title='账户 '+session.workspace_id.slice(0,8)+' · 资料版本 '+state.version;
       if (document.getElementById('bankRecommendations')) renderRecommendations();
       window.dispatchEvent(new CustomEvent('bank:ready',{detail:{state,products}}));
       return {state,products};
@@ -380,14 +380,14 @@ window.BankUI = (() => {
       if(op.result.amount_minor!==undefined)container.append(note('金额：'+B.money(op.result.amount_minor)+
         (op.result.settlement_date?'；预计结算日：'+op.result.settlement_date:'')));
       else if(op.result.total_minor!==undefined)container.append(note('金额：'+B.money(op.result.total_minor)));
-      if(op.result.payment_id)container.append(note('模拟付款编号：'+op.result.payment_id));
+      if(op.result.payment_id)container.append(note('付款记录编号：'+op.result.payment_id));
       if(op.result.scheduled_payment_id)container.append(note('定时转账编号：'+op.result.scheduled_payment_id));
       if(op.result.hold_id)container.append(note('资金预留编号：'+op.result.hold_id));
-      if(op.result.reservation_ids?.length)container.append(note('模拟预约编号：'+op.result.reservation_ids.join('、')));
+      if(op.result.reservation_ids?.length)container.append(note('预约记录编号：'+op.result.reservation_ids.join('、')));
       if(op.result.balance_after_minor!==undefined)container.append(note('执行后付款账户余额：'+B.money(op.result.balance_after_minor)));
       if(op.result.requested_type==='virtual'&&op.result.status==='issued') {
         if(Number.isSafeInteger(op.result.single_transaction_limit_minor))container.append(note('单笔限额：'+B.money(op.result.single_transaction_limit_minor)));
-        if(Number.isSafeInteger(op.result.fee_minor))container.append(note('模拟费用：'+B.money(op.result.fee_minor)));
+        if(Number.isSafeInteger(op.result.fee_minor))container.append(note('费用：'+B.money(op.result.fee_minor)));
         if(Number.isSafeInteger(op.result.validity_days))container.append(note('有效期：'+op.result.validity_days+' 天'));
       }
       container.append(note(op.result.notice));
@@ -398,7 +398,7 @@ window.BankUI = (() => {
     }));
     if(['expired','invalidated'].includes(op.state)&&trigger?.dataset.agentOperation==='true') {
       container.append(note('这份 Agent 草案已失效。请返回对话重新提问，重新核验后再确认。'));
-    } else if(!readOnly&&op.action==='password_change'&&['expired','invalidated'].includes(op.state))container.append(button('重新输入银行访问密码',()=>{dialog?.finish();passwordChangeForm(op.payload.account_id).catch(()=>{});}));
+    } else if(!readOnly&&op.action==='password_change'&&['expired','invalidated'].includes(op.state))container.append(button('重新输入交易验证密码',()=>{dialog?.finish();passwordChangeForm(op.payload.account_id).catch(()=>{});}));
     else if(!readOnly&&['expired','invalidated'].includes(op.state))container.append(button('重新准备确认卡',()=>{
       if(!current())return;
       const draft={...op.payload,idempotency_key:B.key(),liquidity_floor_minor:floor};
@@ -469,14 +469,38 @@ window.BankUI = (() => {
     finally{if(dialog===d)busy=false;}
   }
   // 验证码只留在专用表单和本次请求中；渠道资格取自同一操作的服务端视图。
-  function operationVerification(form,view,{isCurrent=()=>form.isConnected,onError=()=>{},onChange=()=>{}}={}) {
-    const id=view.operation?.id,permission=view.operation?.permission;
-    let currentView=view,challenge=null,timer=null,sending=false,disposed=false;
+  function operationVerificationError(error) {
+    const code=error?.code,meta=error?.sms_verification,typedMeta=!!meta&&typeof meta==='object'&&!Array.isArray(meta)&&Object.keys(meta).sort().join(',')==='reason_code,same_challenge_retry'&&
+      ['SMS_CODE_REJECTED','SMS_CODE_INVALID','SMS_CHALLENGE_INVALID','SMS_EXPIRED','SMS_TIMEOUT','SMS_VERIFY_UNAVAILABLE','FINANCIAL_WRITE_LOCKED'].includes(meta.reason_code)&&typeof meta.same_challenge_retry==='boolean'&&(!meta.same_challenge_retry||meta.reason_code==='SMS_CODE_REJECTED');
+    const reasonMessage=code==='SMS_VERIFICATION_FAILED'&&typedMeta?({
+      SMS_CODE_REJECTED:meta.same_challenge_retry?'验证码不正确，请修改后重新输入。':'验证码不正确或已失效，请等待冷却结束后重新获取验证码。',
+      SMS_CODE_INVALID:'请输入六位短信验证码；如仍无法验证，请重新获取。',
+      SMS_CHALLENGE_INVALID:'本次短信验证码已失效，请等待冷却结束后重新获取验证码。',
+      SMS_EXPIRED:'本次短信验证码已失效，请等待冷却结束后重新获取验证码。',
+      SMS_TIMEOUT:'短信核验超时，请等待冷却结束后重新获取验证码。',
+      SMS_VERIFY_UNAVAILABLE:'短信核验暂不可用，请等待冷却结束后重新获取验证码。',
+      FINANCIAL_WRITE_LOCKED:'金融安全锁已生效，此操作暂不能执行。'
+    })[meta.reason_code]:null;
+    return {message:reasonMessage||({SMS_CODE_INVALID:'请输入六位短信验证码。',SMS_VERIFICATION_FAILED:'验证码未通过验证，请检查或重新获取。',SMS_CHALLENGE_INVALID:'本次短信验证码已失效，请等待冷却结束后重新发送。',FINANCIAL_WRITE_LOCKED:'金融安全锁已生效，此操作暂不能执行。'})[code]||error?.message||'操作未完成，请查询原操作状态。',
+      retryChallenge:code==='SMS_VERIFICATION_FAILED'&&typedMeta&&meta.reason_code==='SMS_CODE_REJECTED'&&meta.same_challenge_retry===true};
+  }
+  function operationVerification(form,view,{isCurrent=()=>form.isConnected,isBusy=()=>false,onError=()=>{},onChange=()=>{},onExpiredReturn=null,canExpiredReturn=()=>true}={}) {
+    const id=view.operation?.id,permission=view.operation?.permission,summary=view.operation?.confirmation_digest;
+    let currentView=view,challenge=null,timer=null,sending=false,disposed=false,resendAt=0,sendState='idle';
     const red=permission==='red'||view.verification_required===true;
     const info=note(''),row=node('div',undefined,'bank-actions');
-    let pin=null;
+    info.setAttribute('role','status');info.setAttribute('aria-live','polite');
+    let pin=null,region=null;
     const valid=()=>!disposed&&isCurrent();
+    const now=()=>Date.now()/1000;
+    const operationLive=()=>currentView.operation?.id===id&&currentView.operation?.confirmation_digest===summary&&
+      currentView.operation?.version===view.operation?.version&&currentView.operation?.permission===permission&&
+      currentView.operation?.state==='pending_confirmation'&&Number.isFinite(currentView.operation?.expires_at)&&now()<currentView.operation.expires_at;
+    const expired=()=>currentView.operation?.id===id&&currentView.operation?.confirmation_digest===summary&&
+      currentView.operation?.version===view.operation?.version&&currentView.operation?.permission===permission&&
+      currentView.operation?.state==='pending_confirmation'&&Number.isFinite(currentView.operation?.expires_at)&&now()>=currentView.operation.expires_at;
     const security=()=>{
+      if(!operationLive())return {blocked:true,reason:expired()?'确认卡已过期，请取消旧卡后重新准备。':'操作状态已变化，请重新核对。'};
       const status=currentView.strong_verification;
       if(status&&(status.operation_id!==id||status.grade!==(red?'red':permission)||typeof status.financial_write_locked!=='boolean'))
         return {blocked:true,reason:'操作验证资料尚未核对，此操作暂不能确认。'};
@@ -487,45 +511,73 @@ window.BankUI = (() => {
       if(status.channel_configured!==true)return {blocked:true,reason:'短信渠道尚未接通，此操作暂不能确认。'};
       return {blocked:false};
     };
-    function clear(){challenge=null;clearTimeout(timer);timer=null;if(pin)pin.value='';}
-    const liveChallenge=()=>challenge&&Number.isFinite(challenge.expires_at)&&Date.now()/1000<challenge.expires_at;
+    function clearCode(){if(pin)pin.value='';}
+    function clear(){challenge=null;clearTimeout(timer);timer=null;clearCode();}
+    const liveChallenge=()=>challenge&&operationLive()&&Number.isFinite(challenge.expires_at)&&now()<challenge.expires_at;
+    function dispose(){disposed=true;clear();send.disabled=true;if(pin)pin.disabled=true;onChange();}
     function refresh(){
+      clearTimeout(timer);timer=null;
       if(!valid())return;
-      const status=security();
-      send.disabled=sending||status.blocked;
-      if(pin)pin.disabled=status.blocked||sending;
-      info.textContent=status.reason||(!red?'':liveChallenge()?'短信已发送，有效至 '+new Date(challenge.expires_at*1000).toLocaleTimeString('zh-CN')+'。':'请发送短信验证码后确认。');
+      if(challenge&&!liveChallenge())clear();
+      const status=security(),wait=Math.max(0,Math.ceil(resendAt-now()));
+      send.disabled=isBusy()||sending||status.blocked||wait>0;
+      send.textContent=wait>0?'重新发送短信验证码（'+wait+'秒）':'发送短信验证码';
+      if(pin)pin.disabled=isBusy()||status.blocked||sending;
+      if(returnButton){returnButton.hidden=!expired();returnButton.disabled=isBusy()||sending||!valid()||!canExpiredReturn();}
+      info.textContent=status.reason?(status.reason+(sending?' 短信请求尚未结束。':isBusy()?' 操作正在处理或状态待核。':'')):(sending?'正在发送短信验证码…':isBusy()?'操作正在处理或状态待核，请稍候。':liveChallenge()?
+        (sendState==='rate_limited'?'发送较频繁，上一条验证码仍有效，可继续填写并确认。':'短信已发送，有效至 '+new Date(challenge.expires_at*1000).toLocaleTimeString('zh-CN')+'。'):
+        sendState==='rate_limited'?'发送较频繁，请等待重发冷却结束后重试。':
+        sendState==='failed'?'短信发送未确认，请等待重发冷却结束后重试。':!red?'':'请发送短信验证码后确认。');
       onChange();
+      const deadlines=[resendAt,challenge?.expires_at,currentView.operation?.expires_at].filter(t=>Number.isFinite(t)&&t>now());
+      if(deadlines.length)timer=setTimeout(refresh,Math.max(1,Math.min(1000,(Math.min(...deadlines)-now())*1000)));
     }
     const send=button('发送短信验证码',async()=>{
-      if(!valid()||sending||security().blocked)return;
-      clear();sending=true;refresh();
+      if(!valid()||isBusy()||sending||security().blocked||now()<resendAt)return;
+      sending=true;resendAt=now()+60;refresh();
       try {
         const result=await B.post('/operations/'+encodeURIComponent(id)+'/sms',{});
         if(!valid())return;
         if(result.operation_id!==id||result.channel!=='sms'||result.source!=='provider'||
           typeof result.challenge_id!=='string'||!/^[a-f0-9]{32}$/.test(result.challenge_id)||
-          !Number.isFinite(result.expires_at)||result.expires_at<=Date.now()/1000||
+          !Number.isFinite(result.expires_at)||result.expires_at<=now()||
           Number.isFinite(view.operation.expires_at)&&result.expires_at>view.operation.expires_at)
           throw Error('短信验证响应无法与当前操作核对，请重新发送。');
-        challenge={challenge_id:result.challenge_id,expires_at:result.expires_at};
-        timer=setTimeout(()=>{clear();refresh();},Math.max(0,(result.expires_at-Date.now()/1000)*1000));
-      } catch(error){clear();if(valid())onError(error);}
-      finally{sending=false;refresh();}
+        clear();challenge={challenge_id:result.challenge_id,expires_at:result.expires_at};
+        sendState='sent';resendAt=now()+60;
+      } catch(error){
+        if(!valid())return;
+        sendState=error?.code==='SMS_SEND_RATE_LIMITED'?'rate_limited':'failed';
+        if(sendState!=='rate_limited'||!liveChallenge())clear();
+        resendAt=now()+60;onError(error);
+      }
+      finally{sending=false;if(valid())refresh();}
     });
+    const returnButton=typeof onExpiredReturn==='function'?button('取消旧确认卡并返回重新填写',()=>{
+      if(!valid()||isBusy()||sending||!expired()||!canExpiredReturn())return;
+      return onExpiredReturn();
+    }):null;
     if(red){
-      pin=field(form,'短信验证码','password');pin.inputMode='numeric';pin.pattern='[0-9]{6}';pin.maxLength=6;pin.required=true;
+      region=node('section',undefined,'bank-operation-verification');
+      region.append(node('h3','短信验证'));row.append(send,info);if(returnButton)row.append(returnButton);region.append(row);
+      pin=field(region,'短信验证码','password');pin.inputMode='numeric';pin.pattern='[0-9]{6}';pin.maxLength=6;pin.required=true;
       pin.autocomplete='one-time-code';pin.setAttribute('aria-label','短信验证码');pin.addEventListener('input',()=>onChange());
-      row.append(send);form.append(row,info);
+      form.prepend(region);
     }else if(security().blocked)form.append(info);
     // refresh 的回调由调用方在完整表单建立后首次触发。
     send.disabled=security().blocked;if(pin)pin.disabled=security().blocked;info.textContent=security().reason||(red?'请发送短信验证码后确认。':'');
     return {
-      red,reason:()=>security().reason||'',blocked:()=>security().blocked,
-      canConfirm:()=>!disposed&&!sending&&!security().blocked&&(!red||!!liveChallenge()&&/^[0-9]{6}$/.test(pin.value)),
+      red,reason:()=>security().reason||'',blocked:()=>security().blocked,isSending:()=>sending,
+      canConfirm:()=>!disposed&&!isBusy()&&!sending&&!security().blocked&&(!red||!!liveChallenge()&&/^[0-9]{6}$/.test(pin.value)),
       payload(){if(!this.canConfirm())throw Error(security().reason||'请重新发送短信并填写六位验证码。');return red?{challenge_id:challenge.challenge_id,verification_code:pin.value}:{};},
-      update(next){if(next.operation?.id!==id||next.operation?.confirmation_digest!==view.operation?.confirmation_digest)throw Error('操作摘要已变化，请重新准备。');currentView=next;clear();refresh();},
-      clear,refresh,dispose(){disposed=true;clear();}
+      update(next,{preserveChallenge=false}={}){
+        if(next.operation?.id!==id||next.operation?.confirmation_digest!==summary||next.operation?.version!==view.operation?.version||next.operation?.permission!==permission){dispose();throw Error('操作摘要或版本已变化，请重新准备。');}
+        currentView=next;
+        if(!preserveChallenge||security().blocked||!liveChallenge())clear();else clearCode();
+        if(!challenge)sendState='idle';refresh();return !!liveChallenge()&&!security().blocked;
+      },
+      mount(host){if(disposed||!host?.isConnected)return;if(region)host.prepend(region);else if(security().blocked)host.append(info);refresh();},
+      clear,clearCode,refresh,dispose
     };
   }
   function ordinaryTransferTerms(view) {
@@ -595,37 +647,37 @@ window.BankUI = (() => {
       return;
     }
     content.replaceChildren(node('h3',actions[op.action]));
-    content.append(note('环境：模拟银行 · 付款账户：'+view.account.name));
+    content.append(note('付款账户：'+view.account.name));
     content.append(node('p',view.product?.name||view.mandate?.merchant||
-      (view.card?((view.card.type==='virtual'?'SIM 虚拟卡':view.card.type==='credit'?'信用卡':'借记卡')+' · '+view.card.network+' 尾号 '+view.card.last_four):'')));
+      (view.card?((view.card.type==='virtual'?'虚拟卡':view.card.type==='credit'?'信用卡':'借记卡')+' · '+view.card.network+' 尾号 '+view.card.last_four):'')));
     if(op.action==='transfer'){
-      content.append(node('p','向 '+(view.beneficiary?.display_name||'模拟收款人')+' 转账 '+B.money(op.payload.amount_minor)),
-        note('资金确认后只会记入本机模拟账本，不会向真实收款账户转账。'));
+      content.append(node('p','向 '+(view.beneficiary?.display_name||'收款人')+' 转账 '+B.money(op.payload.amount_minor)),
+        note('请核对收款人和金额后确认。'));
       if(!Object.hasOwn(op.payload,'remittance')){
         const terms=ordinaryTransferTerms(view);
-        content.append(note(terms?'本机模拟手续费：'+B.money(terms.fee_minor)+'；仅限当前普通本机SIM收款人转账。':'本机模拟手续费条款尚未核对，请重新准备。'));
+        content.append(note(terms?'手续费：'+B.money(terms.fee_minor)+'；仅限当前可用收款人转账。':'手续费条款尚未核对，请重新准备。'));
       }
     }
-    else if(op.action==='schedule_transfer')content.append(node('p',(view.beneficiary?.display_name||'模拟收款人')+' · '+B.money(op.payload.amount_minor)+' · '+(op.payload.frequency==='monthly'?'每月':'单次')+' · 首次 '+op.payload.next_due_on),
-      note('启用后只在模拟日期推进到期日时执行；推进时会重新检查收款人、限额和可用余额。'));
-    else if(op.action==='cancel_scheduled_payment')content.append(note('将取消 '+(view.schedule?.next_due_on||'后续')+' 起尚未执行的模拟转账。'));
+    else if(op.action==='schedule_transfer')content.append(node('p',(view.beneficiary?.display_name||'收款人')+' · '+B.money(op.payload.amount_minor)+' · '+(op.payload.frequency==='monthly'?'每月':'单次')+' · 首次 '+op.payload.next_due_on),
+      note('启用后只在业务日期推进到期日时执行；推进时会重新检查收款人、限额和可用余额。'));
+    else if(op.action==='cancel_scheduled_payment')content.append(note('将取消 '+(view.schedule?.next_due_on||'后续')+' 起尚未执行的账户转账。'));
     else if(op.action==='request_split')content.append(node('p',(view.split?.title||'AA账单')+' · '+B.money(view.split?.total_minor||0)+' · '+(view.split?.participants?.length||0)+' 位参与人'),
-      note('确认后只创建本机模拟收款请求，不会向联系人发送消息。'));
+      note('确认后创建收款请求，不会向联系人发送消息。'));
     else if(op.action==='collect_split_payment')content.append(node('p','登记 '+(view.participant?.display_name||'参与人')+' 已支付 '+B.money(view.participant?(view.participant.share_minor-view.participant.paid_minor):0)),
-      note('确认后只在本机模拟账户记入一笔收款，不代表真实资金到账。'));
-    else if(op.action==='cancel_subscription')content.append(node('p','取消 '+(view.subscription?.plan_name||'模拟订阅')),
-      note('本次模拟商户取消不会自动关闭银行代扣授权；真实取消结果需以商户确认为准。'));
-    else if(op.action==='reserve_funds')content.append(node('p','为 '+(view.task?.title||'模拟任务')+' 预留 '+B.money(op.payload.amount_minor)),
-      note('只占用模拟可用额度，不会扣款；预留到期后会自动释放。'));
-    else if(op.action==='release_funds')content.append(node('p','解除 '+B.money(view.hold?.amount_minor||0)+' 的模拟资金预留。'));
+      note('确认后记录一笔收款；记录收款不代表资金已到账。'));
+    else if(op.action==='cancel_subscription')content.append(node('p','取消 '+(view.subscription?.plan_name||'商户订阅')),
+      note(view.subscription?.details?.record_origin==='user_entered_simulation'?'仅取消本人登记的本机模拟订阅；模拟扣费安排保留。不会联系或取消真实商户，也不会修改真实银行授权。':'本次取消账户中的订阅记录，不会自动关闭银行代扣授权；商户取消结果仍需单独核实。'));
+    else if(op.action==='reserve_funds')content.append(node('p','为 '+(view.task?.title||'未命名任务')+' 预留 '+B.money(op.payload.amount_minor)),
+      note('只占用当前可用额度，不会扣款；预留到期后会自动释放。'));
+    else if(op.action==='release_funds')content.append(node('p','解除 '+B.money(view.hold?.amount_minor||0)+' 的资金预留。'));
     else if(op.action==='book_services')content.append(node('p','预约 '+(view.quotes||[]).map(q=>q.item).join('、')+' · 合计 '+formatTimelineMoney(view.amount_minor,'CNY')),
-      note('确认后从模拟账户扣款并生成本机预约记录；不会联系真实服务商。'));
+      note('确认后从当前账户扣款并记录预约；服务安排和履约结果仍需与服务商核实。'));
     if(view.product) {
       content.append(node('p','金额 '+B.money(op.payload.amount_minor)));
-      content.append(note('R'+view.product.risk_level+' · 锁定 '+view.product.term_days+' 天 · 赎回后 '+view.product.redemption_delay_days+' 个模拟自然日到账'));
+      content.append(note('R'+view.product.risk_level+' · 锁定 '+view.product.term_days+' 天 · 赎回后 '+view.product.redemption_delay_days+' 个业务自然日到账'));
       content.append(note(view.product.risk_notice));
-      content.append(note('费用未模拟（不是实际收费报价）；待结算赎回不计入可用余额。'));
-    } else if(view.mandate) content.append(note('仅关闭此模拟银行代扣协议。商户订阅合同及应付款不随之取消。'));
+      content.append(note('费用资料尚未取得；待结算赎回不计入可用余额。'));
+    } else if(view.mandate) content.append(note(view.mandate.merchant_contract_status==='user_entered_simulation'?'仅关闭本人登记的本机模拟扣费安排，不影响真实银行授权或商户合同。':'仅关闭当前账户的银行代扣协议。商户订阅合同及应付款不随之取消。'));
     else if(view.card) {
       if(op.action==='card_control') {
         const kind=op.payload.control_type;
@@ -633,78 +685,103 @@ window.BankUI = (() => {
         content.append(note(kind==='single_limit'?'将单笔限额调整为 '+B.money(op.payload.limit_minor)+'；当前为 '+B.money(current?.limit_minor||0):
           '将'+controlNames[kind]+'设为'+(op.payload.enabled?'开启':'关闭')+'。'));
       } else if(op.action==='report_card_lost') {
-        content.append(note('挂失后该模拟卡的全部交易开关将关闭；符合条件时可另行确认解挂，真实银行卡状态不会改变。'));
+        content.append(note('挂失后该卡片的全部交易开关将关闭；符合条件时可另行确认解挂。'));
       } else if(op.action==='unblock_card') {
-        content.append(note('仅解除本账户这张未过期卡片的模拟挂失。交易开关继续关闭，开启交易须另行确认。'));
+        content.append(note('仅解除本账户这张未过期卡片的挂失。交易开关继续关闭，开启交易须另行确认。'));
       } else if(op.action==='request_card_limit') {
-        content.append(note('当前模拟信用额度 '+B.money(view.card.credit_limit_minor)+'；拟申请 '+B.money(op.payload.requested_limit_minor)+'。提交后额度不变，等待模拟审核。'));
+        content.append(note('当前信用额度 '+B.money(view.card.credit_limit_minor)+'；拟申请 '+B.money(op.payload.requested_limit_minor)+'。提交后额度不变，等待审核。'));
       }
     } else if(view.card_application) {
-      content.append(note('拟申请：'+(view.card_application.requested_type==='virtual'?'SIM 虚拟卡':view.card_application.requested_type==='credit'?'信用卡':'借记卡')+
+      content.append(note('拟申请：'+(view.card_application.requested_type==='virtual'?'虚拟卡':view.card_application.requested_type==='credit'?'信用卡':'借记卡')+
         (view.card_application.requested_type==='credit'?'；申请额度 '+B.money(view.card_application.requested_limit_minor):'')));
       if(view.card_application.requested_type==='virtual') {
         const terms=virtualCardTerms(view);
-        content.append(note('单笔限额 '+B.money(view.card_application.requested_limit_minor)+'；仅本机模拟使用，无真实卡号、授信或对外支付能力。'));
-        content.append(note(terms?'用途：'+({online_payment:'线上支付',subscription:'订阅',travel:'旅行'})[terms.purpose]+' · 模拟费用 '+B.money(terms.fee_minor)+' · 有效期 '+terms.validity_days+' 天':'费用与有效期条款尚未核对，暂不能确认生成虚拟卡。'));
-      }else content.append(note('申请提交后等待模拟审核；不会自动核发卡片或授予信用额度。'));
+        content.append(note('单笔限额 '+B.money(view.card_application.requested_limit_minor)+'；当前卡片不提供授信或对外支付能力。'));
+        content.append(note(terms?'用途：'+({online_payment:'线上支付',subscription:'订阅',travel:'旅行'})[terms.purpose]+' · 费用 '+B.money(terms.fee_minor)+' · 有效期 '+terms.validity_days+' 天':'费用与有效期条款尚未核对，暂不能确认生成虚拟卡。'));
+      }else content.append(note('申请提交后等待审核；不会自动核发卡片或授予信用额度。'));
     }
-    if(op.action==='password_change')content.append(note('修改范围：模拟银行访问密码。Navren 应用登录密码保持不变；成功后银行会话与未执行草案失效，需重新验证。'));
+    if(op.action==='password_change')content.append(note('修改范围：交易验证密码。Navren 应用登录密码保持不变；成功后交易验证与未执行草案失效，需重新验证。'));
     if(view.budget)content.append(note('确认前可用额度 '+B.money(view.budget.investable_minor)+'；其中生效资金预留 '+B.money(view.budget.held_minor||0)+'。'));
     content.append(note('操作 '+op.id+(Number.isFinite(op.expires_at)?' · 有效至 '+new Date(op.expires_at*1000).toLocaleString('zh-CN'):' · 有效期尚未核对')+'，账户或画像变化后须重新准备。'));
     const form=node('form',undefined,'bank-form'); d.append(form);
-    const consentText=['transfer','schedule_transfer','book_services'].includes(op.action)?'我已核对收款人、金额和模拟资金来源，确认这项操作。':
-      ['request_split','collect_split_payment','cancel_subscription','reserve_funds','release_funds','cancel_scheduled_payment'].includes(op.action)?'我已核对任务、对象和模拟状态变更，确认继续。':
-      op.action==='card_control'?'我已核对卡片尾号和交易控制，确认更新模拟设置。':
-      op.action==='report_card_lost'?'我确认这张尾号卡片已遗失，并确认执行模拟挂失。':
+    const consentText=['transfer','schedule_transfer','book_services'].includes(op.action)?'我已核对收款人、金额和资金来源，确认这项操作。':
+      ['request_split','collect_split_payment','cancel_subscription','reserve_funds','release_funds','cancel_scheduled_payment'].includes(op.action)?'我已核对任务、对象和账户状态变更，确认继续。':
+      op.action==='card_control'?'我已核对卡片尾号和交易控制，确认更新交易设置。':
+      op.action==='report_card_lost'?'我确认这张尾号卡片已遗失，并确认执行挂失。':
       op.action==='unblock_card'?'我已核对本账户卡片与挂失状态，确认仅解挂并保持交易开关关闭。':
-      op.action==='password_change'?'我确认修改模拟银行访问密码，并知悉银行会话与旧草案将失效。':
-      op.action==='apply_card'&&op.payload.requested_type==='virtual'?'我已核对 SIM 虚拟卡的单笔限额、费用和期限，确认生成本机模拟卡片。':
-      ['request_card_limit','apply_card'].includes(op.action)?'我已核对申请类型和额度，确认提交模拟申请。':
-      '我已核对对象、金额及资金约束，确认执行上述模拟操作。';
+      op.action==='password_change'?'我确认修改交易验证密码，并知悉交易验证与旧草案将失效。':
+      op.action==='apply_card'&&op.payload.requested_type==='virtual'?'我已核对虚拟卡的单笔限额、费用和期限，确认生成银行卡。':
+      ['request_card_limit','apply_card'].includes(op.action)?'我已核对申请类型和额度，确认提交申请。':
+      '我已核对对象、金额及资金约束，确认执行上述账户操作。';
     const consent=context.reject===true?null:check(form,consentText);
     const submit=button('确认执行',null,true); submit.type='submit';
-    const cancel=button('取消操作',async()=>{
-      if(busy||!isCurrent())return; busy=true; cancel.disabled=true;pendingWrites.add(op.id);
+    async function cancelOperation(returnToForm=false){
+      const returnForm=returnToForm?trigger?.form:null;
+      if(busy||!isCurrent()||returnToForm&&(stateUnknown||verification?.isSending()||pendingWrites.has(op.id)||
+        !trigger?.isConnected||!returnForm?.isConnected||trigger.dataset.operationId!==op.id||
+        !Number.isFinite(op.expires_at)||Date.now()/1000<op.expires_at))return;
+      busy=true; cancel.disabled=true;pendingWrites.add(op.id);if(returnToForm)verification?.refresh();
       try {
         const cancelled=await B.post('/operations/'+op.id+'/cancel',{});
         if(!isCurrent()){abort();return;}
         if(cancelled?.id!==op.id||cancelled.state!=='cancelled')throw Error('尚未取得同一操作的取消回执。');
+        if(returnToForm){
+          if(trigger.isConnected&&returnForm.isConnected&&trigger.form===returnForm&&returnForm.closest('#bankTransfers')&&trigger.dataset.operationId===op.id){
+            delete trigger.dataset.operationId;delete trigger.dataset.bankOperationState;delete trigger.dataset.bankOperationVersion;
+            returnForm.dataset.navrenDirty='true';
+          d.finish();trigger.focus();return;
+          }
+          form.remove();error.textContent='旧确认卡已取消，原转账表单已变化，请重新打开转账页面。';
+          recovery.replaceChildren();recovery.hidden=true;stateUnknown=false;receipt(cancelled,content,null);return;
+        }
         form.remove(); error.textContent=''; recovery.replaceChildren(); recovery.hidden=true; stateUnknown=false;
         receipt(cancelled,content,trigger);
       }
-      catch(e){if(isCurrent()){error.textContent=e.message+'\n正在核验操作状态…';await queryOperationState();}}
-      finally {pendingWrites.delete(op.id);if(dialog===d)busy=false;if(isCurrent()&&!stateUnknown)cancel.disabled=false;}
-    });
+      catch(e){if(isCurrent()){error.textContent=e.message+'\n正在核验操作状态…';await queryOperationState({expiredReturnFailure:returnToForm,protectedReturnForm:returnToForm?returnForm:null});}}
+      finally {pendingWrites.delete(op.id);if(dialog===d)busy=false;if(isCurrent()&&!stateUnknown)cancel.disabled=false;if(returnToForm&&isCurrent())verification?.refresh();}
+    }
+    const cancel=button('取消操作',()=>cancelOperation());
     const row=node('div',undefined,'bank-actions'); row.append(cancel);if(context.reject!==true)row.append(submit);form.append(row);
     const recovery=node('div',undefined,'bank-actions'); recovery.hidden=true;
     let stateUnknown=false;
     const termsMissing=(op.action==='apply_card'&&op.payload.requested_type==='virtual'&&!virtualCardTerms(view))||(op.action==='transfer'&&!Object.hasOwn(op.payload,'remittance')&&!ordinaryTransferTerms(view));
-    const verification=context.reject===true?null:operationVerification(form,view,{isCurrent:()=>isCurrent()&&!busy,onError:e=>{error.textContent=e.message;},onChange:()=>refreshControls()});
+    const originalTransferForm=trigger?.form;
+    const canReturnToTransfer=context.reject!==true&&op.action==='transfer'&&!Object.hasOwn(op.payload,'remittance')&&
+      trigger?.dataset.agentOperation!=='true'&&trigger?.type==='submit'&&!!originalTransferForm?.closest('#bankTransfers')&&trigger.dataset.operationId===op.id;
+    const returnTargetCurrent=()=>!pendingWrites.has(op.id)&&trigger?.isConnected&&originalTransferForm?.isConnected&&
+      trigger.form===originalTransferForm&&!!originalTransferForm.closest('#bankTransfers')&&trigger.dataset.operationId===op.id;
+    const verification=context.reject===true?null:operationVerification(form,view,{isCurrent,isBusy:()=>busy||stateUnknown,onError:e=>{error.textContent=operationVerificationError(e).message;},onChange:()=>refreshControls(),
+      onExpiredReturn:canReturnToTransfer?()=>cancelOperation(true):null,canExpiredReturn:returnTargetCurrent});
     const finishConfirmation=d.finish;d.finish=()=>{verification?.dispose();finishConfirmation();};
-    function refreshControls(){submit.disabled=busy||stateUnknown||termsMissing||!!verification&&!verification.canConfirm();cancel.disabled=busy||stateUnknown;}
+    function refreshControls(){submit.disabled=busy||stateUnknown||termsMissing||!!verification&&!verification.canConfirm()||!!consent&&!consent.checked;cancel.disabled=busy||stateUnknown;}
+    consent?.addEventListener('change',refreshControls);
+    verification?.refresh();
     refreshControls();
-    async function queryOperationState() {
+    async function queryOperationState({confirmationError='',preserveChallenge=false,expiredReturnFailure=false,protectedReturnForm=null}={}) {
       if(!isCurrent())return;
       try {
         const current=await B.get('/operations/'+op.id), state=current.operation.state;
         if(!isCurrent()){abort();return;}
         if(current.operation.id!==op.id)throw Error('操作回执对象不一致。');
+        const receiptTrigger=protectedReturnForm&&!(trigger?.isConnected&&protectedReturnForm.isConnected&&
+          trigger.form===protectedReturnForm&&protectedReturnForm.closest('#bankTransfers')&&trigger.dataset.operationId===op.id)?null:trigger;
         if(context.reject===true&&String(current.operation.version)!==String(op.version))throw Error('操作版本已变化，不能继续取消旧草案。');
         d.dataset.operationState=state;
         recovery.replaceChildren(); recovery.hidden=true;
         stateUnknown=false;
         if(['succeeded','pending_settlement','settled'].includes(state)) {
-          form.remove(); receipt(current.operation,content,trigger); error.textContent='已重新查询并核实执行回执。'; emitChange();
+          form.remove(); receipt(current.operation,content,receiptTrigger); error.textContent='已重新查询并核实执行回执。'; emitChange();
         } else if(state==='pending_confirmation') {
-          verification?.update(current);
-          error.textContent=context.reject===true?'已查到这项草案仍待确认，尚未取消。可再次拒绝同一操作。':'已查到该操作仍待确认，当前没有成功回执。可继续确认同一操作，或取消。';
+          const retained=verification?.update(current,{preserveChallenge})===true;
+          error.textContent=expiredReturnFailure?'未取得旧卡的取消回执；操作仍待确认，请重新核对，暂不要重新生成。':confirmationError?confirmationError+'\n已核实该操作尚未执行，请重新核对后手动确认。':context.reject===true?'已查到这项草案仍待确认，尚未取消。可再次拒绝同一操作。':'已查到该操作仍待确认，当前没有成功回执。可继续确认同一操作，或取消。';
           refreshControls();
+          return retained;
         } else {
-          form.remove(); receipt(current.operation,content,trigger,current.liquidity_floor_minor);
+          form.remove(); receipt(current.operation,content,receiptTrigger,current.liquidity_floor_minor);
         }
       } catch(_) {
         if(!isCurrent()){abort();return;}
-        stateUnknown=true;
+        stateUnknown=true;verification?.clear();verification?.refresh();
         d.dataset.operationState='unknown';
         submit.disabled=cancel.disabled=true;
         error.textContent='目前无法核实此操作状态。请勿重复确认或取消。操作编号：'+op.id;
@@ -715,11 +792,10 @@ window.BankUI = (() => {
     }
     form.onsubmit=async e=>{
       e.preventDefault(); if(context.reject===true||busy||!isCurrent()||termsMissing||!verification.canConfirm()||!consent.checked||!form.reportValidity())return;
-      busy=true; submit.disabled=cancel.disabled=true; error.textContent='';
-      pendingWrites.add(op.id);
-      const payload={confirmed:true,confirmation_digest:op.confirmation_digest};
-      Object.assign(payload,verification.payload());
+      let payload=null,preserveChallenge=false;
       try {
+        payload={confirmed:true,confirmation_digest:op.confirmation_digest,...verification.payload()};
+        busy=true; submit.disabled=cancel.disabled=true; error.textContent='';pendingWrites.add(op.id);verification.refresh();
         const result=await B.post('/operations/'+op.id+'/confirm',payload);
         if(!isCurrent()){abort();return;}
         if(result.operation?.id!==op.id)throw Error('执行回执对象不一致，请查询同一操作状态。');
@@ -732,34 +808,73 @@ window.BankUI = (() => {
           const workspace=guard?.workspace_id||B.identity()?.workspace_id;
           B.requireBankReauthentication(workspace);
           if(dialog===d)d.finish();
-          const completed=modal('银行访问密码已更新');if(completed)completed.append(note('操作 '+op.id+' 已完成。银行会话与旧草案已失效；恢复同一模拟银行工作区不会解除金融安全锁。'),button('验证银行访问密码',()=>{completed.finish();passwordSessionForm(workspace);}));
+          const completed=modal('交易验证密码已更新');if(completed)completed.append(note('操作 '+op.id+' 已完成。交易验证与旧草案已失效；恢复当前账户的操作权限不会解除金融安全锁。'),button('验证交易密码',()=>{completed.finish();passwordSessionForm(workspace);}));
         }else emitChange();
       } catch(e) {
         if(!isCurrent()){abort();return;}
-        error.textContent=e.message+'\n尚未取得成功回执，正在核验状态…';
-        await queryOperationState();
-      } finally {pendingWrites.delete(op.id);delete payload.verification_code;delete payload.challenge_id;verification.clear();if(dialog===d)busy=false;if(isCurrent()&&!stateUnknown)refreshControls();}
+        const failure=operationVerificationError(e);
+        error.textContent=failure.message+'\n尚未取得成功回执，正在核验状态…';
+        preserveChallenge=await queryOperationState({confirmationError:failure.message,preserveChallenge:failure.retryChallenge})===true;
+      } finally {pendingWrites.delete(op.id);if(payload){delete payload.verification_code;delete payload.challenge_id;}if(preserveChallenge)verification.clearCode();else verification.clear();if(dialog===d)busy=false;if(isCurrent()){verification.refresh();refreshControls();}}
     };
     d.append(recovery);
     if(context.reject===true)await cancel.onclick();
     // 关闭视图会保留待确认草案，便于重新核验；没有“已取消”的虚假提示。
   }
   async function amountForm(product,action,accountId,maximum) {
+    const purchase=action==='purchase',epoch=identityEpoch,identity=purchase?B.identity?.():null,
+      guard=purchase?B.guard?.():null,workspace=identity?.workspace_id,currency=product.currency??'CNY';
     const d=modal((action==='purchase'?'申购':'赎回')+' '+product.name);if(!d)return;
-    d.append(note('R'+product.risk_level+' · 锁定'+product.term_days+'天 · 赎回后'+product.redemption_delay_days+'个模拟自然日到账'));
+    d.append(note('R'+product.risk_level+' · 锁定'+product.term_days+'天 · 赎回后'+product.redemption_delay_days+'个业务自然日到账'));
     d.append(note(product.risk_notice));
     if(maximum!==undefined)d.append(note('当前可赎回本金 '+B.money(maximum)));
     const form=node('form',undefined,'bank-form'), error=errorBox();
+    const purchaseCurrent=()=>dialog===d&&d.isConnected&&d.open&&epoch===identityEpoch&&
+      typeof workspace==='string'&&guard?.workspace_id===workspace&&guard.valid()&&
+      state?.workspace_id===workspace&&B.identity?.()?.workspace_id===workspace;
+    const purchaseAccounts=()=>{
+      const accounts=purchaseCurrent()&&Array.isArray(state.accounts)?state.accounts:[];
+      return accounts.filter(account=>account&&typeof account.id==='string'&&account.id&&
+        account.workspace_id===workspace&&account.currency===currency&&
+        Number.isSafeInteger(account.balance_minor)&&account.balance_minor>=0&&
+        accounts.filter(row=>row?.id===account.id).length===1);
+    };
+    let accountSelect=null;
+    if(purchase){
+      const label=node('label','申购资金账户');accountSelect=node('select');
+      accountSelect.name='account_id';accountSelect.required=true;accountSelect.setAttribute('aria-label','申购资金账户');
+      const accounts=purchaseAccounts(),placeholder=node('option',accounts.length?'请选择申购资金账户':'当前没有可用于申购的同币种账户');
+      placeholder.value='';accountSelect.append(placeholder);
+      for(const account of accounts){
+        const option=node('option',(account.name||'资金账户')+' · '+account.currency+' · 账面余额 '+formatTimelineMoney(account.balance_minor,account.currency));
+        option.value=account.id;accountSelect.append(option);
+      }
+      accountSelect.value='';accountSelect.disabled=!accounts.length;label.append(accountSelect);form.append(label);
+      form.append(note('账面余额不代表可申购金额，生成确认卡时会核对保留资金和近期到期款。'));
+      if(!accounts.length)error.textContent='当前工作区的同币种资金账户尚未核实，请刷新账户资料后重试。';
+    }
     const amount=field(form,'金额（元）','text',''); amount.required=true; amount.inputMode='decimal'; amount.setAttribute('aria-label','金额（元）');
     const submit=button('生成确认卡',null,true);submit.type='submit';form.append(submit);d.append(form,error);
+    if(purchase){
+      const updateSelection=()=>{submit.disabled=!purchaseAccounts().some(account=>account.id===accountSelect.value);};
+      accountSelect.addEventListener('change',updateSelection);updateSelection();
+    }
     form.onsubmit=e=>{
       e.preventDefault();
-      try {const minor=B.minor(amount.value);if(!minor)throw new Error('金额必须大于零。');
-        const draft={action,product_id:product.id,account_id:accountId,amount_minor:minor,idempotency_key:B.key()};
+      try {
+        let selectedAccountId=accountId;
+        if(purchase){
+          const account=purchaseAccounts().find(row=>row.id===accountSelect.value);
+          if(!account)throw new Error('请选择当前工作区的同币种申购资金账户。');
+          if(!form.reportValidity())return;
+          selectedAccountId=account.id;
+        }
+        const minor=B.minor(amount.value);if(!minor)throw new Error('金额必须大于零。');
+        const draft={action,product_id:product.id,account_id:selectedAccountId,amount_minor:minor,idempotency_key:B.key()};
         d.finish();openDraft(draft).catch(()=>{});
       }catch(e){error.textContent=e.message;}
     };
-    amount.focus();
+    if(purchase&&!accountSelect.disabled)accountSelect.focus();else amount.focus();
   }
   function cardControlAction(card,control) {
     return openDraft({action:'card_control',account_id:card.account_id,card_id:card.id,
@@ -783,7 +898,7 @@ window.BankUI = (() => {
   function cardSingleLimitForm(card,control) {
     const ceiling=card.type==='credit'?card.credit_limit_minor:100000000;
     cardMoneyDraft('调整单笔交易限额',
-      '输入新的模拟单笔限额。限额始终启用；信用卡限额不能超过当前信用额度 '+B.money(ceiling)+'。',
+      '输入新的单笔限额。限额始终启用；信用卡限额不能超过当前信用额度 '+B.money(ceiling)+'。',
       '单笔限额（元）',String(control.limit_minor/100),limit=>{
         if(limit===control.limit_minor)throw new Error('新限额与当前相同，请修改金额后再生成确认卡。');
         if(limit>ceiling)throw new Error('单笔限额不能超过 '+B.money(ceiling)+'。');
@@ -794,27 +909,53 @@ window.BankUI = (() => {
   function cardLimitRequestForm(card) {
     if(card.type!=='credit')return;
     cardMoneyDraft('申请提高信用额度',
-      '当前模拟额度 '+B.money(card.credit_limit_minor)+'。提交后额度不会变化，申请仅进入模拟审核队列。',
+      '当前额度 '+B.money(card.credit_limit_minor)+'。提交后额度不会变化，申请仅进入审核队列。',
       '期望额度（元）','',requested=>{
         if(requested<=card.credit_limit_minor)throw new Error('申请额度必须高于当前额度 '+B.money(card.credit_limit_minor)+'。');
         return {action:'request_card_limit',account_id:card.account_id,card_id:card.id,
           requested_limit_minor:requested,idempotency_key:B.key()};
       });
   }
-  function cardApplicationForm(accountId,requestedType='debit',replacementCard=null) {
-    if(!accountId)return;
+  function cardApplicationForm(accountsOrId,requestedType='debit',replacementCard=null) {
+    const original=B.identity?.(),guard=original&&B.guard?.(),epoch=identityEpoch;
+    const fixedAccountId=replacementCard?.account_id,fixedCardId=replacementCard?.id,fixedType=replacementCard?.type;
+    const explicitAccountId=typeof accountsOrId==='string'?accountsOrId:null;
+    const providedIds=Array.isArray(accountsOrId)?accountsOrId.map(account=>account?.id):null;
+    const allowedIds=providedIds&&providedIds.every(id=>typeof id==='string'&&id)&&new Set(providedIds).size===providedIds.length?new Set(providedIds):null;
     const d=modal(replacementCard?'申请补发银行卡':'申请银行卡');if(!d)return;
     const intro=note(replacementCard
-      ?'此申请关联已挂失卡片尾号 '+replacementCard.last_four+'，只记录本机模拟审核，不会实际制卡。'
-      :'选择申请类型；实体卡申请等待模拟审核，SIM 虚拟卡经本人确认后在本机生成。');d.append(intro);
+      ?'此申请关联已挂失卡片尾号 '+replacementCard.last_four+'，先提交审核，不代表卡片已核发。'
+      :'选择申请类型；实体卡申请等待审核，虚拟卡经本人确认后生成。');d.append(intro);
     const form=node('form',undefined,'bank-form'), error=errorBox();
+    const current=()=>dialog===d&&d.isConnected&&d.open&&epoch===identityEpoch&&!!guard?.valid()&&
+      !!state&&state.workspace_id===original?.workspace_id&&B.identity?.()?.workspace_id===original.workspace_id;
+    const uniqueAccount=id=>{const rows=(state?.accounts||[]).filter(account=>account.id===id);return rows.length===1?rows[0]:null;};
+    const replacement=()=>{
+      if(!current()||explicitAccountId!==fixedAccountId||!fixedCardId||!['debit','credit'].includes(fixedType))return null;
+      const rows=(state.cards||[]).filter(card=>card.id===fixedCardId),account=uniqueAccount(fixedAccountId);
+      return account&&rows.length===1&&rows[0].account_id===fixedAccountId&&rows[0].type===fixedType&&rows[0].status==='lost'?account:null;
+    };
+    let accountSelect=null,accountEnvelope=null,accountsReady=false;
+    const eligibleAccounts=()=>{
+      if(!current()||!accountEnvelope||typeof window.NavrenConnectedAssetsUI?.cardApplicationAccounts!=='function')return [];
+      const accounts=NavrenConnectedAssetsUI.cardApplicationAccounts(accountEnvelope);
+      return accounts.filter(account=>uniqueAccount(account.account_id)&&
+        (explicitAccountId?account.account_id===explicitAccountId:allowedIds?.has(account.account_id)));
+    };
+    if(replacementCard) {
+      const account=replacement();form.append(note('原卡绑定账户：'+(account?.name||'当前账户尚未核实')));
+      if(!account)error.textContent='原卡或账户已变化，请重新读取后再申请补卡。';
+    }else{
+      const label=node('label','申请结算账户');accountSelect=node('select');accountSelect.name='account_id';accountSelect.required=true;accountSelect.disabled=true;accountSelect.setAttribute('aria-label','申请结算账户');
+      const option=node('option','正在核对可申请账户…');option.value='';accountSelect.append(option);accountSelect.value='';label.append(accountSelect);form.append(label);
+    }
     let type;
     if(replacementCard) {
-      type={value:replacementCard.type};
-      form.append(note('补发类型：'+(replacementCard.type==='virtual'?'SIM 虚拟卡':replacementCard.type==='credit'?'信用卡':'借记卡')));
+      type={value:fixedType};
+      form.append(note('补发类型：'+(replacementCard.type==='virtual'?'虚拟卡':replacementCard.type==='credit'?'信用卡':'借记卡')));
     } else {
       const label=node('label','卡片类型'), select=node('select');
-      for(const [value,text] of [['debit','借记卡'],['credit','信用卡'],['virtual','SIM 虚拟卡']]){const option=node('option',text);option.value=value;select.append(option);}
+      for(const [value,text] of [['debit','借记卡'],['credit','信用卡'],['virtual','虚拟卡']]){const option=node('option',text);option.value=value;select.append(option);}
       select.value=['credit','virtual'].includes(requestedType)?requestedType:'debit';select.setAttribute('aria-label','卡片类型');label.append(select);form.append(label);type=select;
     }
     const limit=field(form,'申请信用额度（元）','text','');limit.inputMode='decimal';limit.setAttribute('aria-label','申请信用额度（元）');
@@ -823,22 +964,43 @@ window.BankUI = (() => {
     const updateLimitVisibility=()=>{const needed=['credit','virtual'].includes(type.value);limit.parentElement.style.display=needed?'':'none';limit.required=needed;
       const label=type.value==='virtual'?'单笔交易限额（元）':'申请信用额度（元）';limit.parentElement.firstChild.textContent=label;limit.setAttribute('aria-label',label);
       purposeLabel.hidden=type.value!=='virtual';purpose.disabled=type.value!=='virtual';
-      if(!replacementCard)intro.textContent=type.value==='virtual'?'仅生成本机 SIM 虚拟卡，无真实卡号、授信或对外支付能力；费用与期限请在确认卡核对。':'实体卡申请只提交到模拟审核队列，不会实际制卡或授予信用额度。';};
+      if(!replacementCard)intro.textContent=type.value==='virtual'?'当前虚拟卡不提供授信或对外支付能力；费用与期限请在确认卡核对。':'实体卡申请只提交到审核队列，不会实际制卡或授予信用额度。';};
     if(!replacementCard)type.addEventListener('change',updateLimitVisibility);
     updateLimitVisibility();
     const submit=button('生成确认卡',null,true);submit.type='submit';form.append(submit);d.append(form,error);
     form.onsubmit=e=>{
       e.preventDefault();
       try {
+        if(!current())throw new Error('账户身份已失效，请重新登录并读取账户。');
+        const selected=replacementCard?replacement():accountsReady&&eligibleAccounts().find(account=>account.account_id===(explicitAccountId||accountSelect.value));
+        if(!selected)throw new Error(replacementCard?'原卡或账户已变化，请重新读取后再申请补卡。':'请选择当前可申请的银行结算账户。');
+        const accountId=replacementCard?fixedAccountId:selected.account_id;
         const requested=['credit','virtual'].includes(type.value)?B.minor(limit.value):0;
         if(['credit','virtual'].includes(type.value)&&(!Number.isSafeInteger(requested)||requested<=0))throw new Error(type.value==='virtual'?'单笔限额必须大于零，最多两位小数。':'信用额度必须大于零。');
         const draft={action:'apply_card',account_id:accountId,requested_type:type.value,
           requested_limit_minor:requested,idempotency_key:B.key()};
         if(type.value==='virtual')draft.purpose=purpose.value;
-        if(replacementCard)draft.card_id=replacementCard.id;
+        if(replacementCard)draft.card_id=fixedCardId;
         d.finish();openDraft(draft).catch(()=>{});
       } catch(e) {error.textContent=e.message;}
     };
+    if(!replacementCard){
+      submit.disabled=true;
+      Promise.resolve().then(()=>{
+        if(!current())return null;
+        if(typeof window.NavrenConnectedAssets?.overview!=='function')throw new Error('无法核对银行结算账户，请重新读取账户后再申请。');
+        return NavrenConnectedAssets.overview();
+      }).then(envelope=>{
+        if(!current()||!envelope)return;
+        accountEnvelope=envelope;const accounts=eligibleAccounts();accountsReady=true;accountSelect.replaceChildren();
+        const placeholder=node('option',accounts.length?'请选择银行结算账户':'当前没有可申请的银行结算账户');placeholder.value='';accountSelect.append(placeholder);
+        for(const account of accounts){const option=node('option',account.name+' · '+account.currency);option.value=account.account_id;accountSelect.append(option);}
+        accountSelect.value=explicitAccountId&&accounts.length===1?explicitAccountId:'';accountSelect.disabled=!!explicitAccountId||!accounts.length;
+        submit.disabled=!accounts.length;
+        if(!accounts.length)error.textContent='当前没有可申请的银行结算账户，请重新读取后再申请。';
+        else if(!explicitAccountId)accountSelect.focus();
+      }).catch(e=>{if(current()){error.textContent=e.message;submit.disabled=true;accountSelect.replaceChildren();const option=node('option','可申请账户尚未核实');option.value='';accountSelect.append(option);accountSelect.disabled=true;}});
+    }
     if(['credit','virtual'].includes(type.value))limit.focus();else if(!replacementCard)type.focus();
   }
   function reportCardLost(card) {
@@ -850,11 +1012,11 @@ window.BankUI = (() => {
   function validBankPassword(value){return typeof value==='string'&&Array.from(value).length>=12&&Array.from(value).length<=128&&new TextEncoder().encode(value).length<=512;}
   async function passwordChangeForm(accountId) {
     if(bankRecovery)return passwordSessionForm(bankRecovery.workspace_id);
-    const original=B.identity?.()?B.guard():null,epoch=identityEpoch,d=modal('银行访问密码');if(!d)return;
+    const original=B.identity?.()?B.guard():null,epoch=identityEpoch,d=modal('交易验证密码');if(!d)return;
     let guard=original;
     const current=()=>dialog===d&&d.isConnected&&d.open&&epoch===identityEpoch&&(!guard||guard.valid());
-    d.append(note('仅修改模拟银行访问密码；Navren 应用登录密码保持不变。修改成功后需重新验证银行访问。'));
-    const form=node('form',undefined,'bank-form'),error=errorBox(),password=field(form,'新银行访问密码','password'),repeat=field(form,'再次输入新密码','password');
+    d.append(note('仅修改交易验证密码；Navren 应用登录密码保持不变。修改成功后需重新完成交易验证。'));
+    const form=node('form',undefined,'bank-form'),error=errorBox(),password=field(form,'新交易验证密码','password'),repeat=field(form,'再次输入新密码','password');
     for(const input of [password,repeat]){input.required=true;input.minLength=12;input.maxLength=128;input.autocomplete='new-password';}
     const submit=button('生成密码修改确认卡',null,true);submit.type='submit';form.append(submit);d.append(form,error);
     form.onsubmit=async e=>{
@@ -877,18 +1039,18 @@ window.BankUI = (() => {
     password.focus();return d;
   }
   function passwordSessionForm(workspaceId=bankRecovery?.workspace_id) {
-    const d=modal('验证银行访问密码');if(!d)return;
+    const d=modal('验证交易密码');if(!d)return;
     const epoch=identityEpoch,initial=B.identity?.();let controller=null,timeout=null;
     const current=()=>dialog===d&&d.isConnected&&d.open&&epoch===identityEpoch&&
       (!B.identity?.()||B.identity().workspace_id===workspaceId)&&(!initial||B.identity()?.privacy_revision===initial.privacy_revision);
     const finish=d.finish;d.finish=()=>{controller?.abort();clearTimeout(timeout);finish();};
-    d.append(note('恢复同一模拟银行工作区的访问；不会修改 Navren 应用登录或解除金融安全锁。'));
-    const form=node('form',undefined,'bank-form'),error=errorBox(),password=field(form,'银行访问密码','password');password.required=true;password.minLength=12;password.maxLength=128;password.autocomplete='current-password';
+    d.append(note('恢复当前账户的操作权限；不会修改 Navren 应用登录或解除金融安全锁。'));
+    const form=node('form',undefined,'bank-form'),error=errorBox(),password=field(form,'交易验证密码','password');password.required=true;password.minLength=12;password.maxLength=128;password.autocomplete='current-password';
     const submit=button('验证并恢复银行访问',null,true);submit.type='submit';form.append(submit);d.append(form,error);
     if(typeof workspaceId!=='string'||!/^[a-f0-9]{32}$/.test(workspaceId)||initial&&initial.workspace_id!==workspaceId){error.textContent='原银行工作区无法核对，请重新选择账户。';submit.disabled=true;return d;}
     form.onsubmit=async e=>{
       e.preventDefault();if(busy||!current()||!form.reportValidity())return;
-      if(!validBankPassword(password.value)){error.textContent='银行访问密码须为12至128个字符。';return;}
+      if(!validBankPassword(password.value)){error.textContent='交易验证密码须为12至128个字符。';return;}
       busy=true;submit.disabled=true;pendingWrites.add('password-session');error.textContent='';
       controller=new AbortController();
       timeout=setTimeout(()=>controller.abort(),15000);
@@ -897,7 +1059,7 @@ window.BankUI = (() => {
         const body={workspace_id:workspaceId,password:password.value};password.value='';let response;
         try{response=await fetch('/api/finance/security/password-session',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json','Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});}finally{delete body.password;}
         if(!current())return;const restored=await response.json();if(!current())return;
-        if(!response.ok)throw Error(restored.error?.message||'银行访问密码验证失败。');
+        if(!response.ok)throw Error(restored.error?.message||'交易密码验证失败。');
         if(restored.workspace_id!==workspaceId||restored.credential_scope!=='simulated_bank_access'||typeof restored.csrf!=='string')throw Error('恢复响应与原银行工作区不一致。');
         const sessionResponse=await fetch('/api/finance/session',{method:'GET',credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'},signal:controller.signal});
         if(!current())return;const session=await sessionResponse.json();if(!current())return;
@@ -911,14 +1073,14 @@ window.BankUI = (() => {
   function bankRecoveryWorkspace(){return bankRecovery?.workspace_id||B.bankReauthenticationWorkspace?.()||null;}
   function editProfile() {
     if(!state)return;
-    const d=modal('模拟风险与资金设置');if(!d)return;
-    d.append(note('此处用于选择演示账户画像，不替代正式风险测评。更改后，之前的确认卡将失效。'));
+    const d=modal('资金与风险设置');if(!d)return;
+    d.append(note('此处用于设置账户风险等级、投资期限与保留金额，不替代正式风险测评。更改后，之前的确认卡将失效。'));
     const form=node('form',undefined,'bank-form'), error=errorBox();
-    const riskLabel=node('label','模拟风险等级'), risk=node('select');risk.setAttribute('aria-label','模拟风险等级');
+    const riskLabel=node('label','风险等级'), risk=node('select');risk.setAttribute('aria-label','风险等级');
     for(let i=1;i<=5;i++){const o=node('option','R'+i);o.value=i;risk.append(o);}risk.value=state.profile.risk_level;riskLabel.append(risk);form.append(riskLabel);
     const horizon=field(form,'最长投资期限（天）','number',state.profile.horizon_days);horizon.min=0;horizon.max=3650;horizon.step=1;horizon.required=true;
     const reserve=field(form,'应急保留（元）','text',String(state.profile.reserve_minor/100));reserve.required=true;
-    const consent=check(form,'我确认更新这个模拟账户的风险等级、投资期限与保留金额。');
+    const consent=check(form,'我确认更新当前账户的风险等级、投资期限与保留金额。');
     const save=button('确认更新',null,true);save.type='submit';form.append(save);d.append(form,error);
     form.onsubmit=async e=>{e.preventDefault();if(busy||!consent.checked||!form.reportValidity())return;
       try {const amount=B.minor(reserve.value);busy=true;save.disabled=true;
@@ -929,20 +1091,20 @@ window.BankUI = (() => {
   }
   function renderRecommendations() {
     const root=document.getElementById('bankRecommendations');if(!root||!state)return;
-    const intro=panel('先看资金，再选产品'); intro.classList.add('bank-intro'); intro.append(note('当前模拟画像为 R'+state.profile.risk_level+'，最长投资期限 '+state.profile.horizon_days+' 天。下面先留出应急资金和近期支出，再比较风险与期限。收益未模拟。'));
-    intro.append(button('修改模拟风险与资金设置',editProfile));
+    const intro=panel('先看资金，再选产品'); intro.classList.add('bank-intro'); intro.append(note('当前账户风险等级为 R'+state.profile.risk_level+'，最长投资期限 '+state.profile.horizon_days+' 天。下面先留出应急资金和近期支出，再比较风险与期限。收益未计入。'));
+    intro.append(button('修改资金与风险设置',editProfile));
     root.replaceChildren(intro,budgetPanel());
     const p=panel('产品比较与申购');
-    p.append(note('全部为虚构产品；下方产品可接入模拟记账。其他市场研究内容仅供信息参考。'));
+    p.append(note('下方为账户专用示例产品，可记录本金流转，不对应真实发行方。其他市场研究内容仅供信息参考。'));
     const grid=node('div',undefined,'bank-product-grid');
     for(const product of products) {
       const card=node('article',undefined,'bank-product-card'), status=node('div',undefined,'bank-product-status');
       status.append(node('span','R'+product.risk_level,'bank-tag'),node('span',product.profile_eligible?'风险与期限匹配':'暂不匹配',product.profile_eligible?'matched':''));
       card.append(status,node('h4',product.name));
       const specs=node('dl');
-      for(const [label,value] of [['锁定期限',product.term_days+' 天'],['起购金额',B.money(product.min_purchase_minor)],['赎回到账',product.redemption_delay_days+'个模拟自然日']]) specs.append(node('dt',label),node('dd',value));
+      for(const [label,value] of [['锁定期限',product.term_days+' 天'],['起购金额',B.money(product.min_purchase_minor)],['赎回到账',product.redemption_delay_days+'个业务自然日']]) specs.append(node('dt',label),node('dd',value));
       card.append(specs,note(product.profile_eligible?'可准备申购，确认前会再次核对可用资金。':product.exclusion_reasons.join(' ')));
-      const buy=button('申购 '+product.name,()=>amountForm(product,'purchase',mainAccount().id));buy.disabled=!product.profile_eligible;card.append(buy);grid.append(card);
+      const buy=button('申购 '+product.name,()=>amountForm(product,'purchase'));buy.disabled=!product.profile_eligible;card.append(buy);grid.append(card);
     }
     p.append(grid);
     p.append(note('风险与期限匹配不代表适合买入；还需通过最低金额、可用资金和执行时状态检查。'));root.append(p);
@@ -957,7 +1119,7 @@ window.BankUI = (() => {
       try {
         const s=await B.ensure();
         if(!current())return;
-        if(s.workspace_id!==b.dataset.bankWorkspace)throw Error('这张草案属于其他模拟账户，请重新提问。');
+        if(s.workspace_id!==b.dataset.bankWorkspace)throw Error('这张草案属于其他账户，请重新提问。');
         if(b.dataset.bankPrivacy!=null&&String(s.privacy_revision)!==b.dataset.bankPrivacy)throw Error('资料授权已变化，请重新查询草案。');
         guard=guard||B.guard?.();if(!current())return;
         const id=b.dataset.operationId;
@@ -973,7 +1135,7 @@ window.BankUI = (() => {
   function renderResponse(msg,result) {
     const bubble=msg.querySelector('.bubble');if(!bubble||!result.bank)return;
     const box=node('div',undefined,'bank-actions');box.dataset.bankResponse=result.bank_response_id;
-    if(Number.isInteger(result.version)&&!bubble.querySelector('.reply-components'))box.append(note('查询时账本版本 '+result.version+'；历史对话保留当时数据，实时状态请查看账户。'));
+    if(Number.isInteger(result.version)&&!bubble.querySelector('.reply-components'))box.append(note('查询时资料版本 '+result.version+'；历史对话保留当时数据，实时状态请查看账户。'));
     if(result.cashflow_timeline?.status!=='withheld'&&Array.isArray(result.cashflow_timeline?.timeline))
       box.append(renderCashflowTimeline(result.cashflow_timeline));
     if(result.agent_workflow)box.append(renderWorkflowEvidence(result.agent_workflow));
@@ -1009,7 +1171,7 @@ window.BankUI = (() => {
     window.addEventListener('focus',()=>{if(!dialog)load().catch(()=>{});});
   });
   return {load,node,button,note,panel,table,budgetPanel,showError,openDraft,openReceipt,amountForm,cardControlAction,
-    cardSingleLimitForm,cardLimitRequestForm,cardApplicationForm,reportCardLost,unblockCard,passwordChangeForm,passwordSessionForm,bankRecoveryWorkspace,operationVerification,financialRecoveryForm,editProfile,renderResponse,rebind,
+    cardSingleLimitForm,cardLimitRequestForm,cardApplicationForm,reportCardLost,unblockCard,passwordChangeForm,passwordSessionForm,bankRecoveryWorkspace,operationVerification,operationVerificationError,financialRecoveryForm,editProfile,renderResponse,rebind,
     state:()=>state,products:()=>products,statuses,actions,operationStatus,
     switchState:()=>{const aa=window.NavrenAAPayments?.switchState?.()||{};return {busy:busy||pendingWrites.size>0||!!aa.busy,unknown:dialog?.dataset.operationState==='unknown'||!!aa.unknown,unconfirmed:dialog?.dataset.operationState==='pending_confirmation'||!!aa.unconfirmed};}};
 })();

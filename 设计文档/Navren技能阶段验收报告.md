@@ -1,12 +1,10 @@
 # Navren 技能阶段验收报告
 
-> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
-
 日期：2026-10-06。状态：本阶段采集和独立评分完成，语义未通过；缺陷转入 Agent 执行任务修复。
 
 ## 验收对象与判据
 
-本轮验收实际开发源 `项目根目录` 的金融技能、工具金额合同、真实 `/api/agent` 请求链与公共 RAG 消费。题集先冻结，再调用模型；10 道题、6 类合成夹具、52 条固定工具事实。主模型 DeepSeek，独立审核 GLM；模型审核的 approved 仍需逐句核对，不能直接计为语义 PASS。
+本轮验收实际开发源 `/Users/manton/CC/projects/Navren` 的金融技能、工具金额合同、真实 `/api/agent` 请求链与公共 RAG 消费。题集先冻结，再调用模型；10 道题、6 类合成夹具、52 条固定工具事实。主模型 DeepSeek，独立审核 GLM；模型审核的 approved 仍需逐句核对，不能直接计为语义 PASS。
 
 必须全部 10 题分别通过，且没有实质金融错误、画像或金融写入，才能称这个小题集通过。被服务、预算或审核阻断的题不计通过；同一道题不同尝试不能拼接成一轮通过。单次小题集不能支持通用金融准确率、真实客户效果或生产可用性的结论。
 
@@ -62,14 +60,14 @@ S01已正确区分预算与底线外余量，但遗漏未录入支出和应急�
 
 ## 可追溯产物
 
-- [冻结题集](../evaluation/navren_skill_semantic_cases.json) 与 评分标准（历史资料未随仓库发布）。
-- 首轮逐题评分（历史资料未随仓库发布） 与 全部尝试记录（历史资料未随仓库发布）。
-- 确定性金融合同复核（历史资料未随仓库发布）。
-- 新集成失败最小复现（历史资料未随仓库发布）。
-- 最终本地回归（历史资料未随仓库发布） 与 完整请求链预检（历史资料未随仓库发布）。
-- 最终独立逐题评分（历史资料未随仓库发布）。
-- 最终云采集（历史资料未随仓库发布） 与 候选快照清单（历史资料未随仓库发布）。
-- 最终真实公共 RAG 独立核验（历史资料未随仓库发布）。
-- 浏览器可见答复（历史资料未随仓库发布）、实际模型回执（历史资料未随仓库发布） 与 预算截图（历史资料未随仓库发布）。
+- [冻结题集](/Users/manton/CC/projects/Navren/evaluation/navren_skill_semantic_cases.json) 与 [评分标准](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/semantic-rubric.md)。
+- [首轮逐题评分](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/semantic-grading-initial.md) 与 [全部尝试记录](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/attempt-ledger.json)。
+- [确定性金融合同复核](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/financial-contract-review.md)。
+- [新集成失败最小复现](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/cloud-round-3/regression-integration-findings.md)。
+- [最终本地回归](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/local-final-round-4/local-final-regression.json) 与 [完整请求链预检](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/process-preflight-round-4/semantic-results.json)。
+- [最终独立逐题评分](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/semantic-grading-round-4.md)。
+- [最终云采集](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/cloud-round-4/semantic-results.json) 与 [候选快照清单](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/candidate-round-4-ready-snapshot.json)。
+- [最终真实公共 RAG 独立核验](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/public-rag-independent-check-round-4.md)。
+- [浏览器可见答复](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/cloud-round-4/browser-ui-ax.txt)、[实际模型回执](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/cloud-round-4/browser-session.json) 与 [预算截图](/Users/manton/CC/projects/Navren/outputs/skills-acceptance-20261005/cloud-round-4/browser-ui-result.jpg)。
 
 本轮没有验证真实银行交易、语音识别、完整投资组合优化器、真实客户资格判断或公开部署。所有金融题使用隔离合成数据；语义标注由独立 AI 逐句核对，尚未经过人工金融专家签收。

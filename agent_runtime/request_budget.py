@@ -21,6 +21,14 @@ PROFILES = (
 )
 _CACHE = None
 
+# 官方当前滚动别名的固定本地参考profile；不认证供应商计费上界。
+OFFICIAL_MODEL = 'deepseek-flash'
+OFFICIAL_VERSION = 'DeepSeek-V4.1-Flash-1017'
+OFFICIAL_REVISION = '1bae0e1088993b9b82de08f59de5be5a34e42170'
+OFFICIAL_TOKENIZER_SHA = 'c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b'
+OFFICIAL_ENCODER_SHA = '13231c592e958fb39e2af6001dae69d90e7a36b265702b9b390236fb387599e2'
+_OFFICIAL_CACHE = None
+
 
 class RequestBudgetError(ValueError):
     """只返回固定错误码；不把请求正文、隐藏内容或用户资料写入错误。"""
@@ -203,6 +211,93 @@ def _profiles():
     return _CACHE
 
 
+
+def _official_profile():
+    global _OFFICIAL_CACHE
+    root = Path(__file__).resolve().parent
+    tokenizer_path = root.parent / 'dependency-resources' / 'deepseek-v41-1017' / 'tokenizer.json'
+    encoder_path = root / 'vendor' / 'deepseek_v41_1017.py'
+    # 每次均复核固定资产；缓存不能掩盖后续改动。
+    tokenizer_raw = _fixed_file(tokenizer_path, OFFICIAL_TOKENIZER_SHA)
+    encoder_raw = _fixed_file(encoder_path, OFFICIAL_ENCODER_SHA)
+    try:
+        if importlib.metadata.version('tokenizers') != TOKENIZERS_VERSION:
+            raise RequestBudgetError('request_budget_tokenizers_version_mismatch')
+        from tokenizers import Tokenizer
+        if _OFFICIAL_CACHE is None:
+            tokenizer = Tokenizer.from_str(tokenizer_raw.decode('utf-8'))
+            if tokenizer.token_to_id('<｜begin▁of▁sentence｜>') != 0:
+                raise RequestBudgetError('request_budget_tokenizer_identity_mismatch')
+            namespace = {'__name__': 'navren_fixed_dsv41_1017'}
+            exec(compile(encoder_raw, str(encoder_path), 'exec'), namespace)
+            _OFFICIAL_CACHE = (tokenizer, SimpleNamespace(**namespace))
+    except RequestBudgetError:
+        raise
+    except (ImportError, importlib.metadata.PackageNotFoundError, ValueError,
+            OSError, UnicodeError, AttributeError, TypeError):
+        raise RequestBudgetError('request_budget_dependency_load_failed') from None
+    return _OFFICIAL_CACHE
+
+
+def _estimate_official(payload, wire, result):
+    # 不支持的完整API形态保持原byte回退，不猜测媒体或未知协议的token数。
+    try:
+        _validate_official_payload(payload)
+    except RequestBudgetError as error:
+        result.update(input_token_estimate=len(wire), raw_token_estimate=None,
+            margin_tokens=0, bound_method='full_wire_bytes_conservative_token_fallback',
+            profiles=[], profile_fallback_reason=error.args[0])
+        return result
+    tokenizer, encoder = _official_profile()
+    special = tuple(t.content for t in tokenizer.get_added_tokens_decoder().values() if t.content)
+    def contains_special(value):
+        if type(value) is str: return any(s in value for s in special)
+        if type(value) is dict: return any(contains_special(k) or contains_special(v) for k,v in value.items())
+        if type(value) is list: return any(contains_special(v) for v in value)
+        return False
+    if contains_special(payload):
+        result.update(input_token_estimate=len(wire), raw_token_estimate=None,
+            margin_tokens=0, bound_method='full_wire_bytes_conservative_token_fallback',
+            profiles=[], profile_fallback_reason='request_budget_literal_special_token_unsupported')
+        return result
+    requested = payload.get('reasoning_effort')
+    # 官方API medium是high兼容别名；wire原样保留，只改参考模板参数。
+    effort = 'high' if requested in (None, 'medium') else requested
+    counts = []
+    try:
+        for mode in ('chat', 'thinking'):
+            messages = deepcopy(payload['messages'])
+            first = next(m for m in messages if m['role'] == 'system')
+            if payload.get('tools'): first['tools'] = deepcopy(payload['tools'])
+            if payload.get('response_format'): first['response_format'] = deepcopy(payload['response_format'])
+            prompt, media = encoder.encode_messages(messages, thinking_mode=mode,
+                drop_thinking=False, add_default_bos_token=True, reasoning_effort=effort,
+                return_multi_modal_data=True)
+            if media['images']: raise ValueError('unsupported_media')
+            counts.append({'profile':'official_v41_1017', 'model_version':OFFICIAL_VERSION,
+                'repository_revision':OFFICIAL_REVISION, 'mode':mode,
+                'encoder_sha256':OFFICIAL_ENCODER_SHA, 'tokenizer_sha256':OFFICIAL_TOKENIZER_SHA,
+                'input_tokens':len(tokenizer.encode(prompt, add_special_tokens=False).ids),
+                'rendered_prompt_sha256':_sha(prompt.encode('utf-8')),
+                'reasoning_effort_requested':requested, 'reasoning_effort_template':effort,
+                'provider_bound_certified':False})
+    except (ValueError, TypeError, KeyError, AttributeError, AssertionError, RecursionError):
+        result.update(input_token_estimate=len(wire), raw_token_estimate=None,
+            margin_tokens=0, bound_method='full_wire_bytes_conservative_token_fallback',
+            profiles=[], profile_fallback_reason='request_budget_template_unsupported')
+        return result
+    raw = max(row['input_tokens'] for row in counts)
+    # 模板未使用的API控制字段以完整wire字节另行预留，不从样本比值拟合。
+    controls = {k:v for k,v in payload.items() if k not in ('messages','tools','response_format')}
+    extension = len(json.dumps(controls, ensure_ascii=False, separators=(',', ':')).encode())
+    estimate = (raw * 6 + 4) // 5 + 1024 + extension
+    result.update(input_token_estimate=estimate, raw_token_estimate=raw,
+        margin_tokens=estimate-raw, transport_extension_byte_reserve=extension,
+        bound_method='official_dsv41_1017_two_modes_max_20pct_plus1024',
+        profiles=counts, tokenizer_version=TOKENIZERS_VERSION,
+        gateway_template_certified=False, model_version=OFFICIAL_VERSION)
+    return result
+
 def estimate_request(wire):
     """完整JSON wire身份独立于完整messages/tools模板token数，绝不认证网关上界。"""
     payload = _payload(wire)
@@ -210,6 +305,8 @@ def estimate_request(wire):
         raise RequestBudgetError('request_budget_unsupported_transport_model')
     result = {'input_bytes': len(wire), 'request_sha256': _sha(wire),
               'model_id': payload['model'], 'provider_bound_certified': False}
+    if payload['model'] == OFFICIAL_MODEL:
+        return _estimate_official(payload, wire, result)
     if payload['model'] != MODEL:
         result.update(input_token_estimate=len(wire), raw_token_estimate=None,
             margin_tokens=0, bound_method='full_wire_bytes_conservative_token_fallback', profiles=[])
@@ -283,3 +380,46 @@ def validate_estimate(value, *, wire=None):
     if wire is not None and (value['input_bytes'] != len(wire) or value['request_sha256'] != _sha(wire)):
         raise RequestBudgetError('request_budget_wire_identity_mismatch')
     return value
+
+
+WIRE_RESERVATION_POLICY = 'native_full_wire_bytes/1'
+
+def wire_reservation_measurement(wire, *, counter):
+    """Trusted local reservation only; never provider usage or a tokenizer claim."""
+    if type(wire) is not bytes or counter is not len:
+        raise RequestBudgetError('request_reservation_counter_not_native_len')
+    upper = counter(wire)
+    return {'input_bytes': upper, 'request_sha256': _sha(wire),
+            'wire_reservation_upper': upper, 'reservation_method': WIRE_RESERVATION_POLICY,
+            'provider_bound_certified': False}
+
+def with_wire_reservation(estimate, wire, *, counter):
+    measured = wire_reservation_measurement(wire, counter=counter)
+    if (type(estimate) is not dict or type(estimate.get('input_token_estimate')) is not int
+            or estimate['input_token_estimate'] < 0 or type(estimate.get('input_bytes'))is not int
+            or estimate['input_bytes'] != len(wire)
+            or ('request_sha256' in estimate and estimate['request_sha256'] != measured['request_sha256'])):
+        raise RequestBudgetError('request_reservation_wire_identity_mismatch')
+    return {**estimate, **measured}
+
+def reservation_input_upper(estimate):
+    upper = estimate.get('wire_reservation_upper', estimate.get('input_token_estimate'))
+    if type(upper) is not int or upper < 0:
+        raise RequestBudgetError('request_reservation_invalid_upper')
+    if 'wire_reservation_upper' in estimate and (estimate.get('reservation_method') != WIRE_RESERVATION_POLICY
+            or upper != estimate.get('input_bytes')):
+        raise RequestBudgetError('request_reservation_invalid_wire_upper')
+    return upper
+
+
+
+def current_wire_admission(wire, *, counter, known_tokens, output_tokens, limit=100000):
+    """Exactly the original native next-request rule; no future-review sum."""
+    measured=wire_reservation_measurement(wire,counter=counter)
+    if any(type(v)is not int or v<0 for v in (known_tokens,output_tokens,limit)):
+        raise RequestBudgetError('request_reservation_invalid_current_usage')
+    required=known_tokens+measured['wire_reservation_upper']+output_tokens
+    accepted=required<=limit
+    return {**measured,'provider_known_tokens_before':known_tokens,'output_upper':output_tokens,
+        'hard_current_request_upper':required,'hard_limit':limit,'accepted':accepted,
+        'cause_code':None if accepted else 'complete_wire_and_original_output_reserve_required'}

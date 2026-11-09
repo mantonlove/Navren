@@ -97,11 +97,13 @@ _FINANCIAL_TERM = (
     r"(?:账户余额|余额|现金|金额|资金|本金|净资产|净值|资产|预算|房租|应急金|"
     r"应急保留|应急底线|留款|退款|补助|到账|收入|支出|损益|盈利|亏损|费用|"
     r"手续费|总额|余量|可安排|可用|可花|能花|可投|能投|贷款|付款|还款|收益)")
-_FINANCIAL_NUMBER = re.compile(
-    _FINANCIAL_TERM +
+_FINANCIAL_NUMBER_LINK = (
     r"(?:\s*(?:为|是|有|达|达到|约|大约|共|合计|预计|预测|至少|最多|仅|只剩|"
-    r"剩|了|增加|减少|已|已经|：|:|=))*\s*"
-    rf"(?P<number>{_NUMBER_TOKEN})")
+    r"剩|了|增加|减少|已|已经|：|:|=))*\s*")
+_FINANCIAL_NUMBER = re.compile(
+    _FINANCIAL_TERM + _FINANCIAL_NUMBER_LINK + rf"(?P<number>{_NUMBER_TOKEN})")
+_CONDITIONAL_FINANCIAL_TAIL = re.compile(
+    _FINANCIAL_NUMBER_LINK + rf"(?P<number>{_NUMBER_TOKEN})")
 _NUMBER_FINANCIAL = re.compile(
     rf"(?P<number>{_NUMBER_TOKEN})\s*(?:(?:为|是|的|你|我|本人|当前|本期|总)\s*)*" +
     _FINANCIAL_TERM)
@@ -116,16 +118,22 @@ _DATE_TOKEN = re.compile(r"(?<![0-9A-Za-z_])\d{4}-\d{2}-\d{2}(?![0-9A-Za-z_])")
 
 
 class MetricClaimError(ValueError):
-    def __init__(self, code, field=None):
+    def __init__(self, code, field=None, *, money_span=None):
         self.code, self.field = code, field
+        # Local diagnostic only; as_dict and all rejection decisions stay unchanged.
+        self._money_span = money_span
         super().__init__(code + (":" + field if field else ""))
+
+    @property
+    def money_span(self):
+        return self._money_span
 
     def as_dict(self):
         return {"code": self.code, **({"field": self.field} if self.field else {})}
 
 
-def _fail(code, field=None):
-    raise MetricClaimError(code, field)
+def _fail(code, field=None, *, money_span=None):
+    raise MetricClaimError(code, field, money_span=money_span)
 
 
 def _json_copy(value):
@@ -241,13 +249,22 @@ def _reject_unsupported_money(text, canonical):
 
     for match in _CN_MONEY.finditer(text):
         if not covered(*match.span()):
-            _fail("METRIC_MONEY_SYNTAX_REQUIRED")
+            _fail("METRIC_MONEY_SYNTAX_REQUIRED", money_span=match.span())
     for match in _BARE_SCALE.finditer(text):
         if not covered(*match.span()) and not _NON_MONEY_UNIT.match(text, match.end()):
-            _fail("METRIC_MONEY_SYNTAX_REQUIRED")
+            _fail("METRIC_MONEY_SYNTAX_REQUIRED", money_span=match.span())
     for pattern in (_FINANCIAL_NUMBER, _NUMBER_FINANCIAL, _PREFIX_MONEY):
         for match in pattern.finditer(text):
             start, end = match.span("number")
+            # “一旦” is a conditional word, not an amount. Reuse the same
+            # financial link after it so a later bare amount is still rejected
+            # at its actual span by the original checks below.
+            if (pattern is _FINANCIAL_NUMBER and text[start:end] == "一"
+                    and text.startswith("一旦", start)):
+                tail = _CONDITIONAL_FINANCIAL_TAIL.match(text, end + 1)
+                if tail is None:
+                    continue
+                start, end = tail.span("number")
             # Numeral characters inside a complete comparison word are not
             # amounts. Explicit currencies/scales still ran above; all other
             # numbers, including a later number in this clause, remain checked.
@@ -268,10 +285,17 @@ def _reject_unsupported_money(text, canonical):
                     clause = re.split(r"[，,。；;!?！？\n]", text[:negation.start()])[-1]
                     if not re.search(r"不|非|未|没|无|否认", clause):
                         continue
-            # Only the relational “同一” is nonnumeric here; amounts such as
-            # “同一万元” retain the earlier currency/scale guards unchanged.
+            # The complete relational modifiers “同一” and “单一” are
+            # nonnumeric here. Currency/scale amounts such as “单一万元”
+            # still pass through the earlier strict money guards first.
             if (pattern is _NUMBER_FINANCIAL and text[start:end] == "一"
-                    and start > 0 and text[start - 1] == "同"):
+                    and start > 0 and text[start - 1] in ("同", "单")):
+                continue
+            # A complete “一半” fraction may end here or at an explicit
+            # clause boundary. Attached units (including unknown currency or
+            # parenthesized units) stay in the original money rejection path.
+            if (pattern is _FINANCIAL_NUMBER and text[start:end] == "一"
+                    and re.match(r"\s*半\s*(?=$|[，,。；;!?！？])", text[end:])):
                 continue
             # R4等正式等级不是“4元”，即便其后紧接“资金配置”。
             if start and text[start - 1] in "Rr" and text[start:end].isdigit():
@@ -288,7 +312,7 @@ def _reject_unsupported_money(text, canonical):
                             and before_t not in "_+.-−＋－")):
                     continue
             if not covered(start, end) and not _NON_MONEY_UNIT.match(text, end):
-                _fail("METRIC_MONEY_SYNTAX_REQUIRED")
+                _fail("METRIC_MONEY_SYNTAX_REQUIRED", money_span=(start, end))
 
 
 def merge_source_versions(metrics, *, base_versions=None):

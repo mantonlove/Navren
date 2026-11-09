@@ -146,11 +146,62 @@ class SmsAuthTests(unittest.TestCase):
     def test_frequency_and_quotas_survive_new_auth_instance(self):
         self.transport.phone_daily_limit = 2
         token = self.anonymous(); self.send(token)
-        with self.assertRaises(SmsFailure): self.send(token,'login')
+        with self.assertRaises(SmsFailure): self.send(token)
         self.clock.advance(); self.send(token,'login')
         self.clock.advance()
         again = WelcomeAuth(self.path,self.clock,sms_transport=self.transport,allow_test_sms=True)
         with self.assertRaises(SmsFailure): again.send_sms(token,'login',PHONE)
+
+    def test_unregistered_sms_login_can_immediately_request_registration_code(self):
+        token = self.anonymous()
+        login = self.send(token, 'login')
+        with self.assertRaises(AuthError):
+            self.auth.sms_login(PHONE, login, self.transport.code(login), token)
+        registration = self.send(token, 'register')
+        with self.assertRaises(SmsFailure):
+            self.auth.sms_register(PHONE, PASSWORD, login, self.transport.code(login), token,
+                                   password_confirmation=PASSWORD)
+        _, user = self.auth.sms_register(PHONE, PASSWORD, registration,
+            self.transport.code(registration), token, password_confirmation=PASSWORD)
+        self.assertTrue(user['phone_verified'])
+        self.assertEqual(len(self.transport.sent), 2)
+
+    def test_switching_login_registration_cannot_reset_either_cooldown(self):
+        token = self.anonymous()
+        self.send(token, 'login')
+        self.send(token, 'register')
+        for purpose in ('login', 'register', 'login', 'register'):
+            with self.assertRaises(SmsFailure) as caught:
+                self.send(token, purpose)
+            self.assertEqual(caught.exception.code, 'SMS_RATE_LIMITED')
+        self.assertEqual(len(self.transport.sent), 2)
+        self.clock.advance(60)
+        self.send(token, 'register')
+
+    def test_auth_switch_does_not_bypass_other_browser_or_operation_cooldown(self):
+        token = self.anonymous()
+        self.send(token, 'login')
+        other = self.anonymous()
+        with self.assertRaises(SmsFailure): self.send(other, 'register')
+        principal = self.auth.sms.principal(self.auth.session(token))
+        with self.assertRaises(SmsFailure):
+            self.auth.sms.send(principal, 'operation', PHONE, {})
+        self.clock.advance()
+        self.auth.sms.send(principal, 'operation', PHONE, {})
+        with self.assertRaises(SmsFailure): self.send(token, 'register')
+
+    def test_auth_switch_preserves_phone_and_ip_quotas(self):
+        for quota in ('phone_daily_limit', 'ip_hourly_limit'):
+            with self.subTest(quota=quota):
+                self.clock.advance(3601)
+                setattr(self.transport, quota, 1)
+                token = self.anonymous()
+                phone = PHONE if quota == 'phone_daily_limit' else OTHER_PHONE
+                self.send(token, 'login', phone)
+                with self.assertRaises(SmsFailure) as caught:
+                    self.send(token, 'register', phone)
+                self.assertEqual(caught.exception.code, 'SMS_QUOTA_REACHED')
+                setattr(self.transport, quota, 10)
 
     def test_test_transport_is_never_implicitly_enabled(self):
         normal = WelcomeAuth(Path(self.tmp.name)/'normal.sqlite3',self.clock,sms_transport=self.transport)

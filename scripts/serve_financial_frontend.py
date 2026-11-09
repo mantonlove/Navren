@@ -62,7 +62,10 @@ def arguments():
         help='运行收据与调用记录目录；独立实例应使用独立目录。')
     parser.add_argument('--prepare', action='store_true')
     parser.add_argument('--agent-route-provider', choices=('off','native','jev'), default='off')
+    parser.add_argument('--model-route', choices=('ai_ping','official'), default='ai_ping')
     args = parser.parse_args()
+    if args.model_route == 'official' and args.agent_route_provider != 'off':
+        parser.error('OFFICIAL_MODEL_ROUTE_REQUIRES_ROUTE_OFF')
     if args.financial_database is None:
         args.financial_database = active_financial_database(args.state_dir)
     return args
@@ -87,8 +90,11 @@ def prepare(args):
     }.items()}
     paths['financial'] = readable(args.financial_database)
     paths['market'] = readable(args.market_database)
-    if not os.environ.get('AIPING_API_KEY'):
-        raise RuntimeError('AIPING_KEY_REQUIRED_USE_CC_WITH_SECRETS')
+    required_model_keys = (('DEEPSEEK_API_KEY', 'GLM_API_KEY')
+        if args.model_route == 'official' else ('AIPING_API_KEY',))
+    if any(not os.environ.get(name) for name in required_model_keys):
+        raise RuntimeError('OFFICIAL_KEYS_REQUIRED_USE_CC_WITH_SECRETS'
+            if args.model_route == 'official' else 'AIPING_KEY_REQUIRED_USE_CC_WITH_SECRETS')
     key = os.environ.get('NAVREN_PERSONAL_DATA_KEY')
     if not key:
         raise RuntimeError('EXISTING_PERSONAL_KEY_REQUIRED_USE_CC_WITH_SECRETS')
@@ -149,7 +155,9 @@ def main():
         'registered_experience_mode': True,
         'existing_registered_instance_count':metadata['existing_registered_instance_count'],
         'legacy_workspace_count':metadata['legacy_workspace_count'],
-        'existing_personal_key_verified': True, 'model_provider': 'aiping',
+        'existing_personal_key_verified': True,
+        'model_provider': 'official' if args.model_route == 'official' else 'aiping',
+        'model_route': args.model_route,
         'model_checks': 0, 'source_static_files': True,
         'runtime_python': sys.executable, 'runtime_prefix': sys.prefix,
         'stream_events_ready': True,
@@ -164,15 +172,18 @@ def main():
         NAVREN_MARKET_DB=str(paths['market']),
         NAVREN_FUND_CACHE=str(args.state_dir.resolve() / 'fund-cache'),
         NAVREN_ALLOW_CLOUD_ASR='0')
-    os.environ.pop('DEEPSEEK_API_KEY', None)
+    if args.model_route == 'ai_ping':
+        os.environ.pop('DEEPSEEK_API_KEY', None)
     runtime_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.environ['NAVREN_MODEL_CALL_LOG'] = str(runtime_dir / 'model-calls.jsonl')
     sys.path.insert(0, str(ROOT))
     os.chdir(ROOT)
     from local_knowledge.store import LocalKnowledgeProvider
     from local_knowledge.runtime import EvidenceRuntime
-    from voice_gateway import VoiceGateway
+    from voice_gateway import VoiceGateway, load_key
+    from local_speech_task import LocalTTSConfig
     from server import create_server
+    from agent_runtime.agent_factory import create_agent
     from welcome_auth import create_welcome_server
     from sms_aliyun import load_sms_transport
     from simulated_bank.aliyun_sms import AliyunOperationSmsProvider
@@ -186,13 +197,18 @@ def main():
 
     provider = LocalKnowledgeProvider(paths['knowledge'])
     evidence = EvidenceRuntime(provider, background=False)
-    voice = VoiceGateway(allow_cloud_asr=False)
+    voice = VoiceGateway(key=load_key() if LocalTTSConfig.from_environment() is None else '', allow_cloud_asr=False)
     stopped = threading.Event()
     instances, threads = [], []
     try:
+        selected_agent = create_agent(route_provider=args.agent_route_provider, model_route=args.model_route)
+        base['configured_models'] = {
+            'primary': {'provider': selected_agent.primary.provider, 'model_id': selected_agent.primary.model_id},
+            'reviewer': {'provider': selected_agent.reviewer.client.provider, 'model_id': selected_agent.reviewer.model_id},
+        }
         business = create_server(port=args.upstream_port, database=paths['bank'],
             voice=voice, evidence_runtime=evidence, market_database=paths['market'],
-            agent_route_provider=args.agent_route_provider, **gateway_options)
+            conversation_agent=selected_agent, **gateway_options)
         instances.append(business)
         experience_provider=business.finance.experience_provider
         if experience_provider is None:

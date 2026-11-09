@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from simulated_bank import BankError
 from simulated_bank.agent_guard import context_hash
 from simulated_bank.service import encoded
-from base_runtime.reply_interaction import INTERACTION_SCHEMA, validate_interaction
+from base_runtime.reply_interaction import INTERACTION_SCHEMA, validate_interaction, legacy_followups_interaction
 from base_runtime.position_currency import position_currency
 from .skills import catalog as skill_catalog, load_advisor
 from .knowledge_retrieval import KnowledgeRetrieval
@@ -141,8 +141,9 @@ SPECS = {
     'public_products': ('查询微众官网真实公开产品资料；资料日期过期不可用于最新推荐。收益等缺失字段为未知，不能执行真实交易。',
                         obj({'query':{'type':'string','maxLength':80},'view':{**STR,'enum':['current_disclosure','historical_conditions']}},())),
     'research_plans': ('读取本人保存的研究备选及实际产品回执覆盖。可按稳定plan_id读取一项；过期依据与部分执行分别说明，不能把产品覆盖当作金额或期限假设全部实现。只读，不能生成申购授权。', obj({'plan_id':STR})),
-    'customer_records': ('读取借贷、保障、存款、支持工单、账户权限或个人财务目标的模拟档案。无真实贷款/保险执行能力。',
-                        obj({'domain':{**STR,'enum':['loans','insurance','deposits','support','permissions','goals']}},('domain',))),
+    'customer_records': ('读取借贷、保障、存款、支持工单、账户权限或个人财务目标的模拟档案。借贷合同类型与利率适用条件选择view=contract_terms，仅适用于loans；还款计划、余额、费用、逾期及其他档案选择view=full。未展示字段不表示原始档案缺少该字段。无真实贷款/保险执行能力。',
+                        obj({'domain':{**STR,'enum':['loans','insurance','deposits','support','permissions','goals']},
+                             'view':{**STR,'enum':['contract_terms','full']}},('domain',))),
     'account_summary': ('查询已结算现金、各币种账户、持仓本金、待到账赎回和正式模拟画像；不包含信用额度作为现金。', obj()),
     'budget': ('当前可安排资金必须用本工具，不用cashflow.current_available代替。规划额外留款前，先对同账户调用不带reserves的budget读取已扣义务及真实evidence_id，再把同一义务的ID填入commitment_ids去重；空列表表示全新留款。floor_minor为应急底线；全部金额单位分。',
                obj({'account_id': STR, 'floor_minor': MONEY,
@@ -226,13 +227,73 @@ SPECS.update(tool_specs())
 SPECS['run_generated_code']=GENERATED_CODE_SPEC
 
 
+def public_fee_question_intent(text):
+    """Local request grammar only; evidence/model metadata cannot select a mode."""
+    if not isinstance(text,str):return False
+    marker='\ue000'
+    question=unicodedata.normalize('NFKC',text).replace(marker,' ')
+    terms=(r'(?:认购费|申购费|赎回费|管理费|托管费|销售服务费|运作费|手续费|'
+        r'费率|费用|收费|扣费|佣金|持有成本|投资成本|'
+        r'\b(?:fees?|charges?|commission|expense(?: ratio)?)\b)')
+    inquiry=(r'多少|几何|如何|怎么|怎样|是否|什么|哪种|哪个|哪些|区别|差别|差异|'
+        r'比较|对比|解释|说明|介绍|理解|含义|意思|计算|算一下|查询|查一下|'
+        r'看看|看一下|列出|提供|给出|查看|明细|吗|呢|'
+        r'\b(?:what|how|why|compare|explain|calculate|show|provide)\b')
+    question=re.sub(r'```.*?(?:```|$)|`[^`\n]*(?:`|$)',' ',question,flags=re.S)
+    quoted=(r'“[^”]*(?:”|$)|「[^」]*(?:」|$)|『[^』]*(?:』|$)|'
+        r'"[^"\n]*"|‘[^’]*(?:’|$)|(?<!\w)\x27[^\x27\n]*\x27(?!\w)')
+    def quote_object(match):
+        value=match.group(0)[1:-1].strip()
+        if re.fullmatch(terms,value,re.I):return value
+        # An actual fee quotation can be the question's object. Its requests
+        # or pseudo host settings must never supply the question's intent.
+        if (re.search(terms,value,re.I)and not re.search(
+                r'请|必须|忽略|回答|意图|协议|\b(?:intent|facets|schema|public_fee_intent|current_user_text)\b',value,re.I)):
+            return marker
+        return ' '
+    question=re.sub(quoted,quote_object,question)
+    for clause in re.split(r'[，,。！？?!；;\n]+',question):
+        clause=clause.strip()
+        if marker in clause:
+            clause=clause.replace(marker,'费用'if re.search(inquiry,clause,re.I)else ' ')
+        if not re.search(terms,clause,re.I):continue
+        if re.search(r'\b(?:public_fee_intent|current_user_text|intent|facets|schema)\b|'
+                r'(?:设置|切换|标记|伪造).{0,8}(?:费用意图|费用协议)|'
+                r'(?:费用意图|费用协议).{0,8}(?:设为|切换|标记|true|false|=)',clause,re.I):continue
+        clause=re.sub(r'(?:不要|别|不能|不可)(?:忽略|遗漏|漏掉|省略)','请说明',clause)
+        if (re.search(r'(?:不问|不谈|不看|不查|不关心|不是(?:在)?问).{0,8}'+terms,clause,re.I)
+                or re.search(r'(?:不用|不要|不必|无需|无须|别).{0,4}'
+                    r'(?:问|说|讲|谈|看|查|介绍|说明|解释|列出|比较|对比|计算|讨论|回答|分析|涉及).{0,12}'+terms,clause,re.I)
+                or re.search(terms+r'.{0,8}(?:不是(?:本轮)?(?:问题|重点|所问)|'
+                    r'只是(?:背景|引用)|仅作(?:背景|引用)|(?:不用|无需|不必)(?:说|讲|介绍|说明|解释|回答))',clause,re.I)
+                or re.search(r'\b(?:do not|not asking|no need to)\b.{0,24}'+terms,clause,re.I)):continue
+        if re.fullmatch(terms,clause,re.I)or re.search(inquiry,clause,re.I):return True
+    return False
+
+
 def native_tools(facts=(), evidence=(), drafts=(), identifiers=None, widgets=(), metrics=(), *,
                  financial_mcp_tools=None, historical_quote_ids=None, metric_selections=False,
-                 public_quote_fact_ids=(), statistic_ids=()):
+                 public_quote_fact_ids=(), statistic_ids=(), public_fee_intent=False):
     # JSON round-trip breaks shared schema dicts (STR/MONEY). deepcopy preserves
     # aliasing and would accidentally put participant IDs into account_id enums.
     if type(metric_selections) is not bool:raise ValueError('metric_selection_mode_must_be_host_boolean')
+    if type(public_fee_intent) is not bool:raise ValueError('public_fee_intent_must_be_host_boolean')
     specs = json.loads(json.dumps(SPECS))
+    # Native model calls choose a read scope explicitly, including on discovery.
+    # SPECS/BankTools retain legacy Python/API omission as the full view.
+    specs['customer_records'][1]['required'].append('view')
+    specs['customer_records'][1]['properties']['view']['description']=(
+        '必须显式选择：借贷合同类型、利率或调整适用条件为contract_terms；'
+        '还款计划、余额、费用、逾期或其他domain为full。')
+    specs['customer_records'][0]+=' 本轮view必填；合同或利率需求不能省略范围，也不能用full替代条款读取。'
+    time_catalog=None
+    if metric_selections and not metrics:
+        from .public_time_statement_contract import build_time_catalog
+        time_catalog=build_time_catalog(evidence)
+    fee_sources=None
+    if metric_selections and not metrics and (public_quote_fact_ids or time_catalog is not None):
+        from .public_fee_statement_contract import source_rows_from_evidence
+        fee_sources=source_rows_from_evidence(evidence)
     if historical_quote_ids is None:
         specs['answer_reviewed'][1]['properties'].pop('historical_quote_ids')
     else:
@@ -255,7 +316,15 @@ def native_tools(facts=(), evidence=(), drafts=(), identifiers=None, widgets=(),
     else:
         specs.pop('run_generated_code')
         specs['answer_reviewed'][1]['properties']['amount_claims']['maxItems']=0
-    if metric_selections and metrics:
+    source_only_parts = (bool(statistic_ids) and not public_quote_fact_ids
+        and time_catalog is None and fee_sources is None)
+    if metric_selections and not metrics and source_only_parts:
+        # Preserve F's general public-fee text protocol as well as its explicit
+        # quote/time protocols. New source statements never take those routes.
+        from .public_fee_statement_contract import source_rows_from_evidence
+        source_only_parts = source_rows_from_evidence(evidence) is None
+    private_parts = metric_selections and (bool(metrics) or source_only_parts)
+    if private_parts:
         schema=specs['answer_reviewed'][1]
         schema['properties'].pop('text')
         schema['properties']['reply_parts']=metric_reply_parts_schema(metrics, statistic_ids)
@@ -263,40 +332,61 @@ def native_tools(facts=(), evidence=(), drafts=(), identifiers=None, widgets=(),
         schema['required']=[key for key in schema['required'] if key not in ('text','amount_claims')]
         schema['required'].append('reply_parts')
         specs['answer_reviewed'][0]=specs['answer_reviewed'][0].split(' 每个个人金融金额片段在amount_claims中复制',1)[0]
-        specs['answer_reviewed'][0]+=METRIC_PARTS_NOTICE
-    elif metric_selections and public_quote_fact_ids:
+        specs['answer_reviewed'][0]+=(METRIC_PARTS_NOTICE if metrics else
+            ' 本轮终稿使用reply_parts，每片为非金额text或显式选择的本轮statistic_id。'
+            '当前没有可选metric_id，不制造金融金额或读取无关账户；来源原子仅按其目录类型解释。'
+            '原来源、权限和完整GLM审核仍必需；不选择原子的自由文字仍受原守卫约束。')
+    elif (metric_selections and (public_quote_fact_ids or time_catalog is not None)
+            and (public_fee_intent or fee_sources is None)):
         schema=specs['answer_reviewed'][1]
         schema['properties'].pop('text')
         schema['properties'].pop('interaction',None)
-        schema['properties'].update(public_quote_answer_fields(public_quote_fact_ids))
+        schema['properties'].update(public_quote_answer_fields(public_quote_fact_ids or ()))
         schema['properties']['amount_claims']=array(obj(),0)
         schema['required']=[key for key in schema['required'] if key not in ('text','amount_claims')]+['direct_answer','conditions','unknowns']
         specs['answer_reviewed'][0]=specs['answer_reviewed'][0].split(' 每个个人金融金额片段在amount_claims中复制',1)[0]
         specs['answer_reviewed'][0]+=PUBLIC_QUOTE_PARTS_NOTICE
-        from .public_fee_statement_contract import source_rows_from_evidence, build_catalog, restrict_schema, extend_time_catalog
-        fee_sources=source_rows_from_evidence(evidence)
+        from .public_fee_statement_contract import build_catalog, restrict_schema, extend_delivery_catalog
         if fee_sources is not None:
-            restrict_schema(schema,extend_time_catalog(build_catalog(*fee_sources),evidence))
-            specs['answer_reviewed'][0]+=(' 本轮费用陈述采用来源绑定的有限文字目录；所有text和claims.text完整选择各自enum中的句子，'
-                '不能追加、拼接改写或另造费用关系。每个正文或条件句必须有同文claims，evidence_ids精确指向支持该句的来源；'
-                '直接回答至少含一个规范事实或结论句，不能只有引文。unknowns仅用受控未知句，不选引用ID。'
-                'followups为空或选择受控问句；仍需完整回答问题，原一次修复、预算和完整独立审核不变。')
+            restrict_schema(schema,extend_delivery_catalog(build_catalog(*fee_sources),evidence,
+                public_quote_texts={fid:facts[fid]['text']for fid in public_quote_fact_ids
+                    if isinstance(facts,dict)and fid in facts and isinstance(facts[fid],dict)and 'text'in facts[fid]}))
+            specs['answer_reviewed'][0]=specs['answer_reviewed'][0].removesuffix(PUBLIC_QUOTE_PARTS_NOTICE)
+            specs['answer_reviewed'][0]+=(' 本轮费用文字只用fee_statement_unit_id显式选择目录中的完整规范单元，不能提交text或自行改写；'
+                '必须显式选择目录内所有费用完整原文，并选择能完整回答问题的事实、费率周期、扣除口径和结论，不能只有原文。'
+                'claims显式为空；宿主仅为你选中的单元逐字展开原句和来源绑定，不补选任何事实或结论。'
+                'direct_answer是片数组；conditions和unknowns是片数组列表，无已核实条件或缺项时外层可为空。'
+                'unknowns只选受控未知单元；必需货币金额仅显式引用本轮public_quote_fact_id完整原文，百分比不补造币种。'
+                '三个分区合计最多64片、6次货币引文；直接回答展开文字最多1200字，每条条件和缺项最多600字，全部正文最多6000字。'
+                'followups为空或受控问句。不能省略用户所问必需信息，原金额、费用、时间、权限、预算、唯一修稿上限和完整独立审核保持。')
+        else:
+            from .public_time_statement_contract import build_time_catalog, restrict_time_schema
+            time_catalog=build_time_catalog(evidence)
+            if time_catalog is not None:
+                restrict_time_schema(schema,time_catalog)
+                specs['answer_reviewed'][0]=specs['answer_reviewed'][0].removesuffix(PUBLIC_QUOTE_PARTS_NOTICE)
+                specs['answer_reviewed'][0]+=(' 本轮只提交pair_ref与relation两个字段，均从本轮schema枚举显式选择；'
+                    'pair_ref选择完整支付期限及计日定义，relation选择有据关系，不抄写正文或claims。'
+                    '宿主逐字重建原文、全部条件及例外和有限结论，不补选遗漏关系或猜修参数；'
+                    '原来源、时间、金额、fresh、完整GLM及FinalProof保持。')
     for name in ('answer_facts','answer_reviewed'):
+        if 'widget_ids' not in specs[name][1]['properties']:continue
         if widgets: specs[name][1]['properties']['widget_ids']['items']['enum']=list(widgets)
         else: specs[name][1]['properties']['widget_ids']['maxItems']=0
     for name, key, values in [('answer_facts','fact_ids',facts), ('answer_reviewed','draft_ids',drafts)]:
-        if values:
+        if values and key in specs[name][1]['properties']:
             specs[name][1]['properties'][key]['items']['enum'] = list(values)
-    if evidence:
+    if evidence and 'evidence_ids'in specs['answer_reviewed'][1]['properties'].get('claims',{}).get('items',{}).get('properties',{}):
         specs['answer_reviewed'][1]['properties']['claims']['items']['properties']['evidence_ids']['items']['enum'] = list(evidence)
-    if metric_selections and metrics and statistic_ids:
-        claim=specs['answer_reviewed'][1]['properties']['claims']['items']
-        specs['answer_reviewed'][1]['properties']['claims']['items']={'oneOf':[claim,statistic_reference_schema(statistic_ids)]}
-        specs['answer_reviewed'][0]+=' 账户统计仅显式选择本轮statistic_id原子；可在reply_parts或独立claims项引用。它只表达已核验统计口径，不代表同一笔交易回执。'
+    if private_parts and statistic_ids:
+        specs['answer_reviewed'][1]['properties']['claims']=array(obj(),0)
+        specs['answer_reviewed'][0]=('完成解释、建议、澄清或操作提案，经GLM核验后展示。'
+            'draft_ids只能引用本轮准备的草案，不得宣称已执行。'+SOURCE_PARTS_NOTICE)
     commitment_ids = sorted((identifiers or {}).get('commitment_id', ()))
     if commitment_ids:
         specs['budget'][1]['properties']['reserves']['items']['properties']['commitment_ids']['items']['enum'] = commitment_ids
     for _, schema in specs.values():
+        if set(schema.get('properties',{}))=={'pair_ref','relation'}:continue
         for field, choices in (identifiers or {}).items():
             if field in schema['properties'] and choices:
                 schema['properties'][field]['enum'] = sorted(choices)
@@ -311,7 +401,7 @@ METRIC_SELECTION_NOTICE = (' 本轮金额使用metric_selections，每项只填�
     '没有个人金额时显式提交metric_selections=[]；不自造ID、不漏选、不用普通claims替代、不省略用户所问的必需金额。')
 
 
-METRIC_PARTS_NOTICE = (' 本轮有正式metrics时，终稿用reply_parts按顺序组合回复，每片只能是{text:普通文字}或{metric_id:本轮已交付指标ID}。'
+METRIC_PARTS_NOTICE = (' 本轮有正式metrics时，终稿用reply_parts按顺序组合回复，每片可以是{text:普通文字}或{metric_id:本轮已交付指标ID}。'
     '金额只使用metric_id片，宿主按原指标数值和币种生成文字及完整签名；不填金额文字、日期签名、来源表、位置编号或offset。'
     '个人金额写成0、零或省去货币单位仍是金额，不能留在text。修稿反馈列出的每一个text索引都须逐一处理，不能只改其中一项。'
     'text片可写说明、非金额期间和标点，不手写金融金额；claims仅引用真实证据并说明其支持的事实。'
@@ -319,6 +409,19 @@ METRIC_PARTS_NOTICE = (' 本轮有正式metrics时，终稿用reply_parts按顺�
     '例如“当前可安排资金为”作为text片，后接对应metric_id片；不要先写含数字的完整句子再只改其中一处。'
     '只报原问题必需的金额并简短解释对应口径和缺项；无对应指标不口算派生金额，不得省略用户所问的必需信息避开校验。'
     '没有正式metrics且未提供public_quote_fact_id合同时沿原text终稿合同，公开金额仍仅允许完整原文引述。')
+
+
+SOURCE_PARTS_NOTICE = (' 本轮有可直接引用的来源事实，既可为数值统计，也可为非数值的产品条款、预算口径或未来研究方法。'
+    '终稿用reply_parts按顺序组合：有来源事实显式选{statistic_id:本轮来源事实ID}，金融金额显式选{metric_id:本轮指标ID}，普通解释用{text:文字}。'
+    'statistic_id渲染的是完整canonical_statement句，包含来源事实及其限制，不是其中一个数值；每句独立成段，前后用text换行衔接，不能当数值嵌入“锁定期限为…”等半句。'
+    'metric_id仍渲染金额片段，可与说明该金额的前后文字衔接；不要把两种引用混用。'
+    '目录天数、预算现金排除或解锁不证明交易结果、后续核对方法等已有对应原子时，按statement_kind、主体、字段及来源显式选择对应atom，不抄写或同义改写这些来源事实及限制。'
+    'claims必须显式为[]；宿主仅从你明确选中的statistic_id片展开原文及证据，生成审核事实清单，不另选事实，不要求至少选择一个。'
+    '不要再用text加evidence_ids重复编写第二套claims；没有相应原子的事实不得借相似原子通行。'
+    'text写有限比较、普通规划、非金额期间、标点与衔接，不重复改写这些来源事实；全部自由文字仍须通过原金额、操作状态及来源校验，不因存在原子免审。'
+    '个人金额包括0、零和省略单位的金额，只用metric_id片，不抄金融数值、不口算派生金额、不填金额签名或offset。'
+    '只回答原问题必需的信息，不补写无关持仓日期或交易状态；必需事实没有对应atom时，仍须按原取证合同取得支持并接受完整GLM审核，不借相似atom担保，不省略原必需事实或降低原通过标准。'
+    '完整终稿和完整来源仍交GLM审核，原权限、预算、FinalProof和发布校验不变。')
 
 
 def statistic_reference_schema(statistic_ids):
@@ -329,8 +432,9 @@ def statistic_reference_schema(statistic_ids):
 def metric_reply_parts_schema(metric_ids, statistic_ids=()):
     metric={'type':'string','minLength':1,'maxLength':256,'enum':sorted(set(metric_ids))}
     return {'type':'array','minItems':1,'maxItems':64,'items':{'oneOf':[
-        obj({'text':{'type':'string','minLength':0,'maxLength':6000}},('text',)),
-        obj({'metric_id':metric},('metric_id',))]+([statistic_reference_schema(statistic_ids)]if statistic_ids else [])}}
+        obj({'text':{'type':'string','minLength':0,'maxLength':6000}},('text',))]
+        +([obj({'metric_id':metric},('metric_id',))]if metric_ids else [])
+        +([statistic_reference_schema(statistic_ids)]if statistic_ids else [])}}
 
 
 PUBLIC_QUOTE_PARTS_NOTICE = (' 本轮公开引文答复由text与本轮可信引文共同完整回答当前用户问题；text须直接表达有据的非货币结论、关键非金额条件和未核实边界，必需金额及阈值由绑定引文完整展开，text不得重复金额；不能只介绍资料或只堆引文。'
@@ -378,6 +482,32 @@ def metric_selection_answer_schema(metric_ids=()):
     schema['properties']['metric_selections']=metric_selection_schema(metric_ids)
     schema['properties']['amount_claims']['maxItems']=0
     return schema
+
+
+def _validate_loan_contract_terms(data):
+    # Host-created non-monetary shape; reject additions rather than hiding them.
+    root={'as_of','version','environment','data_scope','read_scope','records','unavailable_entities','notice'}
+    if (not isinstance(data,dict) or set(data)!=root
+            or data.get('read_scope')!='loan_contract_terms' or data.get('environment')!='simulation'
+            or data.get('data_scope') not in ('simulation','navren_synthetic')
+            or not isinstance(data.get('as_of'),str) or type(data.get('version')) not in (int,str)
+            or not isinstance(data.get('notice'),str)
+            or data.get('unavailable_entities') not in ([],['loans'])
+            or not isinstance(data.get('records'),dict) or set(data['records'])!={'loans'}
+            or not isinstance(data['records']['loans'],list)
+            or data['unavailable_entities'] and data['records']['loans']):
+        raise BankError('METRIC_ARGUMENTS_INVALID','合同条款视图结构不合法。',422)
+    for row in data['records']['loans']:
+        terms=row.get('rate_terms') if isinstance(row,dict) else None
+        if (not isinstance(row,dict) or set(row)!={'id','loan_type','status','rate_terms'}
+                or any(not isinstance(row[k],str) or not row[k] for k in ('id','loan_type','status'))
+                or row['status'] not in ('active','closed')
+                or not isinstance(terms,dict) or set(terms)!={'annual_rate_bps','unit','missing_fields'}
+                or terms['unit']!='basis_points'
+                or terms['annual_rate_bps'] is not None and type(terms['annual_rate_bps'])is not int
+                or terms['missing_fields']!=['rate_type','benchmark','spread_bps','repricing_rule']
+                    +(['annual_rate_bps'] if terms['annual_rate_bps'] is None else [])):
+            raise BankError('METRIC_ARGUMENTS_INVALID','合同条款视图不得包含金额或未声明字段。',422)
 
 
 def safe_data(value):
@@ -430,6 +560,12 @@ def monetary_literals(text):
         except (InvalidOperation,ValueError):
             raise BankError('INVALID_MONEY_TEXT','答复中的金额精度或格式无效。')
         yield int(minor),currencies.get(unit.upper(),unit.upper())
+
+
+def user_followups_for_review(values):
+    """The unchanged existing conversation followup display filter."""
+    internal = re.compile('(?<![A-Za-z0-9_])(?:' + '|'.join((re.escape(name) for name in SPECS)) + ')(?![A-Za-z0-9_])|读取后按实际返回|先读取.{0,20}实际返回')
+    return [value for value in values if isinstance(value, str) and (not internal.search(value))][:3]
 
 
 def market_agent_view(name, data):
@@ -542,7 +678,7 @@ def _host_security_rejection(gateway,workspace,error,*,request_id,event_id,phase
 
 
 class BankTools:
-    def __init__(self, gateway, workspace, request_id, *, private_context_disabled=False, language='zh', request_privacy=None, metric_selections=False, audit_request_id=_ORIGINAL_AUDIT_REQUEST):
+    def __init__(self, gateway, workspace, request_id, *, private_context_disabled=False, language='zh', request_privacy=None, metric_selections=False, audit_request_id=_ORIGINAL_AUDIT_REQUEST, current_user_text=''):
         if type(private_context_disabled) is not bool:
             raise ValueError('private_context_policy_must_be_host_boolean')
         from .request_privacy import RequestPrivacyPolicy
@@ -550,17 +686,24 @@ class BankTools:
                 or request_privacy.private_context_disabled != private_context_disabled):
             raise ValueError('private_context_policy_must_match_host_policy')
         if type(metric_selections) is not bool:raise ValueError('metric_selection_mode_must_be_host_boolean')
+        if type(current_user_text) is not str:raise ValueError('current_user_text_must_be_host_string')
+        self._public_fee_intent=public_fee_question_intent(current_user_text)
         self.metric_selection_mode=metric_selections
+        # Only the existing host language contract selects neutral UI wording.
+        self._reply_language=language if type(language)is str and language in ('zh','en')else None
         self.metric_selection_receipts=[]
         self.metric_part_receipts=[]
         self._joint_source_plan=None
         self._fee_delivery_context=None
         self._fee_statement_args=None
         self._fee_statement_rendered=None
+        self._fee_unit_selection=None
+        self._time_unit_selection=None
         self.joint_source_receipts=[]
         self.request_privacy = request_privacy or RequestPrivacyPolicy(private_context_disabled)
         self.private_context_disabled = private_context_disabled
         self.g, self.w, self.request_id = gateway, workspace, request_id
+        self._optional_cashflow_read=False
         original=request_id if audit_request_id is _ORIGINAL_AUDIT_REQUEST else audit_request_id
         self._audit_request_id=(original if type(original) is str
             and re.fullmatch('[a-f0-9]{32}',original) else None)
@@ -580,7 +723,7 @@ class BankTools:
             except FinancialMCPError as error:
                 self.financial_mcp_unavailable = error.code
         self.financial_mcp_tool_names = (self.financial_mcp.tool_names if self.financial_mcp else ())
-        if not private_context_disabled:self.g.wealth.provision(workspace)
+        self._wealth_source_revision=(None if private_context_disabled else self.g.wealth.source_revision())
         self.evidence, self.facts, self.drafts, self.trace = {}, {}, {}, []
         self.advice, self.changed = False, False
         self.start_context = self.current_context()
@@ -590,7 +733,7 @@ class BankTools:
         self.current_budget = None
         self.budget_baselines = {}
         self.identifiers = {}
-        self.user_text = ''
+        self.user_text = current_user_text
         self.income_statement_query = None
         self.statement_fact_query = None
         self.metrics=MetricRegistry()
@@ -647,8 +790,9 @@ class BankTools:
     def current_context(self):
         if self.private_context_disabled:
             return self.request_privacy.metadata_context(self.g,self.w)
-        # 同步公开行情/条款修订到私有派生版本，再检查本轮上下文。
-        self.g.wealth.provision(self.w)
+        # 来源修订独立只读核验；银行上下文哈希仍保持原绑定语义。
+        if self.g.wealth.source_revision()!=self._wealth_source_revision:
+            raise BankError('STALE_EVIDENCE','公开基金来源已变化，请重新查询。',409)
         with self.g.bank.transaction() as db:
             return context_hash(db, self.w)
 
@@ -720,6 +864,12 @@ class BankTools:
         # Even the hypothetical tool's metric issuer currently versions private
         # source tables. Restricted turns use its user_input_scenario fact
         # contract; they must not mint a personal financial metric indirectly.
+        if name=='customer_records' and args.get('view')=='contract_terms':
+            # Select and validate before requesting any monetary issuance.
+            if args!={'domain':'loans','view':'contract_terms'}:
+                raise BankError('METRIC_ARGUMENTS_INVALID','合同条款视图仅适用于借贷档案。',422)
+            _validate_loan_contract_terms(data)
+            return []
         if self.private_context_disabled:return []
         service=getattr(self.g,'financial_metrics',None)
         describe=getattr(service,'metrics_for_tool',None)
@@ -1239,6 +1389,12 @@ class BankTools:
         self.presentations.fresh()
         return True
 
+    @property
+    def public_fee_intent(self):
+        value=getattr(self,'_public_fee_intent',None)
+        if type(value) is not bool:raise ValueError('public_fee_intent_not_host_bound')
+        return value
+
     def public_quote_fact_ids(self):
         # Eligibility only; every actual rendering still runs fresh() before
         # checking the exact canonical original. No account or execution claim.
@@ -1261,6 +1417,9 @@ class BankTools:
                     and type(row.get('status_code')) is int):continue
             if (type(row)is dict
                     and row=={'tool':'answer_reviewed','status':'rejected','code':'PUBLIC_FEE_SOURCE_REQUIRED','status_code':422}
+                    and type(row.get('status_code')) is int):continue
+            if (type(row)is dict
+                    and row=={'tool':'answer_reviewed','status':'rejected','code':'PUBLIC_FEE_VALUE_BINDING_REQUIRED','status_code':422}
                     and type(row.get('status_code')) is int):continue
             if (type(row)is dict
                     and row=={'tool':'answer_reviewed','status':'rejected','code':'PUBLIC_TIME_BASIS_REQUIRED','status_code':422}
@@ -1355,6 +1514,44 @@ class BankTools:
             delivered=self.knowledge._delivered,pinned=self.knowledge._pinned_status,
             context_hash=self.start_context)
 
+    def _public_fee_quote_texts(self):
+        return {fid:self.facts[fid]['text']for fid in self.public_quote_fact_ids()}
+
+    def _selected_monetary_fee_quote(self, rendered, evidence_id, hit):
+        """A selected whole original must already have the old monetary receipt.
+
+        This is not a new amount exemption. Legacy/raw authored quotes cannot
+        obtain it; the explicit unit must expand to an eligible public fact.
+        """
+        from .public_fee_statement_contract import source_rows_from_evidence,build_catalog,extend_delivery_catalog
+        try:
+            if self._fee_unit_selection is None or not self.metric_part_receipts:return False
+            proposed=source_rows_from_evidence(self.evidence)
+            if proposed is None:return False
+            catalog=extend_delivery_catalog(build_catalog(*proposed),self.evidence,
+                public_quote_texts=self._public_fee_quote_texts())
+            selected={part['fee_statement_unit_id']
+                for field in ('direct_answer','conditions','unknowns')
+                for row in ([self._fee_unit_selection[field]]if field=='direct_answer'else self._fee_unit_selection[field])
+                for part in row if set(part)=={'fee_statement_unit_id'}}
+            units=[unit for unit in catalog['units']if unit['kind']=='public_quote'and unit['unit_id']in selected
+                and any(w['evidence_id']==evidence_id and w['citation_id']==hit['citation_id']
+                    and w['source_sha256']==hashlib.sha256(hit['excerpt'].encode()).hexdigest()
+                    for w in unit['witnesses'])]
+            if len(units)!=1:return False
+            fid=units[0]['public_quote_fact_id'];fact=self.facts.get(fid,{})
+            receipt=self.metric_part_receipts[-1]
+            quote='“'+unicodedata.normalize('NFKC',hit['excerpt'])+'”'
+            return (fid in self.public_quote_fact_ids() and fact.get('evidence_id')==evidence_id
+                and fact.get('citation_id')==hit['citation_id']and fact.get('text')==hit['excerpt']
+                and fid in receipt.get('selected_public_quote_fact_ids',[])
+                and any(r.get('fact_id')==fid and r.get('evidence_id')==evidence_id
+                    and r.get('canonical_source_text_sha256')==hashlib.sha256(hit['excerpt'].encode()).hexdigest()
+                    for r in receipt.get('quote_source_bindings',[]))
+                and quote in rendered.get('text','')
+                and {'text':quote,'evidence_ids':[evidence_id]}in rendered.get('claims',[]))
+        except (KeyError,ValueError,TypeError,AttributeError):return False
+
     def _fee_source_quote_rows(self, args):
         """Only complete fee originals in evidence actually cited by this draft."""
         pinned=self.knowledge._pinned_status
@@ -1384,8 +1581,10 @@ class BankTools:
                         or any(type(hit.get(k))is not str or not hit[k]for k in
                             ('citation_id','document_id','document_version_id','product_id','share_class_id'))
                         or 'channel_id'not in hit or not(hit['channel_id']is None or type(hit['channel_id'])is str)
-                        or type(hit.get('excerpt'))is not str or not 0<len(hit['excerpt'])<=1198
-                        or monetary_occurrences(unicodedata.normalize('NFKC',hit['excerpt']))):
+                        or type(hit.get('excerpt'))is not str or not 0<len(hit['excerpt'])<=1198):
+                    self._joint_source_invalid()
+                if (monetary_occurrences(unicodedata.normalize('NFKC',hit['excerpt']))
+                        and not self._selected_monetary_fee_quote(args,eid,hit)):
                     self._joint_source_invalid()
                 identities.add(tuple(hit[k]for k in identity_fields))
                 versions.add((hit['document_id'],hit['document_version_id']));days.add(data['as_of'])
@@ -1462,6 +1661,31 @@ class BankTools:
                 'context':deepcopy(context),'sources':sources}
         except BankError:raise
         except (KeyError,ValueError,TypeError,MetricClaimError):self._joint_source_invalid()
+
+    def register_public_fee_unit_selection(self, selection, args):
+        """Independently reproduce an explicit choice against actual host evidence."""
+        self._fee_unit_selection=None
+        self._time_unit_selection=None
+        if selection is None:return
+        from .public_fee_statement_contract import source_rows_from_evidence, build_catalog, extend_delivery_catalog, expand_unit_selections
+        try:
+            self.fresh()
+            sources=source_rows_from_evidence(self.evidence)
+            if sources is None:
+                from .public_time_statement_contract import expand_time_selection
+                catalog=self._public_time_unit_catalog()
+                if expand_time_selection(selection,catalog)!=args:self._joint_source_invalid()
+                self._time_unit_selection=deepcopy(selection)
+                return
+            for row in sources[0]:
+                delivered=self.knowledge._delivered.get((row['hit']['citation_id'],row['as_of']))
+                if (self.evidence[row['evidence_id']].get('context_hash')!=self.start_context
+                        or not delivered or delivered[0]!=row['hit']):self._joint_source_invalid()
+            catalog=extend_delivery_catalog(build_catalog(*sources),self.evidence,
+                public_quote_texts=self._public_fee_quote_texts())
+            if expand_unit_selections(selection,catalog)!=args:self._joint_source_invalid()
+            self._fee_unit_selection=deepcopy(selection)
+        except (KeyError,ValueError,TypeError,AttributeError):self._joint_source_invalid()
 
     def prepare_joint_source_quotes(self, args, context):
         """Private one-shot host plan; no model selector or new financial fact."""
@@ -1623,7 +1847,13 @@ class BankTools:
             seen.add(identity)
             # Always copy the whole delivered excerpt, not a selected table row
             # or a paraphrase. No fee/rate/threshold/unit/date is inferred.
-            quotes.append({'text':quote,'evidence_ids':[row['evidence_id']]})
+            if monetary_occurrences(display):
+                if not self._selected_monetary_fee_quote(rendered,row['evidence_id'],hit):
+                    self._joint_source_invalid()
+                # Already rendered by the model-selected public fact. Never
+                # append an unselected monetary copy through the source path.
+            else:
+                quotes.append({'text':quote,'evidence_ids':[row['evidence_id']]})
             leaves.append({'evidence_id':row['evidence_id'],'citation_id':hit['citation_id'],
                 'document_id':hit['document_id'],'document_version_id':hit['document_version_id'],
                 'release_id':hit['release_id'],'product_id':hit['product_id'],
@@ -1673,21 +1903,79 @@ class BankTools:
                     and re.search(re.escape(fee)+r'\s+[0-9]+(?:\.[0-9]+)?%',original)
                     for original in originals):missing()
 
+    def _public_time_unit_catalog(self):
+        """Rebuild only closed time units from actual request-local delivery."""
+        from .public_time_statement_contract import build_time_catalog
+        catalog=build_time_catalog(self.evidence)
+        pinned=self.knowledge._pinned_status
+        if (catalog is None or not isinstance(pinned,dict)or pinned.get('ready')is not True
+                or not pinned.get('provider_id')or not pinned.get('public_release_id')
+                or catalog['scope']['provider_id']!=pinned['provider_id']
+                or catalog['scope']['release_id']!=pinned['public_release_id']
+                or catalog['scope']['context_hash']!=self.start_context):self._joint_source_invalid()
+        seen=set()
+        for unit in catalog['units']:
+            for witness in unit['witnesses']:
+                key=(witness['evidence_id'],witness['citation_id'],witness['as_of'])
+                if key in seen:continue
+                seen.add(key);entry=self.evidence.get(witness['evidence_id'],{});data=entry.get('data',{})
+                delivered=self.knowledge._delivered.get((witness['citation_id'],witness['as_of']))
+                matches=[hit for hit in data.get('hits',[])if hit.get('citation_id')==witness['citation_id']]
+                if (entry.get('context_hash')!=self.start_context or not delivered or len(matches)!=1
+                        or delivered[0]!=matches[0]
+                        or hashlib.sha256(matches[0]['excerpt'].encode()).hexdigest()!=witness['source_sha256']):
+                    self._joint_source_invalid()
+        return catalog
+
+    def _complete_public_time_delivery(self, rendered):
+        """All authored fields must equal explicit source-bound time units."""
+        from .public_time_statement_contract import validate_time_authored
+        try:
+            if (self._joint_source_plan is not None or self._fee_unit_selection is not None
+                    or self._time_unit_selection is None or not isinstance(self._fee_delivery_context,dict)
+                    or self._fee_delivery_context.get('contract')!='navren.public-quote-fee-delivery-context/1'):
+                self._joint_source_invalid()
+            self.fresh();self.amount_contract(rendered)
+            args=self._fee_statement_args;snapshot=self._fee_statement_rendered
+            context=self._fee_delivery_context;receipt=self.metric_part_receipts[-1]
+            if (context['restored_args_sha256']!=self._joint_source_digest(args)
+                    or receipt.get('raw_structured_answer_sha256')!=self._joint_source_digest(args)
+                    or receipt.get('answer_contract')!='navren.public-quote-answer/1'
+                    or receipt.get('selected_public_quote_fact_ids')!=[]
+                    or receipt.get('quote_reference_count')!=0 or receipt.get('quote_source_bindings')!=[]
+                    or receipt.get('rendered_pre_boundary_text_sha256')!=hashlib.sha256(snapshot['text'].encode()).hexdigest()
+                    or any(unicodedata.normalize('NFKC',rendered[key])!=
+                        unicodedata.normalize('NFKC',snapshot[key])for key in ('text',))
+                    or any(rendered.get(key)!=snapshot.get(key)for key in
+                        ('claims','followups','draft_ids','widget_ids'))):self._joint_source_invalid()
+            catalog=self._public_time_unit_catalog()
+            proof=validate_time_authored(args,catalog,selection_args=self._time_unit_selection)
+            fields=('product_id','share_class_id','channel_id','release_id')
+            bindings=self._fee_source_time_bindings(rendered,tuple(catalog['scope'][key]for key in fields))
+            if not bindings or not any(row['location']=='text'and row['bindings']for row in bindings):
+                self._joint_source_invalid()
+            receipt['public_time_statement_proof']=deepcopy(proof)
+            return rendered
+        except (KeyError,ValueError,TypeError,AttributeError,IndexError):self._joint_source_invalid()
+
     def _complete_public_fee_delivery(self, rendered):
         """Common successful terminal, after the original operation/fee/time gates."""
+        self._validate_general_public_fee_values(rendered)
         from .public_quote_recovery import _FEES
+        if getattr(self,'_time_unit_selection',None)is not None:
+            return self._complete_public_time_delivery(rendered)
+        # Only the existing structured public-answer protocol obtains this
+        # delivery contract; private/legacy answers keep their original path.
+        if self._fee_delivery_context is None and self._joint_source_plan is None:return rendered
         cited={eid for claim in rendered.get('claims',[])for eid in claim.get('evidence_ids',[])}
         has_fees=any('fees'in hit.get('facets',[])for eid in cited
             for hit in self.evidence.get(eid,{}).get('data',{}).get('hits',[]))
         if not has_fees and not _FEES.search(rendered.get('text','')):return rendered
-        # Only the existing structured public-answer protocol obtains this
-        # delivery contract; private/legacy answers keep their original path.
-        if self._fee_delivery_context is None and self._joint_source_plan is None:return rendered
         self.fresh();self.amount_contract(rendered)
         # Validate authored fields only after the unchanged recoverable gates.
         # Bind their proof to the actual renderer result (NFKC is the existing
         # boundary display transform); no new repair or rewriting is allowed.
-        from .public_fee_statement_contract import build_catalog, validate_authored, extend_time_catalog
+        from .public_fee_statement_contract import build_catalog, validate_authored, extend_delivery_catalog
         def statement_proof(sources,context):
             try:
                 args=self._fee_statement_args;snapshot=self._fee_statement_rendered
@@ -1697,10 +1985,11 @@ class BankTools:
                         or rendered['claims']!=snapshot['claims']
                         or rendered['followups']!=snapshot['followups']):self._joint_source_invalid()
                 cited={eid for claim in args['claims']for eid in claim['evidence_ids']}
-                catalog=extend_time_catalog(build_catalog(sources,self.knowledge._pinned_status['provider_id']),
-                    self.evidence,cited_ids=cited)
+                catalog=extend_delivery_catalog(build_catalog(sources,self.knowledge._pinned_status['provider_id']),
+                    self.evidence,cited_ids=cited,public_quote_texts=self._public_fee_quote_texts())
                 for unit in catalog['units']:
-                    if unit['kind']!='time_exact':continue
+                    if (unit['kind']!='time_exact'and not any(u['kind']=='public_quote'
+                            for u in catalog['units'])):continue
                     for witness in unit['witnesses']:
                         entry=self.evidence[witness['evidence_id']]
                         receipt=self.knowledge._delivered.get((witness['citation_id'],witness['as_of']))
@@ -1711,7 +2000,7 @@ class BankTools:
                                 or len(hits)!=1 or receipt[0]!=hits[0]
                                 or hashlib.sha256(receipt[0]['excerpt'].encode()).hexdigest()!=witness['source_sha256']):
                             self._joint_source_invalid()
-                return validate_authored(args,catalog)
+                return validate_authored(args,catalog,selection_args=self._fee_unit_selection)
             except (KeyError,ValueError,TypeError,AttributeError):self._joint_source_invalid()
         if self._joint_source_plan is not None:
             if self._joint_source_plan.get('status')!='consumed':self._joint_source_invalid()
@@ -1862,10 +2151,113 @@ class BankTools:
         self._fee_statement_rendered=deepcopy(result)
         return result
 
+    def _validate_general_public_fee_values(self, args):
+        """Bind each explicit fee value; intent is never a rate-truth exemption."""
+        if (not self.metric_selection_mode or self.metrics.metric_ids or self.public_fee_intent
+                or getattr(self,'_fee_unit_selection',None)is not None
+                or getattr(self,'_time_unit_selection',None)is not None
+                or not isinstance(args,dict)or not isinstance(args.get('text'),str)):
+            return
+        from .public_fee_statement_contract import source_rows_from_evidence, build_catalog, extend_delivery_catalog
+        proposed=source_rows_from_evidence(self.evidence)
+        if proposed is None:return
+        fee=r'(?:管理费|托管费|销售服务费|认购费|申购费|赎回费|运作费|手续费|费率|费用|佣金)'
+        number=r'[-+]?[0-9]+(?:\.[0-9]+)?'
+        value=(r'(?:'+number+r'\s*(?:%|bps?\b|基点|人民币|美元|欧元|元|CNY|USD|EUR)|'
+            r'(?:百分之|千分之|万分之)[0-9零〇一二两三四五六七八九十百点.]+|'
+            +number+r'(?=$|[\s。；;，,]))')
+        link=(r'(?:(?:的|标准|年费率|年率|年度|每年|每月|每日|年|月|日|费率|率|'
+            r'不超过|不高于|不低于|不是|不为|至少|最多|最高|最低|分别为|约为|均为|'
+            r'为|是|等于|约|仅|按|基金资产净值|资产净值|净值|占|收取|计提|高达|高|低)|\s|[:=()（）]|[A-Za-z0-9]+类){0,24}')
+        def has_value(text):
+            if re.search(fee+link+value+r'|'+value+link+r'(?:的)?'+fee,text,re.I):return True
+            # Complete fee table frames are already part of the old catalogue.
+            # Unbound model copies do not gain permission through missing labels.
+            return bool(re.search(r'(?:费用类别|费用类型|收费方式/年费率)[^\r]*'+value,text,re.I))
+        fields=[('text',args['text'])]+[('claims['+str(i)+'].text',claim.get('text',''))
+            for i,claim in enumerate(args.get('claims',[]))if isinstance(claim,dict)]
+        fields += [('followups['+str(i)+']',text)for i,text in enumerate(args.get('followups',[]))]
+        fields=[(path,unicodedata.normalize('NFKC',text))for path,text in fields if isinstance(text,str)]
+        if not any(has_value(text)for _,text in fields):return
+        def invalid():
+            raise BankError('PUBLIC_FEE_VALUE_BINDING_REQUIRED',
+                '通用答复中的具体费用数值须逐条对应本轮同费种、同份额和同版本的完整规范单元或完整原文引述，'
+                '且正文与claims逐字一致绑定原证据。裸数字即使恰好相同也不能代替绑定；只修终稿，不重新检索。',422)
+        self.fresh()
+        try:
+            pinned=self.knowledge._pinned_status
+            if (not isinstance(pinned,dict)or pinned.get('ready')is not True
+                    or proposed[1]!=pinned.get('provider_id')):invalid()
+            public_texts=self._public_fee_quote_texts()
+            catalog=extend_delivery_catalog(build_catalog(*proposed),self.evidence,
+                public_quote_texts=public_texts)
+            body=unicodedata.normalize('NFKC',args['text']);selected=[];selected_by_claim={}
+            def whole_line(text):
+                return r'(?m)^[ \t]*'+re.escape(text)+r'[ \t]*(?=\n|$)'
+            for claim_index,claim in enumerate(args.get('claims',[])):
+                if not isinstance(claim,dict)or set(claim)!={'text','evidence_ids'}:continue
+                text=unicodedata.normalize('NFKC',claim['text'])
+                matches=[unit for unit in catalog['units']if unit['kind']in
+                    ('rate','redemption','comparison','quote','public_quote')
+                    and unicodedata.normalize('NFKC',unit['text'])==text
+                    and unit['evidence_ids']==claim['evidence_ids']]
+                if len(matches)!=1 or not re.search(whole_line(text),body):continue
+                unit=matches[0];valid=True
+                for witness in unit['witnesses']:
+                    entry=self.evidence.get(witness['evidence_id'],{});data=entry.get('data',{})
+                    keys=('citation_id','product_id','share_class_id','channel_id','release_id',
+                        'document_id','document_version_id')
+                    hits=[hit for hit in data.get('hits',[])if all(hit.get(key)==witness.get(key)for key in keys)]
+                    delivered=self.knowledge._delivered.get((witness['citation_id'],witness['as_of']))
+                    if (entry.get('id')!=witness['evidence_id']or entry.get('tool')!='knowledge_search'
+                            or entry.get('source')!='public_knowledge'or entry.get('context_hash')!=self.start_context
+                            or data.get('ready')is not True or data.get('scope')!='public'
+                            or data.get('provider_id')!=pinned['provider_id']
+                            or data.get('public_release_id')!=pinned.get('public_release_id')
+                            or witness.get('provider_id')!=pinned['provider_id']
+                            or witness.get('release_id')!=pinned.get('public_release_id')
+                            or data.get('as_of')!=witness['as_of']or len(hits)!=1
+                            or not delivered or delivered[0]!=hits[0]
+                            or hits[0].get('visibility')!='public'or hits[0].get('outbound_allowed')is not True
+                            or hits[0].get('content_status')!='full_text'
+                            or hits[0].get('claims_are_account_facts')is not False
+                            or hashlib.sha256(hits[0]['excerpt'].encode()).hexdigest()!=witness['source_sha256']):
+                        valid=False;break
+                if not valid:continue
+                if list(monetary_literals(text)):
+                    if (unit['kind']not in ('quote','public_quote')or not any(
+                            text=='“'+unicodedata.normalize('NFKC',original)+'”'
+                            for original in public_texts.values())):continue
+                selected.append(text)
+                selected_by_claim[claim_index]=[text]
+            for path,text in fields:
+                claim_path=re.fullmatch(r'claims\[([0-9]+)\]\.text',path)
+                allowed=(selected_by_claim.get(int(claim_path[1]),[])if claim_path else selected)
+                for bound in allowed:text=re.sub(whole_line(bound),' ',text)
+                if has_value(text):invalid()
+        except (KeyError,ValueError,TypeError,AttributeError):invalid()
+
     def validate_answer_arguments(self, args):
         """Validate the selected protocol without changing the shared legacy SPECS."""
         public_ids=self.public_quote_fact_ids() if self.metric_selection_mode and not self.metrics.metric_ids else []
-        if public_ids:
+        time_catalog=None
+        if self.metric_selection_mode and not self.metrics.metric_ids:
+            from .public_time_statement_contract import build_time_catalog
+            time_catalog=build_time_catalog(self.evidence)
+        if (public_ids or time_catalog is not None) and not self.public_fee_intent:
+            from .public_fee_statement_contract import source_rows_from_evidence
+            if source_rows_from_evidence(self.evidence) is not None:
+                # Same host-selected general protocol as native_tools. This is
+                # envelope validation only; _invoke and the original amount,
+                # source, fee/time and review guards still execute unchanged.
+                validate(args,SPECS['answer_reviewed'][1])
+                self._validate_general_public_fee_values(args)
+                return
+        if public_ids or time_catalog is not None:
+            if time_catalog is not None and not public_ids:
+                from .public_time_statement_contract import validate_time_authored
+                try:validate_time_authored(args,time_catalog,selection_args=self._time_unit_selection)
+                except (ValueError,TypeError,AttributeError):self._joint_source_invalid()
             self._public_quote_answer_sections(args,public_ids)
             envelope={key:value for key,value in args.items()if key not in {'direct_answer','conditions','unknowns'}}
             schema=deepcopy(SPECS['answer_reviewed'][1]);schema['properties']['amount_claims']=array(obj(),0)
@@ -1875,20 +2267,27 @@ class BankTools:
             return
         if isinstance(args,dict) and 'reply_parts' in args:
             public_ids=self.public_quote_fact_ids() if not self.metrics.metric_ids else []
-            if not self.metric_selection_mode or not (self.metrics.metric_ids or public_ids):
+            source_only_parts=bool(self._statistic_session.ids) and not public_ids and time_catalog is None
+            if not self.metrics.metric_ids and source_only_parts:
+                from .public_fee_statement_contract import source_rows_from_evidence
+                source_only_parts=source_rows_from_evidence(self.evidence) is None
+            if not self.metric_selection_mode or not (self.metrics.metric_ids or public_ids or source_only_parts):
                 raise BankError('METRIC_PARTS_UNAVAILABLE','本轮未提供金额片段合同。',403)
             if 'text' in args or 'metric_selections' in args or args.get('amount_claims'):
                 raise BankError('METRIC_PARTS_MIXED','金额片段不能混用整段正文、编号选择或模型金额签名。',422)
+            source_parts=bool(self._statistic_session.ids) and bool(self.metrics.metric_ids or source_only_parts)
+            if source_parts and args.get('claims')!=[]:
+                raise BankError('SOURCE_PARTS_MODEL_CLAIMS_FORBIDDEN','来源片段合同的模型claims必须为空。',422)
             parts=args['reply_parts']
             if not isinstance(parts,list) or not 1<=len(parts)<=64:
                 raise BankError('METRIC_PARTS_INVALID','回复片段数量不合法。',422)
-            schemas=(metric_reply_parts_schema(self.metrics.metric_ids,self._statistic_session.ids) if self.metrics.metric_ids
+            schemas=(metric_reply_parts_schema(self.metrics.metric_ids,self._statistic_session.ids) if self.metrics.metric_ids or source_only_parts
                      else public_quote_reply_parts_schema(public_ids))['items']['oneOf']
-            reference='metric_id' if self.metrics.metric_ids else 'public_quote_fact_id'
+            schemas_by_field={next(iter(schema['properties'])):schema for schema in schemas}
             for part in parts:
-                if not isinstance(part,dict) or set(part) not in ({'text'},{reference},*([{'statistic_id'}]if self.metrics.metric_ids and self._statistic_session.ids else [])):
+                if not isinstance(part,dict) or len(part)!=1 or next(iter(part))not in schemas_by_field:
                     raise BankError('METRIC_PARTS_INVALID','每个回复片段只允许文字或一个指标引用。',422)
-                validate(part,schemas[0] if 'text' in part else schemas[2] if 'statistic_id' in part else schemas[1])
+                validate(part,schemas_by_field[next(iter(part))])
             envelope={key:value for key,value in args.items() if key!='reply_parts'}
             envelope=self._statistic_claim_envelope(envelope)
             validate({**envelope,'text':'validated parts envelope'},SPECS['answer_reviewed'][1])
@@ -1900,6 +2299,7 @@ class BankTools:
             validate(args,metric_selection_answer_schema(self.metrics.metric_ids))
         else:
             validate(args,SPECS['answer_reviewed'][1])
+            self._validate_general_public_fee_values(args)
 
     def expand_metric_selections(self, args):
         """Copy only the explicitly selected live metric; never choose by amount."""
@@ -1950,17 +2350,90 @@ class BankTools:
                 result['claims'][index]={'text':atom['text'],'evidence_ids':atom['evidence_ids']}
         return result
 
+    def _metric_parts_source_disclosure(self, args):
+        """Host source labels for explicitly selected current-turn metric originals.
+
+        This never infers a source from user words, amount equality or response
+        metadata. Public/hypothetical records do not become simulated balances.
+        """
+        if self.private_context_disabled or self._history_reference is not None:
+            return ''
+        ledger=False;imported=False
+        for part in args['reply_parts']:
+            if 'metric_id' in part:
+                mid=part['metric_id']
+            elif 'statistic_id' in part:
+                atom=self._statistic_session.expand(part['statistic_id'])
+                if 'statement_kind' in atom:
+                    if atom['statement_kind']=='current_budget_cash_scope':ledger=True
+                    continue
+                mid=atom['metric_id']
+            else:
+                continue
+            record=self.metrics.lookup(mid)
+            scope=record['metric']['data_scope']
+            for eid in record['evidence_ids']:
+                evidence=self.evidence.get(eid,{})
+                if evidence.get('context_hash')!=self.start_context:
+                    continue
+                tool=evidence.get('tool');data=evidence.get('data',{})
+                if (scope=='simulation_bank_ledger' and record['kind']=='recorded_fact'
+                        and evidence.get('source')=='simulation'
+                        and tool in ('account_summary','budget','budget_aggregate')):
+                    ledger=True
+                elif (scope=='imported_statement_records'
+                        and tool in ('monthly_statement','annual_statement','statement_details')
+                        and evidence.get('source')=='imported_local_csv'
+                        and data.get('source')=='imported_local_csv'
+                        and data.get('environment')=='local_import'):
+                    imported=True
+        if not ledger:
+            return ''
+        return ('本次账户数据及预算基线来自本机模拟账户；本地导入账单另行统计，两者独立。'
+                if imported else '本次账户数据及预算基线来自本机模拟账户。')
+
+    def _legacy_followups_for_parts(self, args):
+        # Invoke only on the validated private metric/statistic parts path,
+        # before its original render binding. Other source-specific protocols
+        # retain their authored envelope and existing legacy revision path.
+        if (args.get('interaction')is not None or args.get('draft_ids')
+                or self.calendar_drafts or self._history_reference is not None
+                or self._joint_source_plan is not None or self._fee_delivery_context is not None):
+            return args
+        values=args.get('followups')
+        if type(values)is not list or user_followups_for_review(values)!=values:
+            return args
+        spec=legacy_followups_interaction(values,language=self._reply_language)
+        if spec is None:return args
+        canonical_labels=[item['label']for item in spec['options']]
+        if user_followups_for_review(canonical_labels)!=canonical_labels:return args
+        try:
+            for text in [spec['prompt'],*[item['label']for item in spec['options']]]:
+                if monetary_occurrences(text):return args
+        except MetricClaimError:
+            return args
+        # Preserve every other field and the complete option order. The normal
+        # interaction contract, full review and FinalProof remain mandatory.
+        return {**args,'followups':[],'interaction':spec}
+
     def render_metric_parts(self, args):
         """Render an explicit current metric reference; no amount calculation."""
         self.validate_answer_arguments(args)
         if 'reply_parts' not in args:
             self._statistic_session.bind_render(args,{}, {})
             return args
-        if not self.metrics.metric_ids:return self._render_public_quote_parts(args)
+        if not self.metrics.metric_ids and self.public_quote_fact_ids():return self._render_public_quote_parts(args)
         self.fresh()
+        args=self._legacy_followups_for_parts(args)
         pieces=[];claims=[];position=0;stat_ranges={};stat_ids={}
         unit_normalizations=[];previous_cny_metric=None
+        rendered=None;rendered_ready=False
         try:
+            # Source wording is part of the same rendered body before all amount
+            # offsets, Boundary, complete GLM review and FinalProof are bound.
+            disclosure=self._metric_parts_source_disclosure(args)
+            if disclosure:
+                pieces.append(disclosure);position=len(disclosure)
             for part_index,part in enumerate(args['reply_parts']):
                 preceding_cny_metric=previous_cny_metric;previous_cny_metric=None
                 if 'text' in part:
@@ -1981,13 +2454,17 @@ class BankTools:
                             'normalized_text_sha256':hashlib.sha256(literal.encode()).hexdigest()})
                 elif 'statistic_id' in part:
                     atom=self._statistic_session.expand(part['statistic_id']);literal=atom['text']
-                    record=self.metrics.lookup(atom['metric_id']);metric=record['metric']
-                    parsed=monetary_occurrences(literal)
-                    if len(parsed)!=1 or (parsed[0]['value_minor'],parsed[0]['currency'])!=(metric['value_minor'],metric['currency']):
-                        raise BankError('STATISTIC_BINDING_INVALID','统计原子绑定无效。',422)
-                    row=parsed[0]
-                    claims.append({**self.metrics.binding(atom['metric_id']),'text':literal[row['start']:row['end']],
-                        'occurrence_start':position+row['start']})
+                    if 'statement_kind' in atom:
+                        if monetary_occurrences(literal):
+                            raise BankError('STATISTIC_BINDING_INVALID','非货币来源原子不能制造金额。',422)
+                    else:
+                        record=self.metrics.lookup(atom['metric_id']);metric=record['metric']
+                        parsed=monetary_occurrences(literal)
+                        if len(parsed)!=1 or (parsed[0]['value_minor'],parsed[0]['currency'])!=(metric['value_minor'],metric['currency']):
+                            raise BankError('STATISTIC_BINDING_INVALID','统计原子绑定无效。',422)
+                        row=parsed[0]
+                        claims.append({**self.metrics.binding(atom['metric_id']),'text':literal[row['start']:row['end']],
+                            'occurrence_start':position+row['start']})
                     stat_ranges.setdefault('text',[]).append((position,position+len(literal)))
                     stat_ids.setdefault('text',[]).append(part['statistic_id'])
                 else:
@@ -2006,8 +2483,15 @@ class BankTools:
                         previous_cny_metric=(part_index,mid,literal)
                 pieces.append(literal);position+=len(literal)
             rendered={key:deepcopy(value)for key,value in args.items()if key!='reply_parts'}
+            claim_references=args.get('claims',[])
+            if self._statistic_session.ids:
+                # Only model-selected parts issue host claims; keep the model draft unchanged.
+                selected=list(dict.fromkeys(part['statistic_id'] for part in args['reply_parts']
+                    if 'statistic_id' in part))
+                claim_references=[{'statistic_id':sid}for sid in selected]
+                rendered['claims']=claim_references
             rendered=self._statistic_claim_envelope(rendered)
-            for index,claim in enumerate(args.get('claims',[])):
+            for index,claim in enumerate(claim_references):
                 if isinstance(claim,dict) and set(claim)=={'statistic_id'}:
                     field='claims['+str(index)+'].text'
                     stat_ranges[field]=[(0,len(rendered['claims'][index]['text']))]
@@ -2015,6 +2499,7 @@ class BankTools:
             rendered.update(text=''.join(pieces),amount_claims=claims)
             # Original whole-body length and 24-claim ceiling remain authoritative.
             validate(rendered,SPECS['answer_reviewed'][1])
+            rendered_ready=True
             actual={(row['start'],row['end'],row['value_minor'],row['currency'])
                 for row in monetary_occurrences(rendered['text'])}
             for claim in claims:
@@ -2023,7 +2508,17 @@ class BankTools:
                 if expected not in actual:
                     raise BankError('METRIC_PARTS_SPAN','指标金额片段与最终正文解析位置不一致。',422)
         except MetricClaimError as error:
-            raise BankError(error.code,'金额片段须符合原完整金额合同。',422) from error
+            rejection=BankError(error.code,'金额片段须符合原完整金额合同。',422)
+            # Read-only diagnostics over the same complete unapproved draft.
+            # No render binding, receipt or publishing authority is issued.
+            if (rendered_ready and self._history_reference is None
+                    and not stat_ranges and not stat_ids):
+                from .operation_claims import OperationWordingError, validate_operation_wording
+                try:
+                    validate_operation_wording(rendered,self)
+                except OperationWordingError as operation_error:
+                    rejection._joint_operation_error=operation_error
+            raise rejection from error
         self._statistic_session.bind_render(rendered,stat_ranges,stat_ids)
         self.metric_part_receipts.append({'contract':'navren.metric-parts-rendering/1',
             'raw_reply_parts_sha256':hashlib.sha256(encoded(args['reply_parts']).encode()).hexdigest(),
@@ -2069,19 +2564,19 @@ class BankTools:
     def security_arguments_invalid(self):
         self.g.security_events.observe(self.w,'TOOL_ARGUMENTS_INVALID')
 
-    def _security_add_operations(self,identifiers):
+    def _security_add_operations(self,identifiers,*,capture_before=False):
         # Target references do not grant identity; only persisted own objects bind.
         values=[x for x in identifiers if type(x) is str and re.fullmatch('[a-f0-9]{32}',x)]
         with closing(self.g.bank.connect()) as db:
             for value in values[:32]:
-                if (value not in self._audit_operations and db.execute(
-                        'SELECT 1 FROM operations WHERE workspace_id=? AND id=?',(self.w,value)).fetchone()):
-                    self._audit_operations.append(value)
+                if db.execute('SELECT 1 FROM operations WHERE workspace_id=? AND id=?',(self.w,value)).fetchone():
+                    if value not in self._audit_operations:self._audit_operations.append(value)
+                    if capture_before:self.g.security_events.capture_before(db,self.w,value)
 
     def invoke(self,name,args):
         with self.security_call(force_new=True):
             if name in ('operation_status','withdraw_draft') and isinstance(args,dict):
-                self._security_add_operations([args.get('operation_id')])
+                self._security_add_operations([args.get('operation_id')],capture_before=True)
             output=self._invoke(name,args)
             data=output.get('data') if isinstance(output,dict) else None
             if isinstance(data,dict):
@@ -2098,6 +2593,7 @@ class BankTools:
             return output
 
     def _invoke(self, name, args):
+        optional_cashflow=(name=='cashflow'and getattr(self,'_optional_cashflow_read',False)is True)
         self.request_privacy.require_tool(name)
         if name not in SPECS:
             raise BankError('TOOL_FORBIDDEN', '该工具不在允许调用范围。', 403)
@@ -2108,6 +2604,10 @@ class BankTools:
             args=(self.render_public_quote_answer(args) if 'direct_answer' in args else
                   self.render_metric_parts(args) if 'reply_parts' in args else self.expand_metric_selections(args))
         else:validate(args, SPECS[name][1])
+        if name=='customer_records' and args.get('view')=='full':
+            # Normalize the explicit native full choice to the unchanged legacy
+            # parameters before monetary issuance, evidence and cache binding.
+            args={key:value for key,value in args.items() if key!='view'}
         if name == 'answer_reviewed' and self.metrics.metric_ids and 'amount_claims' not in args:
             raise BankError('METRIC_CLAIMS_REQUIRED',
                 '本轮已有正式指标，answer_reviewed必须显式提交amount_claims；普通claims不能代替金额签名。无个人金额时提交空数组。',422)
@@ -2287,8 +2787,18 @@ class BankTools:
         elif name == 'knowledge_status':
             data = self.knowledge.status()
         elif name == 'knowledge_search':
+            search_args=deepcopy(args)
+            # Keep private user text local; only the public facet leaves this step.
+            local_intent=unicodedata.normalize('NFKC',self.user_text)
+            if (re.search(r'赎回|划付|支付|到账|退款',local_intent)
+                    and re.search(r'时间|时限|期限|多久|几[天日]|顺延|工作日|自然日|日历[天日]|[0-9一二三四五六七八九十]+个?[天日]|T\s*\+',local_intent,re.I)):
+                facets=list(search_args.get('facets',[]))
+                if 'liquidity' not in facets:
+                    if len(facets)>=8:
+                        raise BankError('INVALID_TOOL_ARGUMENTS','时间问题所需检索维度超出本轮上限。',422)
+                    search_args['facets']=[*facets,'liquidity']
             try:
-                data = self.knowledge.search(**args)
+                data = self.knowledge.search(**search_args)
             except ValueError as error:
                 raise BankError('STALE_KNOWLEDGE_EVIDENCE','知识来源、权限或原文版本已变化，请重新检索。',409) from error
             self.advice = True
@@ -2320,6 +2830,8 @@ class BankTools:
                 if not data['items']:raise BankError('PLAN_NOT_FOUND','研究备选不属于当前账户或已不可用。',404)
             self.advice=True
         elif name == 'customer_records':
+            if args.get('view')=='contract_terms' and args['domain']!='loans':
+                raise BankError('INVALID_TOOL_ARGUMENTS','合同条款视图仅适用于借贷档案。')
             fields={'loans':['loans','loan_installments'], 'insurance':['insurance_policies','insurance_claims'],
                     'deposits':['deposit_contracts'], 'support':['disputes','support_cases'],
                     'permissions':['permission_grants','consents','account_limits','account_restrictions'],
@@ -2328,6 +2840,21 @@ class BankTools:
             data={'as_of':archive['as_of'],'records':{k:archive['records'].get(k,[]) for k in fields},
                   'unavailable_entities':[k for k in fields if k not in archive['records']],
                   'notice':'缺失的档案表表示尚未接入，不能据此声称用户没有保险或保障。'}
+            if args.get('view')=='contract_terms':
+                rows=[]
+                for loan in archive['records'].get('loans',[]):
+                    rate=loan.get('annual_rate_bps')
+                    rate=rate if type(rate)is int else None
+                    rows.append({**{k:loan.get(k) for k in ('id','loan_type','status')},
+                        'rate_terms':{'annual_rate_bps':rate,'unit':'basis_points',
+                            'missing_fields':['rate_type','benchmark','spread_bps','repricing_rule']
+                                +(['annual_rate_bps'] if rate is None else [])}})
+                data={'as_of':archive['as_of'],'version':archive['version'],
+                    'environment':archive['environment'],'data_scope':archive['data_scope'],
+                    'read_scope':'loan_contract_terms','records':{'loans':rows},
+                    'unavailable_entities':[] if 'loans' in archive['records'] else ['loans'],
+                    'notice':'仅查询当前已接入的模拟贷款合同类型与利率字段，不含还款计划、余额或费用；annual_rate_bps为原档案年利率基点，未提供固定或浮动类型、基准、加点及重定价规则。当前记录没有某类贷款不能证明本人现实中没有该类贷款，缺失条款不能推出实际利率调整结果。'}
+                _validate_loan_contract_terms(data)
         elif name == 'account_summary':
             s = self.g.overview(self.w)
             totals = {}
@@ -2350,6 +2877,8 @@ class BankTools:
                     principal[c]['pending_redemption_minor'] += order['amount_minor']
             data['principal_summary'] = list(principal.values())
             data['financial_scope_basis'] = '*_minor金额字段是币种最小货币单位的整数，人民币为分，不能直接当作元；个人金额用本轮metric_id展示，不抄写字段数值。已结算现金、持仓本金、待到账赎回分别说明；持仓本金或解除锁定不等于已结算现金或赎回到账，当前现金预算不含仍属持仓本金或未到账赎回的金额，不能称这些持仓已加进可安排资金。仅凭持仓本金不能声称全部持仓被锁定或都有同一退出规则。正式风险等级是适当性条件，不对应权益比例或确定回撤；假设条件不覆盖正式画像。'
+            from .read_completion import holding_horizon_basis_text
+            data['financial_scope_basis'] += holding_horizon_basis_text(data, self.user_text)
         elif name == 'budget':
             reserves = args.get('reserves', [])
             if reserves and args['account_id'] not in self.budget_baselines:
@@ -2398,7 +2927,7 @@ class BankTools:
                         ('minimum_available_if_candidates_occur_minor','candidate_floor_breached')):
                     amount = account.get(field)
                     account[flag] = amount < 0 if type(amount) is int else None
-            self.cashflow_timeline = data
+            if not optional_cashflow:self.cashflow_timeline = data
         elif name == 'money_calculation':
             values=args['values_minor'];operation=args['operation']
             if operation=='multiply':
@@ -2529,6 +3058,13 @@ class BankTools:
         # Only a registered, side-effect-free optional read may be deferred.
         # Its complete original is checked before it becomes usable evidence.
         admit=getattr(self,'_optional_read_admission',None)
+        if optional_cashflow:
+            if not callable(admit):
+                raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','可选现金流准入不可用。',503)
+            candidate,output=self.preview_optional_read(name,args,data)
+            admit(candidate,name,args,output)
+            self._adopt_optional_cashflow(candidate,output,args,data)
+            return output
         if name=='personal_graph' and admit is not None:
             if not callable(admit):
                 raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','可选读取准入不可用。',503)
@@ -2538,7 +3074,9 @@ class BankTools:
         return self._record_result(name,args,data,catalog_information=catalog_information)
 
     def preview_optional_read(self,name,args,data):
-        # Deliberately closed: other tools need their own no-side-effect proof.
+        # Deliberately closed: the host flag is never a model tool argument.
+        if name=='cashflow'and getattr(self,'_optional_cashflow_read',False)is True:
+            return self._preview_optional_cashflow(args,data)
         if name!='personal_graph':
             raise BankError('TOOL_FORBIDDEN','该工具不支持可选读取预览。',403)
         candidate=copy(self)
@@ -2551,6 +3089,104 @@ class BankTools:
         if output['metrics'] or candidate.metric_batches!=self.metric_batches:
             raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','可选读取发行合同已变化。',503)
         return candidate,output
+
+    def _preview_optional_cashflow(self,args,data):
+        """Closed native issuer view: discardable state, one complete signed batch."""
+        from financial_metrics import FinancialMetrics
+        from base_runtime.evidence import MetricEvidenceObserver
+        validate(args,SPECS['cashflow'][1])
+        issuer=getattr(self.g,'financial_metrics',None)
+        observed=type(issuer)is MetricEvidenceObserver
+        service=issuer.service if observed else issuer
+        if type(service)is not FinancialMetrics:
+            raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','可选现金流发行器不支持隔离预览。',503)
+        candidate=copy(self);gateway=copy(self.g)
+        local_service=service.bound_gateway(gateway)
+        caches=('_budget_observations','_cashflow_prepare_transitions',
+                '_prepared_operation_rows','_funding_issuances')
+        issuer_before={field:deepcopy(getattr(service,field))for field in caches}
+        for field,value in issuer_before.items():setattr(local_service,field,deepcopy(value))
+        observed_before=deepcopy(issuer.batches)if observed else None
+        gateway.financial_metrics=(MetricEvidenceObserver(local_service)if observed else local_service)
+        if observed:gateway.financial_metrics.batches=deepcopy(observed_before)
+        candidate.g=gateway
+        fields=('evidence','facts','drafts','trace','identifiers','widgets',
+                'metrics','ratios','metric_batches','cashflow_timeline','advice')
+        before={field:deepcopy(getattr(self,field))for field in fields}
+        for field,value in before.items():setattr(candidate,field,deepcopy(value))
+        # Cashflow emits no statistic, but a reused session must never retain
+        # ownership of the live BankTools/observer during a private preview.
+        statistics=copy(self._statistic_session)
+        statistics._tools=candidate;statistics._gateway=gateway
+        statistics._service=gateway.financial_metrics
+        statistics._items=deepcopy(self._statistic_session._items)
+        statistics._proof=deepcopy(self._statistic_session._proof)
+        candidate._statistic_session=statistics
+        candidate.cashflow_timeline=deepcopy(data)
+        output=candidate._record_result('cashflow',args,deepcopy(data),catalog_information=None)
+        candidate._optional_cashflow_preview={'owner':self,'fields':fields,'before':before,
+            'issuer':issuer,'service':service,'local_service':local_service,
+            'issuer_before':issuer_before,'observed_before':observed_before,
+            'statistics':self._statistic_session,'output':deepcopy(output),
+            'after':{field:deepcopy(getattr(candidate,field))for field in fields},
+            'arguments':deepcopy(args),'data':deepcopy(data)}
+        return candidate,output
+
+    def _adopt_optional_cashflow(self,candidate,output,args,data):
+        preview=getattr(candidate,'_optional_cashflow_preview',None)
+        if (not isinstance(preview,dict)or preview['owner']is not self
+                or self.g.financial_metrics is not preview['issuer']
+                or len(candidate.metric_batches)!=len(self.metric_batches)+1):
+            raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','可选现金流预览状态已变化，未提交。',503)
+        # Keep database freshness/validation outside the issuer lock; publication
+        # rechecks them normally. The lock protects the pure state comparison
+        # and commit, without reversing bank/issuer lock acquisition order.
+        self.fresh()
+        preview['service'].validate(self.w,candidate.metric_batches[-1])
+        with preview['service']._tool_lock:
+            self._commit_optional_cashflow(candidate,output,args,data)
+
+    def _commit_optional_cashflow(self,candidate,output,args,data):
+        """Adopt the same checked issuance; never issue a second random batch."""
+        def invalid():
+            raise BankError('AGENT_BUDGET_ESTIMATOR_UNAVAILABLE','可选现金流预览状态已变化，未提交。',503)
+        preview=getattr(candidate,'_optional_cashflow_preview',None)
+        if (not isinstance(preview,dict)or preview['owner']is not self
+                or self.g.financial_metrics is not preview['issuer']
+                or self._statistic_session is not preview['statistics']
+                or output!=preview['output']or args!=preview['arguments']or data!=preview['data']):invalid()
+        for field in preview['fields']:
+            actual,old=getattr(self,field),preview['before'][field]
+            if (actual.__dict__!=old.__dict__ if field in ('metrics','ratios')else actual!=old):invalid()
+            proposed,checked=getattr(candidate,field),preview['after'][field]
+            if (proposed.__dict__!=checked.__dict__ if field in ('metrics','ratios')else proposed!=checked):invalid()
+        for field,old in preview['issuer_before'].items():
+            if getattr(preview['service'],field)!=old or getattr(preview['local_service'],field)!=old:invalid()
+        statistics=candidate._statistic_session
+        if (statistics._items!=self._statistic_session._items
+                or statistics._proof!=self._statistic_session._proof
+                or candidate.drafts!=self.drafts or candidate.widgets!=self.widgets
+                or candidate.ratios.__dict__!=self.ratios.__dict__):invalid()
+        if (len(candidate.metric_batches)!=len(self.metric_batches)+1
+                or candidate.metric_batches[:-1]!=self.metric_batches):invalid()
+        batch=candidate.metric_batches[-1]
+        if (batch.get('tool_name')!='cashflow'or batch.get('arguments')!=args
+                or output.get('data')!=data
+                or [row['metric']for row in output.get('metrics',[])]!=batch.get('metrics')):invalid()
+        observed_before=preview['observed_before'];issuer=preview['issuer']
+        if observed_before is not None:
+            if (issuer.batches!=observed_before or candidate.g.financial_metrics.batches!=observed_before+[batch]):invalid()
+        adopted={field:getattr(candidate,field)for field in preview['fields']}
+        previous={field:getattr(self,field)for field in preview['fields']}
+        # Request-local synchronous commit; keep the observer list identity used
+        # by other views, and restore all live references if commit raises.
+        try:
+            self.__dict__.update(adopted)
+            if observed_before is not None:issuer.batches[:]=candidate.g.financial_metrics.batches
+        except BaseException:
+            self.__dict__.update(previous)
+            if observed_before is not None:issuer.batches[:]=observed_before
+            raise
 
     def _record_result(self,name,args,data,*,catalog_information=None):
         self.remember_identifiers(name,data)
@@ -2587,6 +3223,8 @@ class BankTools:
         metric_records=[] if self._history_reference is not None or catalog_information is not None else self._register_metrics(name,args,data,evidence_id)
         facts = [f for f in self.facts.values() if f['evidence_id']==evidence_id]
         self.trace.append({'tool':name,'evidence_id':evidence_id,'status':'completed'})
+        if self._history_reference is None and catalog_information is None and not self.private_context_disabled:
+            self._statistic_session.register_source(name,evidence_id)
         output={'evidence_id':evidence_id,'data':data,'facts':facts,'metrics':metric_records}
         statistics=self._statistic_session.catalog(evidence_id)
         if statistics:output['statistics']=statistics

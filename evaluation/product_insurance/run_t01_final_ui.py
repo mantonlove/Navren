@@ -2,12 +2,11 @@
 import hashlib
 import json
 from pathlib import Path
-import os
 import sqlite3
 import subprocess
 from evaluation.product_insurance.run_joint_matrix import OUT, ROOT
 
-CLI=os.environ.get('PLAYWRIGHT_CLI','playwright-cli')
+CLI='/Users/manton/.codex/skills/playwright/scripts/playwright_cli.sh'
 
 
 def main():

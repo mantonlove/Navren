@@ -61,6 +61,31 @@ def _scope_authorization_text(text):
     return re.sub(r'(?:假设|假如|如果|设想|举例|例如|譬如)[^，,。；;！？!?\n]*',' ',text)
 
 
+def _disclaimed_hypothesis_scope(text, authorization_text):
+    """A narrow data ceiling, after actual private requests kept their path."""
+    if (any(text.count(left) != text.count(right) for left, right in
+            (('“', '”'), ('‘', '’'), ('「', '」'), ('『', '』')))
+            or text.count('"') % 2 or text.count("'") % 2):
+        return False
+    active = text
+    for pattern in (r'“[^”]*”', r'‘[^’]*’', r'「[^」]*」', r'『[^』]*』',
+                    r'"[^"\n]*"', r"'[^'\n]*'"):
+        active = re.sub(pattern, ' ', active)
+    # Reported material cannot establish the user's own scope declaration.
+    if re.search(r'(?:文档|网页|资料|条款|材料|提示词|产品说明|模型|Jev|朋友|他人|第三方|对方)'
+                 r'[^，,。；;！？!?\n]{0,16}?(?:说|写|要求|提示|建议|内容为|内容是)', active, re.I):
+        return False
+    # Preserve independent real read/action requests that the earlier finite
+    # private branch does not recognize; never turn them into a hypothesis.
+    if re.search(r'查询|核对|查看|读取|调取|访问|告诉我|给我看看|帮我查询|'
+                 r'转账|还款|扣款|挂失|申购|赎回|买入|卖出|认购|保存|记住', authorization_text):
+        return False
+    return bool(re.search(r'(?:只|仅)(?:做|作|进行|按)?(?:条件(?:化)?|假设(?:条件)?)(?:讨论|分析|推演)', active)
+        and re.search(r'假设|假如|如果|设想', active)
+        and re.search(r'(?:不是|并非|不代表)(?:我(?:的)?|本人(?:的)?)(?:真实|实际)(?:情况|事实|资料)', active)
+        and re.search(r'(?:不是|并非|不代表)(?:(?:我|本人)(?:的)?)?已(?:经)?确认(?:的)?目标', active))
+
+
 def explicit_simulated_wealth_read(text):
     """Select maintainer methods for an explicit own simulated-holdings read.
 
@@ -239,6 +264,8 @@ class RequestPrivacyPolicy:
         if (private_selected or _PRIVATE_REQUEST.search(authorization_text)
                 or _active_private_request(text,authorization_text)):
             return cls(False, version='host-turn-data-scope/1')
+        if _disclaimed_hypothesis_scope(text, authorization_text):
+            return cls(True, version='host-turn-data-scope/1', scope_reason='disclaimed_hypothesis')
         public_product=(bool(_PUBLIC_PRODUCT.search(text)) or
             (cls.is_public_reference(page_context) and page_context.get('kind') == 'product'))
         return cls(bool(public_product), version='host-turn-data-scope/1', scope_reason='public_product' if public_product else 'normal')

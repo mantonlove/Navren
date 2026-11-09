@@ -35,7 +35,8 @@
     'proto', 'constructor', 'prototype']);
   const SAFE_STATUS = Object.freeze({
     withheld: '该条历史回复当前无法核验，正文暂不展示。',
-    not_published: '这次回复未发布。'
+    not_published: '这次回复未发布。',
+    archive_unavailable: '这条历史回复未完整保存，暂时无法恢复。'
   });
 
   function fail(code) {
@@ -170,17 +171,37 @@
     }
     mediaList(attachments, true);
   }
+  const DOCUMENT_MIME = Object.freeze({
+    'application/pdf':'pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'xlsx',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation':'pptx',
+    'text/plain':'txt','text/markdown':'md','text/csv':'csv'});
+  function documentFields(value) {
+    const name=value.file_name, format=DOCUMENT_MIME[value.mime_type];
+    if (!text(name,180) || name !== name.trim() || /[\/\\]/u.test(name) || /\p{C}/u.test(name) ||
+        name.lastIndexOf('.') <= 0 || name.slice(name.lastIndexOf('.')).toLowerCase() !== '.'+format ||
+        value.document_format !== format || !integer(value.text_chars,0) || value.text_chars > 120000 ||
+        !(value.extraction_status === 'text' && value.text_chars > 0 && value.extraction_warning === null ||
+          value.extraction_status === 'no_text' && value.text_chars === 0 && text(value.extraction_warning,200))) throw fail('INVALID_ARCHIVE_DTO');
+  }
   function mediaDescriptor(value) {
-    keys(value, ['contract','media_id','kind','mime_type','bytes','sha256','duration_ms','storage_status',
-      'content_url','historical_readonly','execution_authority','audio_format']);
-    const mime = new Set(['image/png','image/jpeg','image/webp','image/gif','audio/wav','audio/webm','audio/ogg','audio/mpeg','audio/mp4','audio/pcm']);
+    const document=value?.kind === 'document';
+    const required=['contract','media_id','kind','mime_type','bytes','sha256','duration_ms','storage_status',
+      'content_url','historical_readonly','execution_authority','audio_format'];
+    keys(value, document ? required.concat(['file_name','document_format','text_chars','extraction_status','extraction_warning']) : required);
+    const mime = new Set(['image/png','image/jpeg','image/webp','image/gif','audio/wav','audio/webm','audio/ogg','audio/mpeg','audio/mp4','audio/pcm',...Object.keys(DOCUMENT_MIME)]);
     if (value.contract !== 'navren.chat-media/1' || typeof value.media_id !== 'string' || !HASH.test(value.media_id) ||
-        typeof value.sha256 !== 'string' || !HASH.test(value.sha256) || !['image','audio'].includes(value.kind) ||
+        typeof value.sha256 !== 'string' || !HASH.test(value.sha256) || !['image','audio','document'].includes(value.kind) ||
         !mime.has(value.mime_type) || (value.kind === 'image') !== value.mime_type.startsWith('image/') ||
-        !integer(value.bytes,1) || value.bytes > (value.kind === 'image' ? 10485760 : 26214400) ||
+        (value.kind === 'audio') !== value.mime_type.startsWith('audio/') || document !== own(DOCUMENT_MIME,value.mime_type) ||
+        !integer(value.bytes,1) || value.bytes > (value.kind === 'audio' ? 26214400 : 10485760) ||
         value.storage_status !== 'bound' || value.content_url !== '/api/finance/chat-media/' + value.media_id ||
         value.historical_readonly !== true || value.execution_authority !== false ||
         !(value.duration_ms === null || integer(value.duration_ms,1) && value.duration_ms <= 600000)) throw fail('INVALID_ARCHIVE_DTO');
+    if (document) {
+      if (value.duration_ms !== null || value.audio_format !== null) throw fail('INVALID_ARCHIVE_DTO');
+      documentFields(value);
+    }
     const format=value.audio_format;
     if (format !== null) {
       keys(format,['encoding','sample_rate','channels']);
@@ -213,11 +234,11 @@
         value.current_fact_eligible !== false || value.execution_authority !== false) throw fail('INVALID_ARCHIVE_DTO');
     if (own(value, 'readonly_components')) archivedDisplay(value.readonly_components);
     if (own(value,'attachments')) mediaList(value.attachments);
-    if (value.status === 'withheld' || value.status === 'not_published') {
+    if (value.status === 'withheld' || value.status === 'not_published' || value.status === 'archive_unavailable') {
       if (value.content !== null || own(value,'attachments') && value.attachments.length) throw fail('INVALID_ARCHIVE_DTO');
       return;
     }
-    if (!['published_original', 'published_local_rule'].includes(value.status) ||
+    if (!['published_original', 'published_local_rule', 'published_verified_facts'].includes(value.status) ||
         published.some(key => !own(value, key)) || !text(value.content, 6000) ||
         !['zh', 'en'].includes(value.language) || !['unchanged', 'changed'].includes(value.source_versions_state) ||
         !integer(value.original_personal_revision, 0) || value.original_personal_revision > page.personal_revision ||
@@ -229,6 +250,8 @@
         !(review.review_id === null || typeof review.review_id === 'string')) throw fail('INVALID_ARCHIVE_DTO');
     if (value.status === 'published_original') {
       if (review.source !== 'agent_review' || review.status !== 'approved_at_publication') throw fail('INVALID_ARCHIVE_DTO');
+    } else if (value.status === 'published_verified_facts') {
+      if (review.source !== 'host_verified_facts' || review.status !== 'not_required' || review.reviewer_model !== null || review.review_id !== null || own(review,'rule_id')) throw fail('INVALID_ARCHIVE_DTO');
     } else if (review.source !== 'local_rule' || review.status !== 'not_required' || !text(review.rule_id, 160)) {
       throw fail('INVALID_ARCHIVE_DTO');
     }
@@ -280,7 +303,7 @@
       text: item.user.content, created_at: iso(item.received_at), status: 'archived',
       references: clone(item.user.references), attachments: clone(item.user.attachments) };
     const a = item.assistant;
-    const readable = a.status === 'published_original' || a.status === 'published_local_rule';
+    const readable = a.status === 'published_original' || a.status === 'published_local_rule' || a.status === 'published_verified_facts';
     const assistant = { ...base, message_id: a.message_id, position: 1, role: 'assistant',
       kind: readable ? 'published-readback' : 'safe-status', text: readable ? a.content : SAFE_STATUS[a.status],
       created_at: iso(readable ? a.publication.published_at : item.received_at), status: a.status,
@@ -290,7 +313,7 @@
     // Neither original packets, actions, HTML nor current execution credentials
     // leave this projection. Trust comes from the injected authenticated reader.
     const receivedMediaOnly = user.text === '' && user.references.length === 0 &&
-      user.attachments.some(item => item.contract === 'navren.chat-media/1') && a.status === 'not_published';
+      user.attachments.some(item => item.contract === 'navren.chat-media/1') && (a.status === 'not_published' || a.status === 'archive_unavailable');
     return freeze(receivedMediaOnly ? [user] : [user, assistant]);
   }
   function restartCode(code) {

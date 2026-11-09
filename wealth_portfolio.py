@@ -31,6 +31,11 @@ class WealthPortfolio:
     def products(self):
         return [d['product']for c in FUNDS if(d:=cached(c))]
 
+    def source_revision(self):
+        """只读公开来源指纹，不创建、刷新或激活任何组合。"""
+        data=[d for c in FUNDS if(d:=cached(c))]
+        return hashlib.sha256(pack({'expected':list(FUNDS),'sources':data}).encode()).hexdigest()
+
     def provision(self,w):
         """只构建独立历史回放；绝不把回放份额写回真实/现有账户。幂等、源修订生成新版。"""
         data=[d for c in FUNDS if(d:=cached(c))]
@@ -65,7 +70,6 @@ class WealthPortfolio:
                 db.execute('INSERT INTO portfolio_positions VALUES(?,?,?,?,?)',(w,pid,acc,fid,pack(pos)))
 
     def versions(self,w):
-        self.provision(w)
         with self.bank.transaction()as db:
             self.bank._workspace(db,w)
             rows=[{**dict(r),'metadata':json.loads(r['payload'])}for r in db.execute('SELECT * FROM portfolio_versions WHERE workspace_id=? ORDER BY effective_on DESC',(w,))]
@@ -73,7 +77,6 @@ class WealthPortfolio:
         return {'versions':rows,'products':self.products(),'accounting_basis':'total_equity_v2'}
 
     def points(self,w,start,end,portfolio='historical'):
-        self.provision(w)
         with self.bank.transaction()as db:
             self.bank._workspace(db,w)
             version=db.execute('SELECT * FROM portfolio_versions WHERE workspace_id=? AND '+('kind=? AND active=1'if portfolio in ['historical','current']else 'id=?'),(w,portfolio)).fetchone()

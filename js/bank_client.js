@@ -16,6 +16,53 @@ window.NavrenPresentation={
 /** 同源模拟银行客户端。身份在HttpOnly Cookie中；不保存金融状态或验证码到本地存储。 */
 window.BankClient = (() => {
   let session = null, boot = null, generation=0, reselecting=false;
+  // 仅供本机显式G01验收观察，不认证、不请求接口、不赋予任何权限。
+  const identityProjectionEnabled=(()=>{
+    try{return ['http:','https:'].includes(window.location.protocol)&&
+      ['127.0.0.1','localhost','[::1]'].includes(window.location.hostname)&&
+      new URLSearchParams(window.location.search).get('navren_g01_identity')==='1';}
+    catch(_){return false;}
+  })();
+  const identityProjectionAttributes=['data-navren-g01-identity-status','data-navren-g01-registered-user-sha256',
+    'data-navren-g01-workspace-sha256','data-navren-g01-persona'];
+  let identityProjectionEpoch=0,identityProjectionTimer=null,identityProjectionSession=null;
+  function clearIdentityProjection(){
+    identityProjectionEpoch++;clearTimeout(identityProjectionTimer);identityProjectionTimer=null;identityProjectionSession=null;
+    for(const name of identityProjectionAttributes)document.documentElement?.removeAttribute(name);
+  }
+  function projectVerifiedIdentity(current){
+    if(!identityProjectionEnabled||!current||identityProjectionSession===current)return;
+    clearIdentityProjection();
+    try{registeredSession(current);}catch(_){return;}
+    if(!window.crypto?.subtle||typeof TextEncoder!=='function')return;
+    const epoch=identityProjectionEpoch,started=generation;
+    identityProjectionSession=current;
+    const stillCurrent=()=>{
+      if(epoch!==identityProjectionEpoch||started!==generation||session!==current)return false;
+      try{registeredSession(current);return session===current;}catch(_){return false;}
+    };
+    const clearCurrent=()=>{if(epoch===identityProjectionEpoch)clearIdentityProjection();};
+    identityProjectionTimer=setTimeout(clearCurrent,Math.max(0,Math.min(2147483647,
+      Math.ceil((Math.min(current.auth_expires_at,current.lease_expires_at)-Date.now()/1000)*1000))));
+    const fingerprint=async(field,value)=>{
+      const bytes=new TextEncoder().encode('navren.g01.client-identity/1\0'+field+'\0'+value);
+      const hash=await window.crypto.subtle.digest('SHA-256',bytes);
+      return Array.from(new Uint8Array(hash),byte=>byte.toString(16).padStart(2,'0')).join('');
+    };
+    void Promise.all([fingerprint('registered_user_id',current.registered_user_id),fingerprint('workspace_id',current.workspace_id)])
+      .then(([owner,workspace])=>{
+        if(!stillCurrent()){clearCurrent();return;}
+        const root=document.documentElement;if(!root){clearCurrent();return;}
+        root.setAttribute(identityProjectionAttributes[1],owner);root.setAttribute(identityProjectionAttributes[2],workspace);
+        root.setAttribute(identityProjectionAttributes[3],current.account_id);
+        root.setAttribute(identityProjectionAttributes[0],'verified');
+      }).catch(clearCurrent);
+  }
+  clearIdentityProjection();
+  if(identityProjectionEnabled){
+    window.addEventListener('navren:identity-revoked',clearIdentityProjection);
+    window.addEventListener('pagehide',clearIdentityProjection);
+  }
   const reauthenticationKey='navren_bank_reauthentication';
   let reauthentication=null,legacyReauthentication=null,reauthenticationOwner=null;
   try {
@@ -36,7 +83,7 @@ window.BankClient = (() => {
     }
     session=boot=null;clearHistory();window.dispatchEvent(new Event('navren:identity-revoked'));
   };
-  function invalidate(){generation++;for(const c of reads)c.abort();reads.clear();}
+  function invalidate(){generation++;clearIdentityProjection();for(const c of reads)c.abort();reads.clear();}
   function clearHistory({purgeCache=false,reason='identity_unloaded'}={}){
     // 退出／切号只卸载；显式删除或授权变更仅清当前缓存，归档由服务端管理。
     if(purgeCache){try{Storage.invalidatePrivateCache?.();}catch(_){} }
@@ -45,6 +92,14 @@ window.BankClient = (() => {
     window.dispatchEvent(new CustomEvent('navren:privacy-reset',{detail:{reason,persistent_history_deleted:false}}));
   }
   const registeredId=value=>typeof value==='string'&&/^[a-f0-9]{32}$/.test(value);
+  const smsVerificationReasons=new Set(['SMS_CODE_REJECTED','SMS_CODE_INVALID','SMS_CHALLENGE_INVALID','SMS_EXPIRED','SMS_TIMEOUT','SMS_VERIFY_UNAVAILABLE','FINANCIAL_WRITE_LOCKED']);
+  function smsVerificationFailure(data,path,method){
+    if(method!=='POST'||!/^\/operations\/[a-f0-9]{32}\/confirm$/.test(path)||data?.error?.code!=='SMS_VERIFICATION_FAILED')return null;
+    const meta=data.error.sms_verification;
+    if(!meta||typeof meta!=='object'||Array.isArray(meta)||Object.keys(meta).sort().join(',')!=='reason_code,same_challenge_retry'||
+      !smsVerificationReasons.has(meta.reason_code)||typeof meta.same_challenge_retry!=='boolean'||meta.same_challenge_retry&&meta.reason_code!=='SMS_CODE_REJECTED')return null;
+    return Object.freeze({reason_code:meta.reason_code,same_challenge_retry:meta.same_challenge_retry});
+  }
   const personaIds=new Set(['tycoon','grain_farmer','working_landlady','retired_entrepreneur']);
   const subjectId=value=>typeof value==='string'&&/^[A-Za-z0-9:_-]{16,192}$/.test(value);
   function leaseCurrent(data){
@@ -98,7 +153,7 @@ window.BankClient = (() => {
   function assertBankAccess(){const lock=denialLock();if(lock){const error=new Error(lock.workspace_id?'银行访问会话已失效，请验证银行访问密码或明确选择账户。':'银行重验证记录无法核对，请明确选择账户。');error.code='BANK_RELOGIN_REQUIRED';throw error;}}
   function liveIdentity(){
     if(!session)return null;
-    try{const current=session;registeredSession(current);if(session!==current)return null;return {...current};}
+    try{const current=session;registeredSession(current);if(session!==current)return null;projectVerifiedIdentity(current);return {...current};}
     catch(_){session=boot=null;clearHistory({reason:'registered_session_invalid'});return null;}
   }
   window.addEventListener('storage',e=>{
@@ -146,8 +201,9 @@ window.BankClient = (() => {
       const data = await response.json();
       assertRequestCurrent(requestGeneration,requestWorkspace,requestCsrf,requestOwner,requestSubject,requestServerGeneration,requestAuthExpiry,requestLeaseExpiry);
       if (!response.ok) {
-        const error = new Error(data.error?.message || '银行请求失败');
+        const error = new Error(data.error?.code==='SMS_VERIFICATION_FAILED'?'验证码未通过验证，请检查或重新获取。':data.error?.message || '银行请求失败');
         error.code = data.error?.code; error.status = response.status;
+        const smsFailure=smsVerificationFailure(data,path,method);if(smsFailure)error.sms_verification=smsFailure;
         if (['CSRF_DENIED','SESSION_CHANGED','WORKSPACE_CHANGED'].includes(error.code) || error.status === 401) {
           session = boot = null;clearHistory();
         }
@@ -168,6 +224,7 @@ window.BankClient = (() => {
       if(path==='/session/reset'){registeredSession(data);clearHistory();session=data;boot=null;}
       if(Array.isArray(data)&&requestWorkspace&&(!binding.workspace_id||!Number.isInteger(binding.privacy_revision))){const e=new Error('资料身份或授权版本缺失，请重新核对。');e.code='UNBOUND_RESPONSE';throw e;}
       checkPrivacy(binding,path,method);
+      if(path==='/session/reset')projectVerifiedIdentity(session);
       return path.startsWith('/graph/evidence')||['/account-state','/personal-profile'].includes(path)?data:NavrenPresentation.data(data);
     } catch (error) {
       if (error.name === 'AbortError') throw new Error('银行请求超时。请查询操作状态，暂勿重复提交。');
@@ -216,7 +273,7 @@ window.BankClient = (() => {
         // The welcome gateway already signed the lease; cold start only reads it.
         const next=await raw('/session');
         assertBankAccess();if(started!==generation){const error=Error('旧会话初始化已失效。');error.code='STALE_RESPONSE';throw error;}
-        registeredSession(next);session=next;return session;
+        registeredSession(next);session=next;projectVerifiedIdentity(session);return session;
       })();
       const guarded=pending.catch(e=>{if(boot===guarded)boot=null;throw e;});boot=guarded;
     }
@@ -294,14 +351,14 @@ window.BankClient = (() => {
         (reauthentication&&(reauthentication.registered_user_id!==data.registered_user_id||reauthentication.workspace_id!==data.workspace_id))))throw Error('银行恢复会话与原工作区不一致。');
       try{sessionStorage.removeItem(ownerLockKey(data.registered_user_id));if(legacyReauthentication)sessionStorage.removeItem(reauthenticationKey);}catch(_){throw Error('银行重验证锁无法清除，请重试。');}
       reauthentication=legacyReauthentication=null;reauthenticationOwner=data.registered_user_id;
-      clearHistory();session={...data};boot=null;return {...session};
+      clearHistory();session={...data};boot=null;projectVerifiedIdentity(session);return {...session};
     },
     identity(){return liveIdentity();},
     async refreshIdentity(){
       await ensure();const next=await raw('/session');
       registeredSession(next);
       if(session&&['workspace_id','registered_user_id','auth_subject','session_generation','csrf','auth_expires_at','lease_expires_at'].some(key=>session[key]!==next[key]))clearHistory();
-      session=next;return {...session};
+      session=next;projectVerifiedIdentity(session);return {...session};
     },
     guard(){
       const snapshot=liveIdentity(),gen=generation,view=window.NavrenViews?.revision();
@@ -332,7 +389,7 @@ window.BankClient = (() => {
       if (!/^\d{1,7}(?:\.\d{1,2})?$/.test(s)) throw new Error('金额请输入正数，最多两位小数。');
       const [yuan, cents = ''] = s.split('.');
       const value = Number(yuan) * 100 + Number(cents.padEnd(2, '0'));
-      if (!Number.isSafeInteger(value) || value < 0 || value > 100000000) throw new Error('金额超出模拟业务范围。');
+      if (!Number.isSafeInteger(value) || value < 0 || value > 100000000) throw new Error('金额超出当前业务范围。');
       return value;
     }
   };

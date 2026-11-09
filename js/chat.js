@@ -10,12 +10,8 @@ const PRESET_QUESTIONS = {
 
 let currentMode = 'classic';
 let isListening = false;
-let pendingImage = null;
-// 保留选择的原始 bytes；预览 dataURL 不作为服务端上传原件。
-let pendingImageFile = null;
-const chatImageUploadKeys=new WeakMap();
-const chatImageUploads=new WeakMap();
-const activeChatImageReaders=new Set();
+const chatAttachmentUploadKeys=new WeakMap();
+const chatAttachmentUploads=new WeakMap();
 let handoffActive = false;
 let chatSending=false;
 let chatRequestVersion=0;
@@ -124,18 +120,22 @@ function restoreReplyProjection(message,entry){
 }
 
 let chatArchive=null;
+let chatHistoryView=null;
+function historyView(){return chatHistoryView||=(window.NavrenChatHistoryView?.create());}
 let chatArchiveRun=0;
 let chatArchiveReady=false;
 let chatArchiveBusy=false;
 let chatArchiveNodes=new Map();
+const chatArchiveMediaTasks=new Set();
 const chatWelcomeTemplate=document.getElementById('welcomeMsg')?.closest('.message')?.cloneNode(true)||null;
 
 function unloadChatArchive(){
   chatArchiveRun++;
+  historyView()?.reset();
   window.VoiceMessages?.clear?.();
   window.NavrenChatMedia?.clear();
   const old=chatArchive;chatArchive=null;
-  chatArchiveReady=false;chatArchiveBusy=false;chatArchiveNodes.clear();
+  chatArchiveReady=false;chatArchiveBusy=false;chatArchiveNodes.clear();chatArchiveMediaTasks.clear();
   old?.unload();
   document.getElementById('chatMessages')?.replaceChildren();
   updateChatSendState();
@@ -151,12 +151,13 @@ function archivedUserMessageHtml(row){
   const english=window.NavrenI18n?.language==='en';
   const references=(row.references||[]).map(ref=>'<span class="chat-user-reference" role="group">'+
     '<span class="chat-user-reference-label">'+(english?'Reference':'关联资料')+'</span>'+
-    '<span class="chat-user-reference-title" translate="no" data-i18n-skip>'+escapeHtml(ref.label)+'</span></span>').join('');
+    '<span class="chat-user-reference-title" translate="no" data-i18n-skip>'+escapeHtml(chatReferenceTitle(ref))+'</span></span>').join('');
   const attachment=(row.attachments||[]).some(item=>item.storage_status==='not_archived')?'<span class="chat-user-text">'+
     (english?'The original image was not archived.':'原图片未存档。')+'</span>':'';
   return references+attachment+(row.text?'<span class="chat-user-text">'+escapeHtml(row.text)+'</span>':'');
 }
 function mountArchivedMedia(message,row,run,guard){
+  const tasks=[];
   const current=()=>run===chatArchiveRun&&guard.valid()&&message.isConnected;
   for(const raw of row.attachments||[]){
     if(raw?.storage_status==='not_archived')continue;
@@ -165,23 +166,25 @@ function mountArchivedMedia(message,row,run,guard){
     if(!media)continue;
     if(media.kind==='audio'){
       if(row.kind==='safe-status')continue;
-      Promise.resolve(window.VoiceMessages?.restoreMedia(message,media,row.text,{assistant:row.role==='assistant'})).catch(error=>{
+      tasks.push(Promise.resolve(window.VoiceMessages?.restoreMedia(message,media,row.text,{assistant:row.role==='assistant'})).catch(error=>{
         if(!current()||error?.name==='AbortError'||['MEDIA_ABORTED','MEDIA_STALE'].includes(error?.code))return;
         const note=document.createElement('span');note.className='chat-user-text';note.textContent='语音暂时无法读取。';message.querySelector('.bubble')?.append(note);
-      });
+      }));
       continue;
     }
     if(row.role!=='user')continue;
     const host=message.querySelector('.message-body');if(!host)continue;
+    if(media.kind==='document'){window.NavrenChatAttachments?.mountStoredDocument(host,media,current);continue;}
     const note=document.createElement('span');note.className='chat-user-text';note.textContent='正在读取图片…';host.prepend(note);
-    window.NavrenChatMedia.open(media).then(handle=>{
+    tasks.push(window.NavrenChatMedia.open(media).then(handle=>{
       if(!current()){handle.dispose();return;}
       const image=document.createElement('img');image.alt='聊天图片';image.style.cssText='max-width:200px;border-radius:8px;margin-bottom:6px;display:block';
       image.onload=()=>{if(!current()){handle.dispose();image.remove();}};
       image.onerror=()=>{handle.dispose();if(current()){image.remove();note.textContent='图片暂时无法读取。';host.prepend(note);}};
       image.src=handle.url;note.replaceWith(image);
-    }).catch(()=>{if(current())note.textContent='图片暂时无法读取。';});
+    }).catch(()=>{if(current())note.textContent='图片暂时无法读取。';}));
   }
+  return Promise.allSettled(tasks);
 }
 function renderArchivedComponents(message,row,guard){
   const display=row.readonly_components;
@@ -231,20 +234,22 @@ function renderChatArchiveState(state,run,guard){
     window.VoiceMessages?.clear?.();window.NavrenChatMedia?.clear();
     container.replaceChildren();chatArchiveNodes.clear();chatArchiveReady=false;
   }
-  const live=[...container.children].filter(node=>!node.matches('[data-chat-archive-row],.chat-archive-page-control')&&!node.querySelector('#welcomeMsg'));
+  const live=[...container.children].filter(node=>!node.matches('[data-chat-archive-row],.chat-archive-page-control,[data-chat-history]')&&!node.querySelector('#welcomeMsg'));
   const ordered=[];
   for(const row of state.messages){
     let message=chatArchiveNodes.get(row.message_id);
     if(!message){
       const role=row.role==='user'?'user':'ai';
-      message=addMessage(role,role==='user'?archivedUserMessageHtml(row):renderReplyText(row.text),row.kind==='safe-status',{historical:true});
+      message=addMessage(role,role==='user'?archivedUserMessageHtml(row):renderReplyText(row.text,{safeStatus:row.kind==='safe-status'}),row.kind==='safe-status',{historical:true});
       message.dataset.chatArchiveRow=row.message_id;
       message.dataset.historyReadonly='true';
       message.dataset.bankResponseId=row.request_id;
       renderArchivedComponents(message,row,guard);
       chatArchiveNodes.set(row.message_id,message);
       // 下一微任务时消息已在本次排序后的容器内；旧页/旧身份不允许挂载原件。
-      queueMicrotask(()=>{if(run===chatArchiveRun&&guard.valid()&&message.isConnected)mountArchivedMedia(message,row,run,guard);});
+      const mediaTask=Promise.resolve().then(()=>{if(run===chatArchiveRun&&guard.valid()&&message.isConnected)return mountArchivedMedia(message,row,run,guard);});
+      chatArchiveMediaTasks.add(mediaTask);
+      mediaTask.then(()=>chatArchiveMediaTasks.delete(mediaTask),()=>chatArchiveMediaTasks.delete(mediaTask));
     }
     ordered.push(message);
   }
@@ -262,24 +267,36 @@ function renderChatArchiveState(state,run,guard){
   if(state.phase==='ready'&&state.is_empty===true&&!live.length&&chatWelcomeTemplate){
     const welcome=chatWelcomeTemplate.cloneNode(true);ordered.push(welcome);
   }
-  container.replaceChildren(...(control.childNodes.length?[control]:[]),...ordered,...live);
+  const archivedNodes=[...(control.childNodes.length?[control]:[]),...ordered];
+  const history=state.messages.length?historyView()?.render(archivedNodes):null;
+  if(history){
+    history.style.setProperty('--chat-history-gap',getComputedStyle(container).rowGap);
+    container.replaceChildren(history,...live);
+  }else container.replaceChildren(...archivedNodes,...live);
   if(state.phase==='ready'){
     chatArchiveReady=true;
     const binding=chatBinding(),archived=state.messages.map(row=>archiveHistoryEntry(row,binding));
     const known=new Set(state.messages.map(row=>row.request_id));
     const liveEntries=currentChatHistory().filter(row=>row.client_origin==='live'&&!known.has(row.bank_response_id));
     Storage.set('qingzhou_chatHistory',[...archived,...liveEntries]);
-    if(state.is_empty===true)personalizeWelcome();
-    if(first)scrollToBottom();else container.scrollTop=oldTop+Math.max(0,container.scrollHeight-oldHeight);
+    if(state.is_empty===true){
+      personalizeWelcome();renderPresets();
+      const welcomeText=document.getElementById('welcomeMsg');
+      if(welcomeText)attachMessageSpeech(welcomeText.closest('.message'),welcomeText.textContent||'');
+    }
+    if(first){
+      if(state.messages.length&&historyView()&&!historyView().isExpanded())container.scrollTop=0;
+      else scrollToBottom();
+    }else container.scrollTop=oldTop+Math.max(0,container.scrollHeight-oldHeight);
   }
   updateChatSendState();
 }
-async function initializeChatArchive(){
+async function initializeChatArchive({identity:verifiedIdentity=null}={}){
   unloadChatArchive();
   const run=chatArchiveRun;
   try{
-    const identity=await BankClient.refreshIdentity();if(run!==chatArchiveRun)return false;
-    const guard=BankClient.guard();if(!guard.valid(identity)||!window.NavrenChatArchive)throw Error('archive_unavailable');
+    const identity=verifiedIdentity||await BankClient.refreshIdentity();if(run!==chatArchiveRun)return false;
+    const guard=BankClient.guard();if(!guard.valid(identity)||!window.NavrenChatArchive||!window.NavrenChatHistoryView?.create)throw Error('archive_unavailable');
     const archive=NavrenChatArchive.create({identityProvider:()=>BankClient.identity(),
       readPage:async({cursor,limit,signal})=>{
         if(signal.aborted||run!==chatArchiveRun||!guard.valid())throw Error('stale_archive');
@@ -307,6 +324,8 @@ async function initializeChatArchive(){
       }
     }
     await archive.loadNext();
+    if(run!==chatArchiveRun||!guard.valid())return false;
+    await Promise.allSettled([...chatArchiveMediaTasks]);
     return run===chatArchiveRun&&guard.valid();
   }catch(_){
     if(run!==chatArchiveRun)return false;
@@ -335,29 +354,47 @@ function resetPrivateChat(){
   globalThis.NavrenChatPrivacyVersion=(globalThis.NavrenChatPrivacyVersion||0)+1;
   cancelVoice();
   const input=document.getElementById('userInput');if(input)input.value='';
-  pendingImage=null;
-  pendingImageFile=null;
-  for(const reader of activeChatImageReaders){try{reader.abort();}catch(_){}}activeChatImageReaders.clear();
   try{removeImage();clearChatReference();}catch(_){}
   unloadChatArchive();
 }
 for(const event of ['navren:privacy-reset','navren:identity-revoked','navren:account-change','navren:account-switched','pagehide'])window.addEventListener(event,resetPrivateChat);
 window.addEventListener('storage',event=>{
   const identity=Storage.privateIdentity?.();
-  if(identity&&event.key==='navren:private-cache:provisional:v1:'+identity.registered_user_id+':'+identity.workspace_id+':meta')resetPrivateChat();
+  if(identity&&event.key==='navren:private-cache:provisional:v1:'+identity.registered_user_id+':'+identity.workspace_id+':meta'){
+    window.NavrenPageLoad?.invalidate();resetPrivateChat();
+  }
 });
-window.addEventListener('pageshow',event=>{if(event.persisted&&document.body.dataset.page==='chat')initializeChatArchive();});
+window.addEventListener('pageshow',async event=>{
+  if(!event.persisted||document.body.dataset.page!=='chat')return;
+  let pageLoad=window.NavrenPageLoad?.join();let run;
+  try{
+    const identity=await BankClient.refreshIdentity();await Storage.ready();
+    if(!BankClient.guard().valid(identity))return;
+    pageLoad=window.NavrenPageLoad?.resume();
+    const restoration=initializeChatArchive({identity});run=chatArchiveRun;
+    const restored=await restoration;if(run!==chatArchiveRun)return;
+    if(!restored){pageLoad?.fail(new Error('聊天历史暂时无法读取，请重试。'));return;}
+    await pageLoad?.ready();
+  }catch(error){if(run==null||run===chatArchiveRun)pageLoad?.fail(error);}
+});
 
 // ── Init ──
 document.addEventListener('DOMContentLoaded', async () => {
   if(document.body.dataset.page!=='chat')return;
+  let pageLoad=window.NavrenPageLoad?.join();
+  try{
   const params = new URLSearchParams(window.location.search);
-  try{await BankClient.refreshIdentity();}catch(e){
-    const welcome=document.getElementById('welcomeMsg');if(welcome)welcome.textContent='账户身份暂时无法核对，请刷新后重试。';return;
+  let initialIdentity;
+  try{initialIdentity=await BankClient.refreshIdentity();}catch(e){
+    const welcome=document.getElementById('welcomeMsg');if(welcome)welcome.textContent='账户身份暂时无法核对，请刷新后重试。';pageLoad?.fail(e);return;
   }
-  try { await Storage.ready(); } catch (_) {
-    const welcome=document.getElementById('welcomeMsg');if(welcome)welcome.textContent='账号设置暂时无法恢复，请刷新后重试。';return;
+  try { await Storage.ready(); } catch (error) {
+    const welcome=document.getElementById('welcomeMsg');if(welcome)welcome.textContent='账号设置暂时无法恢复，请刷新后重试。';pageLoad?.fail(error);return;
   }
+  const pageGuard=BankClient.guard(),privacyTurn=globalThis.NavrenChatPrivacyVersion||0;
+  if(!pageGuard.valid(initialIdentity))return;
+  pageLoad=window.NavrenPageLoad?.resume();
+  const pageCurrent=()=>pageGuard.valid()&&privacyTurn===(globalThis.NavrenChatPrivacyVersion||0);
   // 旧URL只作预填。图谱对象必须由服务器重新核对，不能信任URL里的个人JSON。
   window.NavrenGraphContext=null;
   if(['event','article','weekly'].includes(params.get('market_kind'))&&params.get('market_id')){
@@ -369,23 +406,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.body.className = 'mode-' + currentMode;
   // mode badge removed from chat header
 
-  // 智能欢迎语
-  personalizeWelcome();
+  // 欢迎内容只在服务端确认空归档后一次构建。
 
   // 应用字体：优先用户保存的，否则按模式默认
   const savedFontSize = getModeFont(currentMode);
   const defaultFont = savedFontSize || MODE_DEFAULT_FONT[currentMode] || 'medium';
   applyFontSize(defaultFont);
 
-  renderPresets();
   setupVoice();
   checkPrivacyGuide();
   await checkVoiceGuide();
-  const welcomeText = document.getElementById('welcomeMsg');
-  if (welcomeText) attachMessageSpeech(welcomeText.closest('.message'), welcomeText.textContent || '');
 
   // 恢复当前注册用户实例的服务端完整归档；浏览器缓存不作为恢复真源。
-  await initializeChatArchive();
+  const archiveLoaded=await initializeChatArchive({identity:initialIdentity});
+  if(!pageCurrent())return;
 
   const input = document.getElementById('userInput');
   input.addEventListener('input', () => {
@@ -393,20 +427,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
   });
-  input.focus();
 
   const queuedQuestion=params.get('context')?'':params.get('q') || (params.get('action')==='reassess'?'了解我的风险偏好与当前业务风险配置':params.get('action')==='handoff'?'我想联系人工顾问':'');
   if(queuedQuestion){input.value=queuedQuestion;input.dispatchEvent(new Event('input'));}
   // 清理旧私密查询参数，不赋予任何自动执行语义。
   const clean=new URL(location.href);for(const key of ['q','action','reason','graph_context'])clean.searchParams.delete(key);
   history.replaceState(history.state,'',clean.pathname+clean.search+clean.hash);
-  if(params.get('context'))await receivePageQuestion(params.get('context'));
+  if(params.get('context'))await receivePageQuestion(params.get('context'),{focus:false});
 
   // 回访变化摘要
   showReengagementSummary();
 
   // 场景引导提示
   await showContextualTip('chat');
+  if(!pageCurrent())return;
+  if(!archiveLoaded){pageLoad?.fail(new Error('聊天历史暂时无法读取，请重试。'));return;}
+  const revealed=await pageLoad?.ready();
+  if(revealed!==false&&pageCurrent()&&input.isConnected&&!document.hidden)input.focus({preventScroll:true});
+  }catch(error){pageLoad?.fail(error);throw error;}
 });
 
 // ── Presets ──
@@ -429,11 +467,66 @@ let voiceConversation = false;
 let voiceResumeTimer = null;
 let voiceRequest = 0;
 let voiceInputState = 'idle';
+let pendingVoiceNameReview = null;
+const VOICE_NAME_REVIEW_NOTICE='请核对产品名称及份额后发送';
+
+function voiceNameReviewCurrent(review) {
+  return !!review&&review.request===voiceRequest&&review.privacyTurn===(globalThis.NavrenChatPrivacyVersion||0)&&
+    review.guard.valid(review.binding);
+}
+function clearVoiceNameReview({clearDraft=false}={}) {
+  const review=pendingVoiceNameReview;pendingVoiceNameReview=null;
+  if(!review)return;
+  const input=document.getElementById('userInput');
+  if(clearDraft&&input?.value===review.raw_text&&chatDraftRevision===review.draftRevision){
+    input.value='';input.dispatchEvent(new Event('input'));
+  }
+  const status=document.getElementById('voiceStatus');
+  if(status){status.textContent='';status.classList.remove('visible');}
+  updateChatSendState();
+}
+function renderVoiceNameReview() {
+  const review=pendingVoiceNameReview;
+  if(!voiceNameReviewCurrent(review)){clearVoiceNameReview({clearDraft:true});return;}
+  const status=document.getElementById('voiceStatus');
+  if(status){
+    status.textContent=VOICE_NAME_REVIEW_NOTICE+(review.names.length?'。参考名称：'+review.names.join('；'):'');
+    status.classList.add('visible');
+  }
+  updateChatSendState();
+}
+async function checkedVoiceNameReview(raw,metadata) {
+  // 兼容没有该字段的原服务；有字段但无法核对时只保留 raw 供本人编辑，不信任候选名。
+  if(metadata===undefined)return null;
+  const manual={names:[]};
+  const keys=['schema_version','status','reason','notice','names','raw_sha256','public_release_id','hint_only','identity_authority'];
+  if(!metadata||typeof metadata!=='object'||Array.isArray(metadata)||Object.keys(metadata).some(key=>!keys.includes(key))||
+    metadata.schema_version!=='navren.asr-name-review.v1'||!['review_required','not_required'].includes(metadata.status)||
+    metadata.hint_only!==true||metadata.identity_authority!==false||
+    !['possible_public_name_mismatch','no_public_name_mismatch','public_name_hints_unavailable','candidate_assist_limit'].includes(metadata.reason)||
+    typeof metadata.notice!=='string'||metadata.notice.length>512||
+    (metadata.status==='review_required'&&metadata.notice!==VOICE_NAME_REVIEW_NOTICE)||
+    !Array.isArray(metadata.names)||metadata.names.length>3||new Set(metadata.names).size!==metadata.names.length||metadata.names.some(name=>
+      typeof name!=='string'||!name||name!==name.trim()||name.length>160||/[\u0000-\u001f\u007f]/.test(name))||
+    (metadata.status==='not_required'&&(metadata.names.length!==0||metadata.notice!==''||metadata.reason!=='no_public_name_mismatch'))||
+    typeof metadata.raw_sha256!=='string'||!/^[a-f0-9]{64}$/.test(metadata.raw_sha256)||
+    !(typeof metadata.public_release_id==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(metadata.public_release_id)||
+      metadata.public_release_id===null&&metadata.names.length===0))return manual;
+  try {
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+    const hex=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+    if(hex!==metadata.raw_sha256)return manual;
+  }catch(_){return manual;}
+  return metadata.status==='review_required'?{names:[...new Set(metadata.names)]}:null;
+}
 
 function setupVoice() {
   const btn = document.getElementById('voiceBtn');
   btn.dataset.idleContent = btn.innerHTML;
   btn.classList.remove('hidden');
+  // 沿用原发送键；这个标记只区分本人提交输入框，不是业务授权。
+  const send=document.getElementById('sendBtn');
+  if(send)send.onclick=()=>sendMessage(null,null,{manualVoiceReview:true});
   voiceButton();
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') cancelVoice();
@@ -462,12 +555,15 @@ function voiceButton(state = 'idle') {
       state === 'finishing' ? '正在整理识别内容…' : '';
     status.classList.toggle('visible', Boolean(status.textContent));
   }
+  // 正常收起录音器不等于本人取消，仍保留这一轮已绑定的待核对草稿。
+  if(state==='idle'&&voiceNameReviewCurrent(pendingVoiceNameReview))renderVoiceNameReview();
 }
 
 function cancelVoice() {
   voiceConversation = false;
   clearTimeout(voiceResumeTimer);
   voiceRequest++;
+  clearVoiceNameReview({clearDraft:true});
   NavrenSpeech.stop();
   voiceButton();
 }
@@ -479,39 +575,55 @@ async function toggleVoice() {
     return;
   }
   clearTimeout(voiceResumeTimer);
+  clearVoiceNameReview({clearDraft:true});
   voiceConversation = true;
   const request = ++voiceRequest;
+  const binding=chatBinding(),guard=BankClient.guard(),privacyTurn=globalThis.NavrenChatPrivacyVersion||0;
+  const current=()=>request===voiceRequest&&privacyTurn===(globalThis.NavrenChatPrivacyVersion||0)&&guard.valid(binding);
+  if(!binding.workspace_id||!current()){voiceConversation=false;voiceButton();return;}
   const input = document.getElementById('userInput');
   const before = input.value;
-  let voiceMessage=null,recording=null;
+  let voiceMessage=null,recording=null,nameReview;
   try {
     const text = await NavrenSpeech.startASR({ finishOnSentence: false,
-      onState: voiceButton,
+      onState: state=>{if(current())voiceButton(state);},
       onRecording: async clip=>{
-        if(request!==voiceRequest)return;
+        if(!current())return;
         recording=await VoiceMessages.save(clip);
-        if(request!==voiceRequest)return;
+        if(!current())return;
         voiceMessage=addMessage('user','');voiceMessage.dataset.recordingId=recording.id;VoiceMessages.mount(voiceMessage,recording);
         const history=currentChatHistory();
         history.push({role:'user',client_origin:'live',content:'',recording_id:recording.id,...chatBinding(),timestamp:new Date().toISOString()});
         Storage.set('qingzhou_chatHistory',history);scrollToBottom();
       },
-      onTranscript: text => {
-        if (request !== voiceRequest) return;
+      onTranscript: (text,final,review) => {
+        if (!current()) return;
+        if(review!==undefined)nameReview=review;
         input.value = text;
         input.dispatchEvent(new Event('input'));
       }
     });
-    if (request !== voiceRequest) return;
+    if (!current()) return;
     voiceButton();
     if(voiceMessage)VoiceMessages.update(voiceMessage,text);
     if(recording){const history=Storage.get('qingzhou_chatHistory')||[];const entry=history.find(m=>m.recording_id===recording.id);if(entry)entry.content=text;Storage.set('qingzhou_chatHistory',history);}
     if (text.trim()||recording?.media) {
+      const draftValue=input.value,draftRevision=chatDraftRevision;
+      const review=nameReview===undefined?null:await checkedVoiceNameReview(text,nameReview);
+      if(!current())return;
+      const voiceEntry=recording?{recording_id:recording.id,message:voiceMessage,media:recording.media,clip:recording}:null;
+      const editedWhileChecking=input.value!==draftValue||chatDraftRevision!==draftRevision;
+      if(review||editedWhileChecking){
+        if(!editedWhileChecking)input.value=text;
+        pendingVoiceNameReview={raw_text:text,names:review?.names||[],voiceEntry,request,guard,binding,privacyTurn,
+          draftRevision:chatDraftRevision};
+        input.dispatchEvent(new Event('input'));renderVoiceNameReview();input.focus({preventScroll:true});return;
+      }
       input.value = text;
-      await sendMessage(recording?{recording_id:recording.id,message:voiceMessage,media:recording.media,clip:recording}:null);
+      await sendMessage(voiceEntry);
     } else { voiceConversation = false; showToast('未取得可保存的录音，请重新录音。'); }
   } catch (error) {
-    if (request !== voiceRequest) return;
+    if (!current()) return;
     voiceButton();
     voiceConversation = false;
     if (error.name === 'AbortError') { input.value = before; input.dispatchEvent(new Event('input')); }
@@ -541,16 +653,16 @@ function renderPrivacyGuide() {
     : {classic:'🔒 隐私与个性化服务说明',senior:'您的专属理财小档案',youth:'你的数据，你做主'};
   const copy = english ? [
     'To tailor its banking and everyday financial services to you, Navren learns about your investment preferences and assets during conversations and builds a personal profile.',
-    'Conversations and demo account records are stored on this computer. Account summaries needed to answer your questions are sent to DeepSeek and GLM.',
-    'When you use voice features, recordings and text to be read aloud are sent to Alibaba Cloud Model Studio for processing. Original chat images and audio are stored privately with your account for playback after sign-in.',
+    'Conversations and account records are stored on this computer. Account summaries needed to answer your questions are sent to DeepSeek and GLM.',
+    'Voice recognition is processed on this computer. When cloud read-aloud is enabled, text is sent to Zhipu GLM official service for speech synthesis. Original chat images and audio are stored privately with your account for playback after sign-in.',
     'Your data will not be used for other purposes without your confirmation.',
-    'Manage conversation permissions in Profile. Change demo risk and funding settings in Accounts.'
+    'Manage conversation permissions in Profile. Change risk and funding settings in Accounts.'
   ] : [
     '为提供更贴合你的银行与生活财务服务，Navren会在对话中了解您的投资偏好和资产情况，并建立个人档案。',
-    '对话与模拟账户记录保存在本机；回答问题所需的账户摘要会发送至 DeepSeek 和 GLM',
-    '使用语音时，录音和待朗读文字发送至阿里云百炼处理；聊天图片和原始音频随本人账户私密保存，登录后可回看和回放',
+    '对话与账户记录保存在本机；回答问题所需的账户摘要会发送至 DeepSeek 和 GLM',
+    '使用语音时，语音识别在本机处理；启用云端朗读时，待朗读文字发送至智谱GLM官方。聊天图片和原始音频随本人账户私密保存，登录后可回看和回放',
     '未经您确认，不会用于其他用途',
-    '聊天授权在「我的」中管理；模拟风险与资金设置请在「账户」中修改'
+    '聊天授权在「我的」中管理；风险与资金设置请在「账户」中修改'
   ];
   guide.lang = english ? 'en' : 'zh-CN';
   guide.querySelector('#privacyTitle').textContent = titles[currentMode] || titles.classic;
@@ -579,57 +691,41 @@ async function checkVoiceGuide() {
   }
 }
 
-// ── Image Upload ──
-function triggerUpload() {
-  document.getElementById('imageInput').click();
-}
-
+// 文件选择与剪贴板共用原件队列；点击发送前不上传。
+function triggerUpload() {document.getElementById('imageInput').click();}
 function handleImageUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  if(!['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)||file.size>10485760||file.size<1){
-    showToast('请选择 10 MB 以内的 PNG、JPEG、WebP 或 GIF 图片。');event.target.value='';return;
-  }
-  const guard=BankClient.guard(),request=chatRequestVersion;
-  if(!guard.valid())return;
-  const reader = new FileReader();activeChatImageReaders.add(reader);
-  reader.onload = (e) => {
-    if(request!==chatRequestVersion||!guard.valid())return;
-    pendingImage = e.target.result;
-    pendingImageFile = file;
-    document.getElementById('previewImg').src = pendingImage;
-    document.getElementById('imagePreview').classList.remove('hidden');
-    updateChatSendState();
-  };
-  reader.onloadend=()=>activeChatImageReaders.delete(reader);
-  reader.readAsDataURL(file);
+  window.NavrenChatAttachments?.addFiles(Array.from(event.target.files||[]));event.target.value='';
 }
-
 function removeImage() {
-  pendingImage = null;
-  pendingImageFile = null;
-  document.getElementById('imagePreview').classList.add('hidden');
-  document.getElementById('imageInput').value = '';
+  window.NavrenChatAttachments?.clear();
+  const input=document.getElementById('imageInput');if(input)input.value='';
   updateChatSendState();
 }
+window.NavrenChatAttachments?.init({onChange:()=>{chatDraftRevision++;updateChatSendState();},notify:message=>showToast(message)});
 
 // ── Send Message ──
 async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}) {
   const input = document.getElementById('userInput');
   const text = retrySnapshot ? retrySnapshot.text : input.value.trim();
   if(chatSending||!chatArchiveReady||chatArchiveBusy||typeof text!=='string')return;
+  let voiceReview=null;
+  if(!voiceEntry&&!retrySnapshot&&options.internalChoice!==true&&pendingVoiceNameReview){
+    if(!voiceNameReviewCurrent(pendingVoiceNameReview)){clearVoiceNameReview({clearDraft:true});return;}
+    if(options.manualVoiceReview!==true){renderVoiceNameReview();return;}
+    if(!text.trim())return;
+    voiceReview=pendingVoiceNameReview;voiceEntry=voiceReview.voiceEntry;voiceConversation=true;
+  }
   const reference = retrySnapshot ? cloneChatReference(retrySnapshot.reference) : currentChatReference();
   const internalChoice=options.internalChoice===true;
-  const imageToSend=internalChoice?null:retrySnapshot?(typeof retrySnapshot.image==='string'?retrySnapshot.image:null):pendingImage;
-  const imageFileToSend=internalChoice?null:retrySnapshot?retrySnapshot.imageBlob||null:pendingImageFile;
+  const attachmentFiles=internalChoice?[]:retrySnapshot?(retrySnapshot.attachmentFiles|| (retrySnapshot.imageBlob?[retrySnapshot.imageBlob]:[])):(window.NavrenChatAttachments?.files()||[]);
   const voiceClip=internalChoice?null:voiceEntry?.clip||retrySnapshot?.voiceClip||null;
-  if(!text.trim()&&!reference&&!imageFileToSend&&!voiceEntry?.recording_id&&!voiceClip?.blob)return;
-  if(retrySnapshot?.had_image&&!imageToSend){
-    showToast('原问题包含图片，请重新附上图片后使用发送按钮。');return;
+  if(!text.trim()&&!reference&&!attachmentFiles.length&&!voiceEntry?.recording_id&&!voiceClip?.blob)return;
+  if((retrySnapshot?.had_attachments||retrySnapshot?.had_image)&&!attachmentFiles.length){
+    showToast('原问题包含附件，请重新添加原附件后发送。');return;
   }
   const requestSnapshot = Object.freeze({text,reference:reference?JSON.parse(JSON.stringify(reference)):null,
-    internal_choice:internalChoice,
-    image:imageToSend,imageBlob:imageFileToSend,had_image:Boolean(imageToSend),voiceClip,had_audio:Boolean(voiceClip?.blob||voiceEntry?.recording_id),
+    internal_choice:internalChoice,attachmentFiles:Object.freeze([...attachmentFiles]),had_attachments:attachmentFiles.length>0,
+    had_image:attachmentFiles.some(file=>file.type.startsWith('image/')),voiceClip,had_audio:Boolean(voiceClip?.blob||voiceEntry?.recording_id),
     return_view:JSON.parse(JSON.stringify(retrySnapshot?.return_view||window.NavrenChatReturnView||{page:'chat',view:'home'}))});
   // 显式重试只使用冻结请求；即使新草稿内容相同，也不消费输入区。
   let consumesComposer=!internalChoice&&!retrySnapshot;
@@ -649,6 +745,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     (!turnGuard||turnGuard.valid(binding));
   clearTimeout(voiceResumeTimer);
   voiceRequest++;
+  if(voiceReview)voiceReview.request=voiceRequest;else clearVoiceNameReview();
   const voiceTurn = voiceRequest;
   const userMessageId=voiceEntry?.recording_id||newChatMessageId();
   NavrenSpeech.stop();
@@ -658,15 +755,15 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
   const media=[];
   updateChatSendState();
   try{
-    if(imageFileToSend){
-      if(!window.NavrenChatMedia)throw Error('图片保存服务暂不可用，请稍后重试。');
-      let descriptor=chatImageUploads.get(imageFileToSend);
+    for(const file of attachmentFiles){
+      if(!window.NavrenChatMedia)throw Error('附件保存服务暂不可用，请稍后重试。');
+      let descriptor=chatAttachmentUploads.get(file);
       if(!descriptor){
-        let uploadKey=chatImageUploadKeys.get(imageFileToSend);
-        if(!uploadKey){uploadKey=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');chatImageUploadKeys.set(imageFileToSend,uploadKey);}
-        descriptor=await NavrenChatMedia.upload(imageFileToSend,{uploadKey});
+        let uploadKey=chatAttachmentUploadKeys.get(file);
+        if(!uploadKey){uploadKey=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');chatAttachmentUploadKeys.set(file,uploadKey);}
+        descriptor=await NavrenChatMedia.upload(file,{uploadKey});
         if(!turnCurrent())return;
-        chatImageUploads.set(imageFileToSend,descriptor);
+        chatAttachmentUploads.set(file,descriptor);
       }
       media.push(NavrenChatMedia.validate(descriptor));
     }
@@ -685,28 +782,29 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     return;
   }finally{
     // 成功后由本轮继续持有发送锁；取消/失败时立即释放，不留下虚假的已发送消息。
-    if(!turnCurrent()||media.length!==(Number(Boolean(imageFileToSend))+Number(Boolean(voiceEntry?.recording_id||voiceClip?.blob)))){
-      if(requestVersion===chatRequestVersion){chatSending=false;syncChatReference();updateChatSendState();}
+    if(!turnCurrent()||media.length!==(attachmentFiles.length+Number(Boolean(voiceEntry?.recording_id||voiceClip?.blob)))){
+      if(requestVersion===chatRequestVersion){
+        chatSending=false;syncChatReference();updateChatSendState();
+        if(voiceReview&&pendingVoiceNameReview===voiceReview&&voiceNameReviewCurrent(voiceReview))renderVoiceNameReview();
+      }
     }
   }
   consumesComposer=consumesComposer&&chatDraftRevision===frozenDraftRevision&&chatReferenceRevision===frozenReferenceRevision&&
-    (!imageFileToSend||pendingImageFile===imageFileToSend);
+    (!attachmentFiles.length||window.NavrenChatAttachments?.matches(attachmentFiles));
+  if(voiceReview&&pendingVoiceNameReview===voiceReview)clearVoiceNameReview();
 
-  const userContent = imageToSend
-    ? `<img src="${imageToSend}" style="max-width:200px;border-radius:8px;margin-bottom:6px;display:block;">${chatUserMessageHtml(text, requestSnapshot.reference,requestSnapshot.return_view)}`
-    : chatUserMessageHtml(text, requestSnapshot.reference,requestSnapshot.return_view);
+  const userContent = chatUserMessageHtml(text, requestSnapshot.reference,requestSnapshot.return_view);
   let userMessage=voiceEntry?.message||null;
   if(!voiceEntry?.recording_id){userMessage=addMessage('user', userContent);userMessage.dataset.clientMessageId=userMessageId;}
   if(!voiceEntry?.recording_id&&voiceClip?.blob){VoiceMessages.mount(userMessage,{...voiceClip,media:media.find(item=>item.kind==='audio')},text);renderChatVoiceReference(userMessage,requestSnapshot.reference,requestSnapshot.return_view);}
-  if(imageToSend&&(voiceEntry?.recording_id||voiceClip?.blob)&&userMessage){
-    const image=document.createElement('img');image.src=imageToSend;image.alt='聊天图片';
-    image.style.cssText='max-width:200px;border-radius:8px;margin-bottom:6px;display:block';userMessage.querySelector('.bubble')?.prepend(image);
-  }
+  window.NavrenChatAttachments?.mountFiles(userMessage,attachmentFiles,media);
   if(consumesComposer){input.value='';if(requestSnapshot.reference)clearChatReference();removeImage();}
+  else if(!internalChoice&&!retrySnapshot)window.NavrenChatAttachments?.consume(attachmentFiles);
   updateChatSendState();
 
   // 保存用户消息到历史（在所有 early return 之前）
   if(voiceEntry?.recording_id){
+    VoiceMessages.update(voiceEntry.message,text);
     const history=currentChatHistory(),entry=history.findLast(item=>item.recording_id===voiceEntry.recording_id);
     if(entry){entry.content=text;entry.attachments=media;entry.reference_snapshot=requestSnapshot.reference;entry.request_snapshot={...(entry.request_snapshot||{}),return_view:requestSnapshot.return_view};Storage.set('qingzhou_chatHistory',history);}
     const message=voiceEntry.message||[...document.querySelectorAll('#chatMessages .message.user')].findLast(item=>item.dataset.recordingId===voiceEntry.recording_id);
@@ -730,13 +828,13 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
       // 每次发送及重试都重新解析同一对象版本并创建新票据；不提交 request_mode。
       const ticket=await BankClient.post('/page-contexts',{question:requestSnapshot.text,
         reference:chatReferencePacket(requestSnapshot.reference),return_view:requestSnapshot.return_view});
-      if(!turnCurrent()){loadingMsg.remove();chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
+      if(!turnCurrent()){loadingMsg.remove();if(requestVersion===chatRequestVersion)chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
       if(typeof ticket.context_id!=='string'||!ticket.context_id)throw new Error('关联资料票据暂时无法核对。');
       pageContextId=ticket.context_id;
     }
-    if(!turnCurrent()){loadingMsg.remove();chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
+    if(!turnCurrent()){loadingMsg.remove();if(requestVersion===chatRequestVersion)chatSending=false;syncChatReference();taskRequest?.component.destroy();return;}
     // 一旦提交回合，上传ID可能已被服务端绑定；显式重试重新上传原Blob，不跨请求重绑旧ID。
-    if(imageFileToSend){chatImageUploads.delete(imageFileToSend);chatImageUploadKeys.delete(imageFileToSend);}
+    for(const file of attachmentFiles){chatAttachmentUploads.delete(file);chatAttachmentUploadKeys.delete(file);}
     result = await Api.sendMessage(requestSnapshot.text, currentMode, null, sentiment,
       event => renderRuntimeEvent(loadingMsg,event),{page_context_id:pageContextId,isolated_text:internalChoice,media_ids:media.map(item=>item.media_id)});
   } catch (e) {
@@ -744,17 +842,19 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     result = { reply: '抱歉，系统遇到了一个小问题，请稍后再试。\n\n⚠️ 理财非存款，产品有风险，投资须谨慎。', isFallback: true };
   }
 
-  loadingMsg.remove();
-  chatSending=false;
+  // 最终答复与确认组件真正插入后，再由 finishRuntimeProgress 移除本轮进度。
+  if(requestVersion===chatRequestVersion)chatSending=false;
   syncChatReference();
-  if(!turnCurrent()){taskRequest?.component.destroy();return;}
+  if(!turnCurrent()){loadingMsg.remove();taskRequest?.component.destroy();return;}
+  try {
   result.reply=NavrenPresentation.text(result.reply);
   const attachmentReceived=result.attachment_receipt?.status==='archived'&&result.attachment_receipt.request_id===result.bank_response_id&&
     result.workspace_id===binding.workspace_id&&result.privacy_revision===binding.privacy_revision;
-  if(attachmentReceived)voiceConversation=false;
+  const reviewedVoiceReply=!!voiceReview&&result.isFallback!==true&&typeof result.speech_receipt==='string'&&!!result.speech_receipt.trim();
+  if(attachmentReceived&&!reviewedVoiceReply)voiceConversation=false;
   const replyProjection=verifiedReplyProjection(result,binding);
   if(replyProjection?.text)result.reply=replyProjection.text;
-  let replyHtml = renderReplyText(result.reply);
+  let replyHtml = renderReplyText(result.reply,{safeStatus:result.isFallback===true&&result.bank===true});
 
   // 金融产品名蓝色加粗高亮
   const highlightNames = result.highlight_names && result.highlight_names.length > 0
@@ -798,7 +898,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
 
   // 语音播报与每条回复的朗读按钮共用控制器。
   const voiceEnabled = Storage.get('qingzhou_voiceEnabled');
-  if (!attachmentReceived&&!result.task_result_rejected&&(voiceEnabled || voiceConversation) && voiceTurn === voiceRequest) {
+  if ((!attachmentReceived||reviewedVoiceReply)&&!result.task_result_rejected&&(voiceEnabled || voiceConversation) && voiceTurn === voiceRequest) {
     speakMessage(msgEl, result.reply, scheduleVoiceResume);
   }
 
@@ -850,7 +950,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
   checkRiskReassessmentNudge(msgEl);
 
   // 重新读取 history（并发调用时避免覆盖其他 sendMessage 写入的数据）
-  finishRuntimeProgress(loadingMsg, msgEl);
+  finishRuntimeProgress(loadingMsg, msgEl, result);
   const latestHistory = currentChatHistory();
   const originalQuestion=latestHistory.findLast(row=>row.role==='user'&&(row.client_message_id===userMessageId||voiceEntry?.recording_id&&row.recording_id===voiceEntry.recording_id));
   if(originalQuestion&&result.bank_response_id){originalQuestion.bank_response_id=result.bank_response_id;if(userMessage)userMessage.dataset.bankResponseId=result.bank_response_id;}
@@ -870,7 +970,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
     client_origin:'live',
     client_message_id:msgEl.dataset.clientMessageId,
     consumed_reply_controls:msgEl.__navrenConsumedReplyControls||{},
-    request_snapshot: {text:requestSnapshot.text,reference:requestSnapshot.reference,return_view:requestSnapshot.return_view,internal_choice:requestSnapshot.internal_choice,had_image:requestSnapshot.had_image,had_audio:requestSnapshot.had_audio},
+    request_snapshot: {text:requestSnapshot.text,reference:requestSnapshot.reference,return_view:requestSnapshot.return_view,internal_choice:requestSnapshot.internal_choice,had_attachments:requestSnapshot.had_attachments,had_image:requestSnapshot.had_image,had_audio:requestSnapshot.had_audio},
     presentation_ref:localSocialReply ? null : (window.NavrenPresentationBridge?.descriptor?.(result)||null),
     ...binding,
     content: result.reply,
@@ -898,6 +998,7 @@ async function sendMessage(voiceEntry = null, retrySnapshot = null, options = {}
   Storage.set('qingzhou_chatHistory', latestHistory);
 
   scrollToBottom();
+  } finally { loadingMsg.remove(); }
 }
 
 // 仅渲染本轮实际收到的活动；不读取工具参数、原始结果或模型推理。
@@ -921,40 +1022,126 @@ function runtimeSafeName(value) {
   return /^[A-Za-z][A-Za-z0-9_.:/-]{0,95}$/.test(name) ? name : '';
 }
 
+// 名称来自实际能力目录；未知能力保留真实标识，不猜测用途或补造调用。
+const RUNTIME_TOOL_LABELS = Object.freeze({
+  "load_skill": "加载专业技能",
+  "knowledge_status": "检查知识资料接入",
+  "knowledge_search": "检索公开知识与条款",
+  "market_hotspots": "查询市场热点",
+  "market_status": "核对市场来源与更新",
+  "market_event": "读取市场事件与分析",
+  "market_article": "核对报道原文",
+  "market_weekly": "读取市场周报",
+  "calendar_query": "查询财务日历",
+  "calendar_day": "读取当日事项",
+  "calendar_item": "核对日历事项",
+  "calendar_budget_scenario": "计算日历预算情景",
+  "calendar_prepare_event": "准备日历事项草案",
+  "wealth_product": "核对基金与组合数据",
+  "wealth_versions": "核对组合版本与来源",
+  "personal_graph": "读取财务关系资料",
+  "graph_scenario": "计算资金规划情景",
+  "remember_profile": "整理待确认资料",
+  "public_products": "查询公开产品资料",
+  "research_plans": "读取已保存研究方案",
+  "customer_records": "读取相关业务档案",
+  "account_summary": "查询账户概览",
+  "budget": "核对可安排资金",
+  "statement_source": "核对账单来源",
+  "monthly_statement": "查询月度账单",
+  "annual_statement": "查询年度账单",
+  "statement_details": "核对账单明细",
+  "anomalies": "核对异常收支",
+  "periodic_charges": "查询周期扣费",
+  "cashflow": "分析现金流",
+  "money_calculation": "进行金额计算",
+  "products": "核对产品与适配条件",
+  "service_offer_rules": "查询服务条件",
+  "service_offer_preview": "核对服务条件预览",
+  "service_application_status": "查询服务申请回执",
+  "business_records": "读取相关业务记录",
+  "operation_status": "核对操作回执",
+  "user_memory": "读取已确认资料",
+  "prepare_operation": "准备待确认操作草案",
+  "withdraw_draft": "撤回待确认草案",
+  "answer_facts": "组织已核验事实",
+  "answer_reviewed": "提交答复审核",
+  "presentation_query": "查询图表依据",
+  "presentation_detail": "核对图表明细",
+  "run_generated_code": "执行受限计算"
+});
+const RUNTIME_SKILL_LABELS = Object.freeze({
+  "goal-planning": "目标规划",
+  "financial-diagnosis": "财务诊断",
+  "reviewer": "独立审核",
+  "payments": "支付与转账",
+  "wealth": "理财与投资",
+  "calendar": "财务日历",
+  "asset-allocation": "资产配置",
+  "product-research": "产品研究",
+  "cards": "卡片与银行业务",
+  "portfolio-review": "持仓复核",
+  "code-sandbox": "受限代码计算",
+  "cashflow": "收支与现金流",
+  "subscriptions": "订阅与代扣",
+  "banking": "银行业务",
+  "profile": "财务资料与偏好",
+  "knowledge-retrieval": "知识检索",
+  "conversation-components": "对话内容编排",
+  "market": "市场研究",
+  "bank-service": "银行服务条件"
+});
+const RUNTIME_SOURCE_LABELS = Object.freeze({
+  "public_knowledge": "公开知识资料",
+  "local_knowledge_status": "知识资料接入状态",
+  "verified_public_market": "已核验市场资料",
+  "webank_public_disclosure": "银行公开资料",
+  "profile_sources": "已登记资料",
+  "maintainer_skill": "专业技能资料",
+  "conversation_candidate": "待核实资料",
+  "simulation": "账户记录",
+  "imported": "导入资料",
+  "local_rule": "本地规则"
+});
+
+function runtimeActivityPresentation(activity) {
+  if (activity.kind === 'skill' && activity.name === 'intent_route')
+    return {category: '任务识别', label: '识别任务范围', code: ''};
+  if (activity.kind === 'skill' || activity.name === 'load_skill') {
+    const skill = runtimeSafeName(activity.summary?.skill);
+    return {category: '技能调用', label: Object.hasOwn(RUNTIME_SKILL_LABELS, skill)
+      ? RUNTIME_SKILL_LABELS[skill] : '加载专业技能', code: skill || 'load_skill'};
+  }
+  if (activity.kind === 'review') {
+    const labels = {independent_review: '独立审核答复', answer_boundary: '核对回答范围',
+      amount_contract: '核对金额依据', evidence_reference: '核对引用来源'};
+    return {category: '结果核验', label: Object.hasOwn(labels, activity.name)
+      ? labels[activity.name] : '核验答复', code: ''};
+  }
+  if (activity.kind === 'model') return {category: '分析处理', label: '分析当前问题与已有资料', code: ''};
+  return {category: '工具调用', label: Object.hasOwn(RUNTIME_TOOL_LABELS, activity.name)
+    ? RUNTIME_TOOL_LABELS[activity.name] : activity.name, code: activity.name};
+}
+
 function runtimeActivitySummary(kind, summary) {
   if (!summary || typeof summary !== 'object' || Array.isArray(summary)) return [];
   const parts = [];
   for (const key of RUNTIME_ACTIVITY_FIELDS[kind] || []) {
     const value = summary[key];
-    if(['model','review'].includes(kind)&&['provider','model'].includes(key))continue;
+    // 调用轮次、供应商、失败代码属于审计信息，保留原事件，不在用户进度中混排。
+    if (['provider', 'model', 'round', 'failure_type', 'skill'].includes(key)) continue;
     if (key === 'record_count') {
       if (Number.isSafeInteger(value) && value >= 0 && value <= 10000000) parts.push(value + ' 条记录');
-    } else if (key === 'round') {
-      if (Number.isSafeInteger(value) && value > 0 && value <= 1000) parts.push('第 ' + value + ' 轮');
     } else if (key === 'period') {
       if (typeof value === 'string' && value.length <= 64 && /^\d{4}-\d{2}(?:-\d{2})?(?:\s*(?:至|—|~|\/|\.\.)\s*\d{4}-\d{2}(?:-\d{2})?)?$/.test(value)) parts.push(value);
     } else if (key === 'verdict') {
       const verdicts = {approve: '审核通过', revise: '需要修订', reject: '审核未通过', insufficient_evidence: '审核证据不足'};
       if (Object.hasOwn(verdicts, value)) parts.push(verdicts[value]);
-    } else {
-      const text = key === 'source' ? runtimeSafeText(value, 64) : runtimeSafeName(value);
-      if(text&&['model','review'].includes(kind)&&/deepseek|glm|ai[_-]?ping|provider|model/i.test(text))continue;
-      if (text) parts.push(({source: '来源：', skill: '技能：', provider: '提供方：', model: '模型：', failure_type: '失败类型：'}[key] || '') + text);
+    } else if (key === 'source' && Object.hasOwn(RUNTIME_SOURCE_LABELS, value)) {
+      parts.push(RUNTIME_SOURCE_LABELS[value]);
     }
   }
   return parts;
-}
-
-function runtimeActivityRole(activity){
-  if(activity.kind==='review')return '审核';
-  if(activity.kind==='model')return /(?:^|[^a-z])jev(?:[^a-z]|$)/i.test(String(activity.summary?.model||activity.name))?'Jev':'主模型';
-  return activity.label;
-}
-function runtimeActivityIdentity(activity) {
-  if(['model','review'].includes(activity.kind))return runtimeActivityRole(activity);
-  const identity=activity.kind==='skill'?(runtimeSafeName(activity.summary?.skill)||activity.name):activity.name;
-  const count=activity.kind==='data'&&Number.isSafeInteger(activity.summary?.record_count)&&activity.summary.record_count>=0&&activity.summary.record_count<=10000000?' · '+activity.summary.record_count+' 条记录':'';
-  return (activity.label.includes(identity)?activity.label:activity.label+' · '+identity)+count;
 }
 
 function runtimeActivityPanel(message) {
@@ -962,51 +1149,75 @@ function runtimeActivityPanel(message) {
   if (state) return state;
   const bubble = message.querySelector('.bubble') || message;
   bubble.replaceChildren();
-  const panel = document.createElement('details'); panel.className = 'runtime-panel runtime-activity-panel';
-  const summary = document.createElement('summary'); summary.className = 'runtime-activity-current';
+  const panel = document.createElement('section'); panel.className = 'runtime-panel runtime-activity-panel';
+  panel.setAttribute('aria-label', '本次处理进度');
+  const heading = document.createElement('div'); heading.className = 'runtime-activity-current';
   const latest = document.createElement('span'); latest.className = 'runtime-activity-latest';
   latest.setAttribute('role', 'status'); latest.setAttribute('aria-live', 'polite'); latest.setAttribute('aria-atomic', 'true');
-  const count = document.createElement('span'); count.className = 'runtime-activity-count';
-  summary.append(latest, count);
+  heading.append(latest);
   const list = document.createElement('ol'); list.className = 'runtime-steps runtime-activity-list';
-  panel.append(summary, list); bubble.append(panel);
-  state = {panel, latest, count, list, records: new Map(), attempts: new Map(), steps: new Map(), sequence: 0, requestId: '', typedSeen: false, finished: false};
+  list.setAttribute('aria-label', '本次实际调用');
+  list.tabIndex = 0;
+  panel.append(heading, list); bubble.append(panel);
+  state = {panel, latest, list, records: new Map(), groups: [], steps: new Map(), sequence: 0,
+    requestId: '', typedSeen: false, finished: false, transportFinished: false, runError: false};
   runtimeActivityStates.set(message, state);
   return state;
 }
 
 function updateRuntimeActivity(state, activity) {
+  const followLatest = state.list.scrollHeight - state.list.scrollTop - state.list.clientHeight <= 24;
   let record = state.records.get(activity.callId);
   if (record?.typed && !activity.typed) return;
   if (!record) {
-    const row = document.createElement('li'); row.className = 'runtime-step';
-    const title = document.createElement('span'); title.className = 'runtime-activity-label';
-    const name = document.createElement('code'); name.className = 'runtime-activity-name';
-    const status = document.createElement('span'); status.className = 'runtime-activity-state';
-    const details = document.createElement('span'); details.className = 'runtime-activity-data';
-    row.append(title, name, status, details); state.list.append(row);
-    const key = activity.kind + ':' + activity.name;
-    const attempt = (state.attempts.get(key) || 0) + 1; state.attempts.set(key, attempt);
-    record = {row, title, name, status, details, attempt}; state.records.set(activity.callId, record);
+    const skill = activity.kind === 'skill' || activity.name === 'load_skill';
+    const key = activity.kind + ':' + activity.name + (skill ? ':' + (runtimeSafeName(activity.summary?.skill) || activity.callId) : '');
+    let group = state.groups.at(-1);
+    // 只归组连续的同名能力，调用ID仍逐条保存；绝不按金额或工具结果去重。
+    if (!group || group.key !== key || !group.row.isConnected) {
+      const row = document.createElement('li'); row.className = 'runtime-step';
+      const category = document.createElement('span'); category.className = 'runtime-activity-kind';
+      const title = document.createElement('span'); title.className = 'runtime-activity-label';
+      const label = document.createElement('span');
+      const count = document.createElement('span'); count.className = 'runtime-activity-count'; count.hidden = true;
+      title.append(label, count);
+      const name = document.createElement('code'); name.className = 'runtime-activity-name';
+      const status = document.createElement('span'); status.className = 'runtime-activity-state';
+      const details = document.createElement('span'); details.className = 'runtime-activity-data';
+      row.append(category, title, status, name, details); state.list.append(row);
+      group = {key, row, category, label, count, name, status, details, records: new Map()};
+      state.groups.push(group);
+    }
+    record = {row: group.row, group}; state.records.set(activity.callId, record);
+    group.records.set(activity.callId, record);
   }
-  // 兼容事件重复到达不能把已经结束的同一次调用重新变成“进行中”。
+  // 同一调用只更新这一行；重复或兼容事件不能重新打开已结束的调用。
   if (record.activity?.status !== 'started' && record.activity && activity.status === 'started') return;
   record.typed = record.typed || activity.typed;
-  if (Number.isSafeInteger(activity.attempt) && activity.attempt > 0 && activity.attempt <= 1000) record.attempt = activity.attempt;
   record.activity = activity;
-  state.latestRecord = record;
-  const statuses = {started: '进行中', completed: '已完成', failed: '失败'};
-  record.row.className = 'runtime-step ' + ({started: 'running', completed: 'done', failed: 'rejected'}[activity.status]);
-  record.title.textContent = runtimeActivityRole(activity);
-  record.name.textContent = ['model','review'].includes(activity.kind)?'':activity.name;
-  record.name.hidden=['model','review'].includes(activity.kind)||activity.label.includes(activity.name);
-  record.status.textContent = statuses[activity.status];
-  const details = runtimeActivitySummary(activity.kind, activity.summary);
-  if (record.attempt > 1) details.unshift('第 ' + record.attempt + ' 次调用');
-  record.details.textContent = details.join(' · '); record.details.hidden = !details.length;
-  state.latest.textContent = runtimeActivityIdentity(activity) + (record.attempt > 1 ? ' · 第 ' + record.attempt + ' 次调用' : '') + ' · ' + statuses[activity.status];
-  state.count.textContent = state.records.size + ' 项调用';
-  state.panel.dataset.status = activity.status;
+  const group = record.group;
+  const view = runtimeActivityPresentation(activity);
+  const calls = [...group.records.values()].map(item => item.activity).filter(Boolean);
+  const running = calls.filter(item => item.status === 'started').length;
+  const failed = calls.filter(item => item.status === 'failed').length;
+  const completed = calls.filter(item => item.status === 'completed').length;
+  group.row.className = 'runtime-step ' + (running ? 'running' : failed ? 'rejected' : 'done');
+  group.category.textContent = view.category;
+  group.label.textContent = view.label;
+  group.count.textContent = calls.length + (activity.name === 'budget' ? '次读取' : '次'); group.count.hidden = calls.length < 2;
+  group.name.textContent = view.code; group.name.hidden = !view.code;
+  group.status.textContent = running ? '进行中' : failed ? '未完成' : '已完成';
+  const summaries = calls.map(item => runtimeActivitySummary(item.kind, item.summary));
+  const common = summaries[0]?.filter(part => summaries.every(parts => parts.includes(part))) || [];
+  const outcomes = [];
+  if (calls.length > 1 && completed && (failed || running)) outcomes.push(completed + '次已完成');
+  if (calls.length > 1 && failed) outcomes.push(failed + '次未完成');
+  if (calls.length > 1 && running) outcomes.push(running + '次进行中');
+  group.details.textContent = [...common, ...outcomes].join(' · ');
+  group.details.hidden = !group.details.textContent;
+  state.latest.textContent = activity.status === 'started' ? '正在' + view.label : '正在处理';
+  state.panel.dataset.status = 'running';
+  if (followLatest) state.list.scrollTop = state.list.scrollHeight;
 }
 
 function renderRuntimeEvent(message, event) {
@@ -1046,11 +1257,18 @@ function renderRuntimeEvent(message, event) {
     activity = {...record.activity, status: 'completed'};
   } else if (event.type === 'RUN_FINISHED' || event.type === 'RUN_ERROR') {
     const state = runtimeActivityStates.get(message);
-    if (state) { state.finished = true; state.panel.remove(); }
+    if (state) {
+      state.transportFinished = true;
+      state.runError = event.type === 'RUN_ERROR';
+      if (state.runError) {
+        state.latest.textContent = '本次处理未完成';
+        state.panel.dataset.status = 'failed';
+      }
+    }
     return;
   } else return;
   const state = runtimeActivityPanel(message);
-  if (state.finished) return;
+  if (state.finished || state.transportFinished) return;
   if (activity.typed && !state.typedSeen) {
     state.typedSeen = true;
     // typed活动有实际调用ID；移除旧模型阶段兼容项，避免同次模型调用显示两遍。
@@ -1064,14 +1282,19 @@ function renderRuntimeEvent(message, event) {
   scrollToBottom();
 }
 
-function finishRuntimeProgress(loadingMessage, replyMessage) {
+function finishRuntimeProgress(loadingMessage, replyMessage, result = {}) {
   const state = runtimeActivityStates.get(loadingMessage);
   if (state) {
     state.finished = true; state.panel.remove();
     runtimeActivityStates.delete(loadingMessage);
-    runtimeActivityStates.set(replyMessage, state);
+    // 失败只保留简短状态；具体原因和重试沿用真实答复，不从参数或异常文本拼接。
+    if (state.runError || result.isFallback === true || result.task_result_rejected === true) {
+      const notice = document.createElement('p'); notice.className = 'runtime-panel runtime-activity-notice';
+      notice.textContent = '本次处理未完成';
+      (replyMessage.querySelector('.bubble') || replyMessage).prepend(notice);
+    }
   }
-  replyMessage.querySelectorAll('.runtime-panel').forEach(panel => panel.remove());
+  loadingMessage.remove();
   ensureMessageTools(replyMessage);
 }
 
@@ -1106,7 +1329,24 @@ function addMessage(role, content, isFallback = false, options = {}) {
   return div;
 }
 
-function renderReplyText(text) {
+function renderReplyText(text, {safeStatus=false}={}) {
+  // 回退只有原正文，没有可用的签名投影。仅重排明确的原账本行，不计算、补值或提高事实资格。
+  if (safeStatus && typeof text === 'string') {
+    const split = text.indexOf('\n\n');
+    if (split > 0) {
+      const lines = text.slice(0, split).split('\n');
+      const header = /^(账户账本)(?: · (\d{4}-\d{2}-\d{2}))?$/.exec(lines[0]);
+      const rows = lines.slice(1).map(line => /^([^\r\n]+) · 已结算余额：(\s*[^\r\n]+)$/.exec(line));
+      if (header && rows.length > 0 && rows.length <= 5 && rows.every(Boolean)) {
+        const ledger = '<section class="reply-ledger-preview" aria-label="账户账本"><header><strong>' + escapeHtml(header[1]) +
+          '</strong>' + (header[2] ? '<span>' + escapeHtml(header[2]) + '</span>' : '') + '</header>' +
+          '<p class="reply-ledger-note">已结算余额</p><dl>' + rows.map(row =>
+            '<div class="reply-ledger-row"><dt>' + escapeHtml(row[1]) + '</dt><dd><strong>' + escapeHtml(row[2].trim()) + '</strong></dd></div>').join('') + '</dl></section>';
+        const tail = text.slice(split + 2);
+        return ledger + (window.NavrenMarkdown?.render(tail) ?? escapeHtml(tail).replace(/\n/g, '<br>'));
+      }
+    }
+  }
   return window.NavrenMarkdown?.render(text) ?? escapeHtml(text).replace(/\n/g, '<br>');
 }
 
@@ -1129,7 +1369,7 @@ function ensureMessageTools(message) {
   });
   bubble.querySelectorAll(':scope > .message-bookmark-control, :scope > .message-audio-control').forEach(button => tools.append(button));
   bubble.querySelectorAll(':scope > .chat-retry, :scope > .message-tools > .chat-retry').forEach(button => {
-    button.classList.add('message-action'); messageToolActions(message).append(button);
+    button.classList.add('message-action'); messageToolActions(message).prepend(button);
   });
   bubble.append(tools);
   return tools;
@@ -1313,9 +1553,9 @@ function renderServiceNegotiationPrompt(message, request) {
   if (!request || typeof request.text !== 'string') return;
   const card = document.createElement('section');
   card.className = 'service-negotiation-card';
-  const title = document.createElement('h3'); title.textContent = '模拟银行服务协商';
+  const title = document.createElement('h3'); title.textContent = '银行服务协商';
   const intro = document.createElement('p');
-  intro.textContent = '先核对你的条件。Navren 只会从已批准的合成优惠规则中匹配方案，不会生成贷款、外部商家报价或真实合同。';
+  intro.textContent = '先核对你的条件。Navren 按已批准的服务规则匹配方案；匹配结果不构成贷款、商家报价或合同。';
   const text = document.createElement('textarea');
   text.value = request.text; text.rows = 3; text.maxLength = 1200;
   text.setAttribute('aria-label', '本次协商条件');
@@ -1323,13 +1563,13 @@ function renderServiceNegotiationPrompt(message, request) {
   shareLabel.className = 'service-memory-share';
   const share = document.createElement('input'); share.type = 'checkbox';
   const shareText = document.createElement('span');
-  shareText.textContent = '本次向模拟银行代理分享已确认的财务目标、流动性偏好和产品兴趣（默认关闭；不分享消费明细、风险测评或资金承诺）。';
+  shareText.textContent = '本次向银行服务代理分享已确认的财务目标、流动性偏好和产品兴趣（默认关闭；不分享消费明细、风险测评或资金承诺）。';
   shareLabel.append(share, shareText);
   const preview = document.createElement('button');
   preview.type = 'button'; preview.className = 'p-btn'; preview.textContent = '按当前条件匹配方案';
   const result = document.createElement('div'); result.className = 'service-negotiation-result';
   preview.addEventListener('click', async () => {
-    preview.disabled = true; preview.textContent = '正在核验模拟规则…'; result.replaceChildren();
+    preview.disabled = true; preview.textContent = '正在核验服务条件…'; result.replaceChildren();
     try {
       const view = await BankClient.post('/service-negotiations/preview', {
         text: text.value.trim(), share_memory: share.checked
@@ -1339,7 +1579,7 @@ function renderServiceNegotiationPrompt(message, request) {
       result.append(messageLine);
       if (view.shared_memory?.length) {
         const disclosure = document.createElement('p');
-        disclosure.textContent = '本次实际分享给模拟银行代理：' + view.shared_memory.map(item => item.value).join('；');
+        disclosure.textContent = '本次实际分享给银行服务代理：' + view.shared_memory.map(item => item.value).join('；');
         result.append(disclosure);
       } else if (share.checked) {
         const noMemory = document.createElement('p');
@@ -1348,7 +1588,7 @@ function renderServiceNegotiationPrompt(message, request) {
       }
       if (view.offers?.length) {
         const participants = document.createElement('p');
-        participants.textContent = '流程：用户利益代理 → 模拟银行服务代理 → 规则独立审核。';
+        participants.textContent = '流程：用户利益代理 → 银行服务代理 → 独立审核。';
         result.append(participants);
         view.offers.forEach(offer => result.append(renderServiceOffer(view.draft_id, offer)));
       }
@@ -1367,14 +1607,14 @@ function renderServiceOffer(draftId, offer) {
   const title = document.createElement('h4'); title.textContent = offer.title;
   const amount = document.createElement('p');
   amount.textContent = '每月最多减免 ' + formatServiceMoney(offer.monthly_value_minor)
-    + '，期限 ' + offer.duration_months + ' 个月，模拟成本上限 ' + formatServiceMoney(offer.max_cost_minor) + '。';
+    + '，期限 ' + offer.duration_months + ' 个月，方案成本上限 ' + formatServiceMoney(offer.max_cost_minor) + '。';
   const conditions = document.createElement('ul');
   (offer.conditions || []).forEach(item => { const li = document.createElement('li'); li.textContent = item; conditions.append(li); });
   const investment = document.createElement('p');
   investment.textContent = '是否要求购买理财：' + (offer.requires_investment_purchase ? '是' : '否');
   const status = document.createElement('p'); status.textContent = offer.status_label || '条件申请待核验';
   const accept = document.createElement('button'); accept.type = 'button'; accept.className = 'p-btn';
-  accept.textContent = '我接受这些条件，提交模拟申请';
+  accept.textContent = '我接受这些条件，提交申请';
   accept.addEventListener('click', async () => {
     accept.disabled = true;
     try {
@@ -1383,7 +1623,7 @@ function renderServiceOffer(draftId, offer) {
       });
       row.replaceChildren(title, amount, conditions, investment);
       const receipt = document.createElement('p');
-      receipt.textContent = '模拟申请已提交，状态：' + application.status + '；编号 ' + application.application_id;
+      receipt.textContent = '申请已提交，状态：' + application.status + '；编号 ' + application.application_id;
       const notice = document.createElement('small'); notice.textContent = application.notice;
       row.append(receipt, notice);
     } catch (error) {
@@ -1667,7 +1907,7 @@ function bookmarkIcon(button, saved) {
   button.closest('.bubble')?.classList.add('has-message-actions');
 }
 function configureAccountBookmark(button, message, text, entry = {}, result) {
-  const origin=chatBinding(), snippet=text.slice(0,200);
+  const origin=chatBinding(), snippet=(window.NavrenConversationComponents?.plainText(text) ?? text).slice(0,200);
   const messageId=entry.client_message_id||entry.bank_response_id||message.dataset.clientMessageId||message.dataset.bankResponseId||message.dataset.chatArchiveRow||newChatMessageId();
   const valid=()=>Storage.accountReady()&&origin.registered_user_id===BankClient.identity()?.registered_user_id&&origin.workspace_id===BankClient.identity()?.workspace_id&&origin.privacy_revision===BankClient.identity()?.privacy_revision;
   const matches=row=>(!row.category||row.category==='chat_message')&&row.workspace_id===origin.workspace_id&&row.privacy_revision===origin.privacy_revision&&(row.message_id?row.message_id===messageId:row.text===snippet);
@@ -1794,7 +2034,7 @@ function extractProfileFromMessage(text) {
 function handleKeyDown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    sendMessage();
+    sendMessage(null,null,{manualVoiceReview:true});
   }
 }
 
@@ -1864,7 +2104,7 @@ function rebindBubbleEvents(msgEl, historyEntry, retryQuestion = '') {
   }
   if(body&&historyEntry?.content){
     const names=historyEntry.highlight_names || [...body.querySelectorAll('.product-name')].map(node=>node.textContent);
-    body.classList.add('message-body','message-prose');body.innerHTML=highlightProductNames(renderReplyText(historyEntry.content),names);
+    body.classList.add('message-body','message-prose');body.innerHTML=highlightProductNames(renderReplyText(historyEntry.content,{safeStatus:historyEntry.isFallback===true}),names);
   }
 
   // 将历史收藏控件统一升级，去掉旧外圈和金色内联样式。
@@ -2262,7 +2502,7 @@ async function triggerHandoff(reason) {
     const state=await BankClient.get('/overview');if(!guard.valid(state))return;
     const risk=Storage.get('qingzhou_riskProfile');
     const boundRisk=risk?.workspace_id===state.workspace_id&&risk?.privacy_revision===state.privacy_revision;
-    const syncedItems=['业务参考日期：'+state.as_of,'业务风险配置：R'+state.profile.risk_level+'（演示配置，非正式测评）'];
+    const syncedItems=['业务参考日期：'+state.as_of,'业务风险配置：R'+state.profile.risk_level+'（账户配置，非正式测评）'];
     if(boundRisk)syncedItems.push('本地问卷参考：'+risk.level+' '+risk.label+'（不替代正式测评）');
     const recentMessages=currentChatHistory().slice(-4).map(m=>({role:m.role,text:String(m.content||'').replace(/<[^>]*>/g,'').slice(0,180)}));
     const packet={...chatBinding(),reason:String(reason),syncedItems,recentMessages,productCtx:'产品身份与购买条件请在发现逐项重新核对',timestamp:new Date().toISOString()};
@@ -2382,7 +2622,7 @@ function chatReferencePacket(ref){
 }
 function updateChatSendState(){
   const button=document.getElementById('sendBtn'),input=document.getElementById('userInput');
-  if(button)button.disabled=chatSending||!chatArchiveReady||chatArchiveBusy||(!input?.value.trim()&&!currentChatReference()&&!pendingImageFile);
+  if(button)button.disabled=chatSending||!chatArchiveReady||chatArchiveBusy||(!input?.value.trim()&&!currentChatReference()&&!(window.NavrenChatAttachments?.files().length));
 }
 function clearChatReference(){
   chatReferenceRevision++;
@@ -2399,21 +2639,23 @@ function retryChatRequest(snapshot,binding,message=null){
   }
   const ref=cloneChatReference(snapshot.reference);
   if(typeof snapshot.text!=='string')return;
-  if(snapshot.had_image&&(!snapshot.imageBlob||typeof snapshot.image!=='string')){
-    showToast('原问题包含图片，请重新附上图片后使用发送按钮。');return;
-  }
+  const attachmentFiles=snapshot.attachmentFiles||(snapshot.imageBlob?[snapshot.imageBlob]:[]);
+  if((snapshot.had_attachments||snapshot.had_image)&&!attachmentFiles.length){showToast('原问题包含附件，请重新添加原附件后发送。');return;}
   if(snapshot.had_audio&&!snapshot.voiceClip?.blob){showToast('原问题包含录音，请重新录音后发送。');return;}
-  if(!snapshot.text.trim()&&!ref&&!snapshot.imageBlob&&!snapshot.voiceClip?.blob)return;
+  if(!snapshot.text.trim()&&!ref&&!attachmentFiles.length&&!snapshot.voiceClip?.blob)return;
   if(message?.__navrenConsumedReplyControls?.retry===true)return;
   if(message&&!consumeReplyControl(message,'retry',binding))return;
   // 重试直接使用冻结请求；不会先把旧引用放进另写的草稿。
   sendMessage(null,{text:snapshot.text,reference:ref,return_view:snapshot.return_view,internal_choice:snapshot.internal_choice===true,
-    image:snapshot.image,imageBlob:snapshot.imageBlob,had_image:snapshot.had_image===true,
+    attachmentFiles,had_attachments:snapshot.had_attachments===true,had_image:snapshot.had_image===true,
     voiceClip:snapshot.voiceClip,had_audio:snapshot.had_audio===true},
     {internalChoice:snapshot.internal_choice===true});
 }
 function chatReferenceTitle(ref){
-  return String(ref?.title||ref?.label||ref?.id||'关联资料').slice(0,200);
+  const title=String(ref?.title||ref?.label||ref?.id||'关联资料').slice(0,200);
+  if(/^(?:(?:市场事件|Market event)\s*[·:]\s*)?e_[a-f0-9]{16,64}$/i.test(title))
+    return window.NavrenI18n?.language==='en'?'Market event':'关联市场事件';
+  return title;
 }
 function chatReferenceUi(text){return window.NavrenI18n?.t(text)??text;}
 function chatReferenceHref(view){
@@ -2441,7 +2683,7 @@ function chatUserMessageHtml(text,ref,returnView=null){
   if(!snapshot)return body;
   const href=chatReferenceHref(returnView);
   const summary='<span class="chat-user-reference" role="group" aria-label="'+escapeHtml(chatReferenceUi('随此消息发送的关联资料'))+'">'+
-    '<span class="chat-user-reference-label">'+escapeHtml(chatReferenceUi('关联资料'))+'</span><span class="chat-user-reference-title" translate="no" data-i18n-skip>'+
+    '<span class="chat-user-reference-label">'+escapeHtml(chatReferenceUi('关联资料'))+'</span><span class="chat-user-reference-title" translate="no" data-i18n-skip>'+ 
     escapeHtml(chatReferenceTitle(snapshot))+'</span>'+(href?'<a class="chat-user-reference-open" href="'+
       escapeHtml(href).replace(/"/g,'&quot;')+'">'+escapeHtml(chatReferenceUi('查看资料'))+'</a>':'')+'</span>';
   return summary+(body?'<span class="chat-user-text">'+body+'</span>':'');
@@ -2501,7 +2743,7 @@ window.addEventListener('navren:language',()=>{
     if(label)label.textContent=chatReferenceUi('关联资料');if(link)link.textContent=chatReferenceUi('查看资料');
   });
 });
-async function receivePageQuestion(id){
+async function receivePageQuestion(id,{focus=true}={}){
   const input=document.getElementById('userInput'),draftAtClaim=input.value;
   const guard=BankClient.guard(),privacyTurn=globalThis.NavrenChatPrivacyVersion||0,referenceTurn=chatReferenceRevision;
   try{
@@ -2514,7 +2756,7 @@ async function receivePageQuestion(id){
     window.NavrenChatReturnView=ref?data.return_view:null;window.NavrenPageContextId=null;
     // 关联跳转只添加附件。无引用旧文字票据仅兼容空且未变化的输入框。
     if(!ref&&!draftAtClaim&&!input.value&&typeof data.question==='string')input.value=data.question;
-    input.dispatchEvent(new Event('input'));syncChatReference();input.focus({preventScroll:true});
+    input.dispatchEvent(new Event('input'));syncChatReference();if(focus)input.focus({preventScroll:true});
   }catch(e){if(guard.valid()&&privacyTurn===(globalThis.NavrenChatPrivacyVersion||0))addMessage('ai',escapeHtml(e.message));}
 }
 for(const type of ['navren:privacy-reset','navren:identity-revoked','navren:account-change','navren:account-switched','pagehide'])

@@ -1,5 +1,6 @@
 """版本迁移、客户档案、字段字典和覆盖核验。"""
 import json
+import os
 import sqlite3
 import time
 from contextlib import closing, contextmanager
@@ -57,6 +58,45 @@ def _rebuild_workflow_status_tables(db):
             db.execute('DROP TABLE __v3_'+table)
 
 
+def _migrate_virtual_card_types(db):
+    """Widen only the two known legacy enums, preserving rows and dependants."""
+    for table, column in (('cards', 'type'), ('card_applications', 'requested_type')):
+        statement = next(s for s in ddl() if s.startswith('CREATE TABLE IF NOT EXISTS '+table+'('))
+        current_sql = statement.replace('CREATE TABLE IF NOT EXISTS ', 'CREATE TABLE ', 1)
+        wide = "CHECK("+column+" IN ('debit','credit','virtual'))"
+        narrow = "CHECK("+column+" IN ('debit','credit'))"
+        legacy_sql = current_sql.replace(wide, narrow, 1)
+        row = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+        if row and row['sql'] == current_sql:
+            continue
+        if not row or row['sql'] != legacy_sql or current_sql.count(wide) != 1:
+            raise RuntimeError('无法识别的卡片枚举迁移结构：'+table)
+        temporary = '__v6_'+table+'_types'
+        if db.execute('SELECT 1 FROM sqlite_master WHERE name=?', (temporary,)).fetchone():
+            raise RuntimeError('发现未清理的卡片枚举迁移备份表：'+temporary)
+        dependants = [r['sql'] for r in db.execute(
+            "SELECT sql FROM sqlite_master WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name",
+            (table,))]
+        names = [r['name'] for r in db.execute('PRAGMA table_info('+table+')')]
+        columns = 'rowid,'+','.join('"'+n.replace('"','""')+'"' for n in names)
+        # Keep the original table name out of RENAME: otherwise SQLite can rewrite
+        # child foreign keys and dependent views/triggers to the temporary name.
+        db.execute(legacy_sql.replace('CREATE TABLE '+table+'(', 'CREATE TABLE '+temporary+'(', 1))
+        db.execute('INSERT INTO '+temporary+'('+columns+') SELECT '+columns+' FROM '+table)
+        def equal_rows(left, right):
+            return not db.execute('SELECT '+columns+' FROM '+left+' EXCEPT SELECT '+columns+' FROM '+right).fetchone()
+        if not equal_rows(table, temporary) or not equal_rows(temporary, table):
+            raise RuntimeError('卡片枚举迁移复制核验失败：'+table)
+        db.execute('DROP TABLE '+table)
+        db.execute(current_sql)
+        db.execute('INSERT INTO '+table+'('+columns+') SELECT '+columns+' FROM '+temporary)
+        if not equal_rows(table, temporary) or not equal_rows(temporary, table):
+            raise RuntimeError('卡片枚举迁移回填核验失败：'+table)
+        db.execute('DROP TABLE '+temporary)
+        for sql in dependants:
+            db.execute(sql)
+
+
 def guard_version(bank):
     with closing(bank.connect()) as db:
         found = db.execute("SELECT name FROM sqlite_master WHERE name='schema_migrations'").fetchone()
@@ -82,6 +122,17 @@ def _migration_transaction(bank):
         db.close()
 
 
+def _migration_backup_path(database):
+    backup = Path(str(database)+'.before-v'+str(SCHEMA_VERSION)+'-'+str(time.time_ns())+'.sqlite3')
+    configured = os.environ.get('NAVREN_CUSTOMER_MIGRATION_BACKUP_DIR')
+    if configured is not None:
+        directory = Path(configured).expanduser()
+        if not configured.strip() or not directory.is_dir():
+            raise RuntimeError('客户档案迁移备份目录不存在或不是目录。')
+        return directory/backup.name
+    return backup
+
+
 def migrate(bank):
     with closing(bank.connect()) as db:
         found = db.execute("SELECT name FROM sqlite_master WHERE name='schema_migrations'").fetchone()
@@ -91,8 +142,8 @@ def migrate(bank):
         old_workspaces = db.execute('SELECT count(*) FROM workspaces').fetchone()[0]
     if version == SCHEMA_VERSION:
         return
+    backup = _migration_backup_path(bank.database)
     if old_workspaces:
-        backup = Path(str(bank.database)+'.before-v'+str(SCHEMA_VERSION)+'-'+str(time.time_ns())+'.sqlite3')
         with closing(bank.connect()) as source, closing(sqlite3.connect(backup)) as target:
             source.backup(target)
         backup.chmod(0o600)
@@ -121,6 +172,8 @@ def migrate(bank):
                 db.execute('INSERT INTO '+temporary+'('+cols+') SELECT '+cols+' FROM '+table)
                 db.execute('DROP TABLE '+table)
                 db.execute('ALTER TABLE '+temporary+' RENAME TO '+table)
+        if current < 6:
+            _migrate_virtual_card_types(db)
         load_sources(db)
         if current < 2:
             for row in db.execute('SELECT * FROM holdings WHERE amount_minor>0').fetchall():
@@ -142,7 +195,7 @@ def migrate(bank):
             db.execute('UPDATE workspace_datasets SET dataset_version=?,core_seed_hash=?',
                        (DATASET_VERSION,seed_fingerprint()))
         if db.execute('PRAGMA foreign_key_check').fetchone(): raise RuntimeError('迁移外键检查失败')
-        db.execute('INSERT INTO schema_migrations VALUES(?,?,?)',(SCHEMA_VERSION,bank.clock(),'保留业务状态和档案；允许未提供的生日缺项'))
+        db.execute('INSERT INTO schema_migrations VALUES(?,?,?)',(SCHEMA_VERSION,bank.clock(),'保留现有业务行；升级客户档案至 v6，兼容虚拟卡枚举'))
         db.execute("INSERT OR REPLACE INTO metadata VALUES('schema_version',?)",(str(SCHEMA_VERSION),))
 
 

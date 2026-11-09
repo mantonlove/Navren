@@ -216,9 +216,16 @@ const Api = {
   const PREFIX='/api/finance/chat-media';
   const HEX64=/^[a-f0-9]{64}$/;
   const HEX32=/^[a-f0-9]{32}$/;
-  const MIME=new Set(['image/png','image/jpeg','image/webp','image/gif','audio/wav','audio/webm','audio/ogg','audio/mpeg','audio/mp4']);
+  const DOCUMENT_MIME=Object.freeze({
+    'application/pdf':'pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'xlsx',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation':'pptx',
+    'text/plain':'txt','text/markdown':'md','text/csv':'csv'});
+  const DOCUMENT_KEYS=['file_name','document_format','text_chars','extraction_status','extraction_warning'];
+  const MIME=new Set(['image/png','image/jpeg','image/webp','image/gif','audio/wav','audio/webm','audio/ogg','audio/mpeg','audio/mp4',
+    ...Object.keys(DOCUMENT_MIME)]);
   const PCM_RATES=new Set([8000,16000,22050,24000,44100,48000]);
-  const LIMITS=Object.freeze({image_bytes:10485760,audio_bytes:26214400,audio_duration_ms_if_embedded:600000,
+  const LIMITS=Object.freeze({image_bytes:10485760,audio_bytes:26214400,document_bytes:10485760,document_text_chars:120000,audio_duration_ms_if_embedded:600000,
     image_pixels:40000000,media_per_user_turn:8,pending_per_workspace:32,pending_bytes_per_workspace:104857600,
     total_bytes_per_workspace:536870912,pending_ttl_seconds:86400,concurrent_binary_uploads_per_service:2});
   const DESCRIPTOR_KEYS=['contract','media_id','kind','mime_type','bytes','sha256','duration_ms','storage_status',
@@ -253,17 +260,39 @@ const Api = {
     return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical(value[k])).join(',')+'}';
   }
   function nonnegative(value){return Number.isSafeInteger(value)&&value>=0;}
+  function documentName(value,format){
+    if(typeof value!=='string'||Array.from(value).length<1||Array.from(value).length>180||value!==value.trim()||
+      /[\/\\]/u.test(value)||/\p{C}/u.test(value)||value.lastIndexOf('.')<=0||
+      value.slice(value.lastIndexOf('.')).toLowerCase()!=='.'+format)throw invalid();
+    return value;
+  }
+  function documentFields(media){
+    const format=DOCUMENT_MIME[media.mime_type];documentName(media.file_name,format);
+    if(media.document_format!==format||!nonnegative(media.text_chars)||media.text_chars>LIMITS.document_text_chars||
+      !(media.extraction_status==='text'&&media.text_chars>0&&media.extraction_warning===null||
+        media.extraction_status==='no_text'&&media.text_chars===0&&typeof media.extraction_warning==='string'&&
+        Array.from(media.extraction_warning).length>0&&Array.from(media.extraction_warning).length<=200))throw invalid();
+  }
+  function documentDisposition(name){
+    // RFC 5987: the server percent-encodes these characters as well.
+    return "attachment; filename*=UTF-8''"+encodeURIComponent(name).replace(/[!'()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase());
+  }
   function validateDescriptor(raw,boundOnly){
-    const media=clone(raw);keys(media,DESCRIPTOR_KEYS);
+    const media=clone(raw),document=media?.kind==='document';keys(media,document?DESCRIPTOR_KEYS.concat(DOCUMENT_KEYS):DESCRIPTOR_KEYS);
     if(media.contract!=='navren.chat-media/1'||typeof media.media_id!=='string'||!HEX64.test(media.media_id)||
-      !['image','audio'].includes(media.kind)||typeof media.mime_type!=='string'||
+      !['image','audio','document'].includes(media.kind)||typeof media.mime_type!=='string'||
       !(MIME.has(media.mime_type)||media.mime_type==='audio/pcm')||
       !Number.isSafeInteger(media.bytes)||media.bytes<=0||media.bytes>LIMITS[media.kind+'_bytes']||
       typeof media.sha256!=='string'||!HEX64.test(media.sha256)||
       !(media.duration_ms===null||Number.isSafeInteger(media.duration_ms)&&media.duration_ms>0&&media.duration_ms<=LIMITS.audio_duration_ms_if_embedded)||
       !['stored','bound'].includes(media.storage_status)||boundOnly&&media.storage_status!=='bound'||
       media.content_url!==PREFIX+'/'+media.media_id||media.historical_readonly!==true||media.execution_authority!==false||
-      !media.mime_type.startsWith(media.kind+'/'))throw invalid();
+      (media.kind==='image')!==media.mime_type.startsWith('image/')||
+      (media.kind==='audio')!==media.mime_type.startsWith('audio/')||document!==own(DOCUMENT_MIME,media.mime_type))throw invalid();
+    if(document){
+      if(media.duration_ms!==null||media.audio_format!==null)throw invalid();
+      documentFields(media);
+    }
     if(media.kind==='image'&&(media.duration_ms!==null||media.audio_format!==null))throw invalid();
     if(media.mime_type==='audio/pcm'){
       keys(media.audio_format,['encoding','sample_rate','channels']);
@@ -338,7 +367,9 @@ const Api = {
     return error('MEDIA_NETWORK','媒体服务暂不可用，请稍后重试。');
   }
   function httpFailure(status){
-    const values={401:['MEDIA_LOGIN_REQUIRED','登录已失效，请重新核验。'],404:['MEDIA_UNAVAILABLE','媒体不存在、未绑定或当前无权读取。'],
+    const values={400:['MEDIA_INVALID_FILE','文件内容无法读取，请检查原件或换为支持的格式。'],
+      422:['MEDIA_INVALID_FILE','文件内容无法读取，请检查原件或换为支持的格式。'],
+      401:['MEDIA_LOGIN_REQUIRED','登录已失效，请重新核验。'],404:['MEDIA_UNAVAILABLE','媒体不存在、未绑定或当前无权读取。'],
       409:['MEDIA_STALE','媒体所属账户或授权已变化，请重新读取。'],413:['MEDIA_TOO_LARGE','媒体超过允许的大小、像素或时长。'],
       415:['MEDIA_UNSUPPORTED','媒体类型不受支持，或文件内容与类型不符。'],429:['MEDIA_LIMITED','媒体上传繁忙或容量不足，请稍后重试。'],
       503:['MEDIA_CORRUPT','媒体暂时无法完整读取，请稍后重试。']};
@@ -356,10 +387,10 @@ const Api = {
   async function context(op,previous){
     const result=clone(await wait(op,()=>op.client.get('/chat-media/context')));
     financeEnvelope(result,['contract','workspace_binding','registered_user_id','privacy_revision','archive_epoch','limits'],op,op.identity.privacy_revision);
-    keys(result.limits,['image_bytes','audio_bytes','media_per_user_turn','mime_types']);
+    keys(result.limits,['image_bytes','audio_bytes','document_bytes','document_text_chars','media_per_user_turn','mime_types']);
     if(result.contract!=='navren.chat-media-context/1'||result.registered_user_id!==op.identity.registered_user_id||result.workspace_binding!==op.identity.workspace_id||
       result.privacy_revision!==op.identity.privacy_revision||!nonnegative(result.archive_epoch)||
-      ['image_bytes','audio_bytes','media_per_user_turn'].some(k=>result.limits[k]!==LIMITS[k])||
+      ['image_bytes','audio_bytes','document_bytes','document_text_chars','media_per_user_turn'].some(k=>result.limits[k]!==LIMITS[k])||
       !Array.isArray(result.limits.mime_types)||result.limits.mime_types.length!==MIME.size||
       new Set(result.limits.mime_types).size!==MIME.size||result.limits.mime_types.some(type=>!MIME.has(type))||
       previous&&(result.archive_epoch!==previous.archive_epoch||result.privacy_revision!==previous.privacy_revision)){
@@ -388,14 +419,19 @@ const Api = {
     try{
       if(!(blob instanceof global.Blob)||!Number.isSafeInteger(blob.size)||blob.size<=0)throw invalid();
       const mime=blob.type.split(';',1)[0].trim().toLowerCase();
-      if(!MIME.has(mime))throw error('MEDIA_UNSUPPORTED','请选择支持的原图片或音频文件。');
-      const kind=mime.split('/')[0];
+      if(!MIME.has(mime))throw error('MEDIA_UNSUPPORTED','请选择支持的原图片、音频或文档文件。');
+      const kind=own(DOCUMENT_MIME,mime)?'document':mime.split('/')[0];
+      const fileName=typeof blob.name==='string'?blob.name:null;
+      if(kind==='document')documentName(fileName,DOCUMENT_MIME[mime]);
+      let encodedName;
+      if(fileName!==null){try{encodedName=encodeURIComponent(fileName);}catch(_){throw invalid();}}
       if(blob.size>LIMITS[kind+'_bytes'])throw httpFailure(413);
       const key=uploadKey(setting.uploadKey),sourceHash=await digest(op,blob),ctx=await context(op);
       const response=await wait(op,()=>global.fetch(PREFIX,{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',
         headers:{'Accept':'application/json','Content-Type':mime,'X-QZ-CSRF':op.identity.csrf,
           'X-Navren-Expected-Workspace':op.identity.workspace_id,'X-Navren-Privacy-Revision':String(ctx.privacy_revision),
-          'X-Navren-Archive-Epoch':String(ctx.archive_epoch),'X-Navren-Upload-Key':key},
+          'X-Navren-Archive-Epoch':String(ctx.archive_epoch),'X-Navren-Upload-Key':key,
+          ...(encodedName===undefined?{}:{'X-Navren-File-Name':encodedName})},
         // A known-size Blob lets the browser set Content-Length. It is forbidden
         // for browser code to set that header or wrap the bytes as multipart/JSON.
         body:blob,signal:op.controller.signal}));
@@ -405,7 +441,8 @@ const Api = {
       const media=validateDescriptor(body.media,false);
       if(body.contract!=='navren.chat-media-upload/1'||body.workspace_binding!==op.identity.workspace_id||
         body.privacy_revision!==ctx.privacy_revision||body.archive_epoch!==ctx.archive_epoch||
-        media.kind!==kind||media.mime_type!==mime||media.bytes!==blob.size||media.sha256!==sourceHash||media.audio_format!==null)throw invalid();
+        media.kind!==kind||media.mime_type!==mime||media.bytes!==blob.size||media.sha256!==sourceHash||media.audio_format!==null||
+        kind==='document'&&media.file_name!==fileName)throw invalid();
       await context(op,ctx);check(op);return media;
     }catch(e){throw safeFailure(e);}finally{finish(op);}
   }
@@ -445,7 +482,8 @@ const Api = {
     const header=name=>response.headers?.get?.(name)?.trim()||'';
     if(header('Content-Type').toLowerCase()!==media.mime_type||!(/^[1-9]\d*$/).test(header('Content-Length'))||
       Number(header('Content-Length'))!==media.bytes||header('X-Content-Type-Options').toLowerCase()!=='nosniff'||
-      header('Cache-Control').toLowerCase()!=='no-store'||header('Content-Disposition').toLowerCase()!=='inline'||
+      header('Cache-Control').toLowerCase()!=='no-store'||
+      (media.kind==='document'?header('Content-Disposition')!==documentDisposition(media.file_name):header('Content-Disposition').toLowerCase()!=='inline')||
       header('Accept-Ranges').toLowerCase()!=='none')throw error('MEDIA_INTEGRITY','媒体响应无法完整核验，已停止读取。');
     const blob=await wait(op,()=>response.blob());
     if(!(blob instanceof global.Blob)||blob.type!==media.mime_type||blob.size!==media.bytes||await digest(op,blob)!==media.sha256)

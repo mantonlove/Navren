@@ -360,6 +360,7 @@ class FinanceGateway:
         workspace,role = self.bank.session(token)
         if role!='human': raise BankError('HUMAN_REQUIRED','当前会话不能确认操作。',403)
         if self.experience_provider is not None:self.experience_provider.validate(token,workspace)
+        self.security_events.bind(workspace,capture_before=True)
         handler._navren_session_token = token
         return workspace,token
 
@@ -787,6 +788,7 @@ class FinanceGateway:
             if not isinstance(core[key],str) or not 1<=len(core[key])<=128:
                 raise BankError('INVALID_FIELDS','操作、账户和幂等键必须为字符串。')
         floor = integer(payload.get('liquidity_floor_minor',0),'保留资金')
+        self.security_events.prepare_checkpoint(workspace,'basic_fields_validated')
         with closing(self.bank.connect()) as db:
             if core['action']=='aa_create':
                 from simulated_bank.aa_payments import canonical
@@ -798,14 +800,17 @@ class FinanceGateway:
         if not existing or existing['state'] not in TERMINAL:
             if core['action']=='purchase':
                 budget = self.budget(workspace,core['account_id'],floor)
+                self.security_events.prepare_checkpoint(workspace,'budget_account_observed',account_id=core['account_id'])
                 if integer(core.get('amount_minor'),'申购金额',1)>budget['investable_minor']:
                     raise BankError('LIQUIDITY_GUARD','申购金额超过扣除保留资金及近期到期款后的可投资额度。',422)
             elif core['action']=='reserve_funds':
                 budget=self.budget(workspace,core['account_id'])
+                self.security_events.prepare_checkpoint(workspace,'budget_account_observed',account_id=core['account_id'])
                 if integer(core.get('amount_minor'),'操作金额',1)>budget['investable_minor']:
                     raise BankError('LIQUIDITY_GUARD','金额超过扣除应急金、到期款和已预留资金后的可用额度。',422)
             elif core['action']=='book_services':
                 budget=self.budget(workspace,core['account_id'],exclude_hold_id=core.get('hold_id'))
+                self.security_events.prepare_checkpoint(workspace,'budget_account_observed',account_id=core['account_id'])
                 archive=self.bank.customer_archive(workspace)['records']
                 quote_ids=core.get('quote_ids')
                 quote_total=sum(q['price_minor'] for q in archive['service_quotes'] if quote_ids and q['id'] in quote_ids)
@@ -813,6 +818,7 @@ class FinanceGateway:
                     raise BankError('LIQUIDITY_GUARD','预约金额超过扣除其他保留款和到期款后的可用额度。',422)
         metrics = self.financial_metrics.snapshot(workspace,60)
         op = self.financial_metrics.prepare_bank_operation(workspace,core,agent_origin=agent_origin,metric_required=True)
+        self.security_events.prepare_checkpoint(workspace,'bank_prepare_returned',operation_id=op['id'])
         with self.bank.transaction() as db:
             policies = db.execute("SELECT details FROM audit WHERE workspace_id=? AND operation_id=? AND event='liquidity_policy' ORDER BY id LIMIT 1",(workspace,op['id'])).fetchone()
             if policies:
@@ -1327,6 +1333,8 @@ class FinanceGateway:
                     result = self.statements.preview(workspace,request_text(handler))
                 else:
                     payload = request_json(handler)
+                    if path=='/api/finance/operations/prepare':
+                        self.security_events.capture_prepare_request(workspace,payload)
                     if path.startswith('/api/finance/account-connections') and parsed.query:
                         raise BankError('INVALID_QUERY','平台关联写入不接受查询参数。',400)
                     if path=='/api/finance/card-bindings' and parsed.query:
@@ -1347,6 +1355,9 @@ class FinanceGateway:
                             raise BankError('PRIVACY_REVISION_CHANGED','账户权限版本无效。',409)
                         workspace,token=self.demo_sessions.select(token,payload['user_id'],payload['expected_workspace_id'],
                             payload.get('expected_privacy_revision'))
+                        request_guard.__exit__(None,None,None)
+                        request_guard=self.demo_sessions.request(token,workspace)
+                        request_guard.__enter__()
                         handler._navren_workspace=workspace;handler._navren_session_token=token
                         from user_memory import privacy_revision
                         with closing(self.bank.connect()) as db:handler._navren_start_revision=privacy_revision(db,workspace)
@@ -1421,6 +1432,10 @@ class FinanceGateway:
                             raise BankError('CONFIRMATION_REQUIRED','推进模拟日期需要明确确认。')
                         result=self.bank.advance_days(workspace,payload['days'])
                     elif path=='/api/finance/operations/prepare': result = self.prepare(workspace,payload)
+                    elif path=='/api/finance/subscriptions/manual-simulation':
+                        if parsed.query:raise BankError('INVALID_QUERY','模拟订阅登记不接受查询参数。',400)
+                        from simulated_bank.manual_subscriptions import register
+                        result=register(self.bank,workspace,payload)
                     elif path=='/api/finance/security/password-drafts':
                         from simulated_bank.security_credentials import prepare as prepare_password
                         result=prepare_password(self.bank,workspace,payload)

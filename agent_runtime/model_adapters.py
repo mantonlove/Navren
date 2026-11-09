@@ -35,6 +35,9 @@ GLM_REVIEW_MODEL = "GLM-5.3-Flash"
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 AIPING_URL = "https://aiping.cn/api/v1/chat/completions"
 AIPING_PRIMARY_MODEL = "DeepSeek-V4-Flash"
+GLM_OFFICIAL_MODEL = "glm-5.3-flash"
+GLM_REASONING_OUTPUT_LIMIT = 8192
+GLM_OFFICIAL_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 
 _LOG_LOCK = threading.Lock()
 
@@ -67,6 +70,54 @@ class ModelAdapterError(RuntimeError):
         self.attempts = attempts
         self.http_status = http_status
 
+
+
+class ModelRequestNotSentError(ModelAdapterError):
+    """A trusted local transport rejected before its actual upstream opener."""
+    def __init__(self):
+        super().__init__('request_rejected_before_send',model_id='not_dispatched',attempts=0)
+        self.request_sent=False
+        self.usage={}
+
+
+_LOCAL_REJECTION_CODES=frozenset({
+    'complete_wire_and_original_output_reserve_required',
+    'original_component_request_count_exceeded',
+    'component_actual_task_usage_required',
+    'component_actual_ledger_calls_required',
+    'attempt_not_human_authorized_scope',
+    'exact_official_endpoint_and_model_required',
+    'official_primary_mode_mismatch',
+    'official_GLM_full_review_mode_mismatch',
+    'AiPing_or_unregistered_provider_fields_forbidden',
+    'campaign_request_after_unknown_or_concurrent_call',
+    'campaign_duplicate_payload_key',
+    'campaign_nonfinite_payload',
+    'campaign_actual_payload_auto_route_and_model_required',
+})
+
+def safe_local_rejection_diagnostic(error, *, stage=None, wire=None):
+    """Only a real not-sent marker and exact allowlisted cause; no exception text."""
+    if (not isinstance(error,ModelRequestNotSentError) or error.attempts!=0
+            or getattr(error,'request_sent',None)is not False):
+        return None
+    cause=error.__cause__
+    code=(cause.args[0] if type(cause)is ValueError and len(cause.args)==1
+          and type(cause.args[0])is str and cause.args[0]in _LOCAL_REJECTION_CODES
+          else 'unclassified_local_before_send')
+    result={'cause_code':code,'layer':'local_before_send','request_sent':False,'attempts':0}
+    if stage in ('primary','conversation.tools'):result['stage']='primary'
+    elif stage in ('reviewer','reviewer.conversation'):result['stage']='reviewer'
+    if type(wire)is bytes:
+        import hashlib
+        result.update(wire_bytes=len(wire),request_sha256=hashlib.sha256(wire).hexdigest())
+    else:
+        previous=getattr(error,'local_rejection_diagnostic',None)
+        if type(previous)is dict:
+            size=previous.get('wire_bytes');pin=previous.get('request_sha256')
+            if type(size)is int and size>=0 and type(pin)is str and len(pin)==64 and all(c in '0123456789abcdef'for c in pin):
+                result.update(wire_bytes=size,request_sha256=pin)
+    return result
 
 def _key_from_sources(env_name: str, keychain_service: str) -> str:
     value = os.environ.get(env_name, "").strip()
@@ -129,6 +180,31 @@ class OpenAICompatibleJsonClient:
         self.key_loader = key_loader or (lambda: _key_from_sources(env_name, keychain_service))
         self.log_path = log_path
 
+    def _request_payload(self, *, system: str, user: str, stage: str) -> dict:
+        """纯构造钩子：预算估计与实际请求使用同一完整协议。"""
+        request_payload = {
+            "model": self.model_id,
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": user}],
+            "temperature": 0,
+            "max_tokens": _max_output_tokens(stage),
+        }
+        if self.provider == "deepseek":
+            # Planning and synthesis are limited to supplied, precomputed evidence;
+            # disable hidden reasoning so the bounded JSON answer is not truncated.
+            request_payload["thinking"] = {"type": "disabled"}
+            request_payload["response_format"] = {"type": "json_object"}
+        elif self.provider == "ai_ping":
+            request_payload["reasoning_effort"] = "low"
+            request_payload["response_format"] = {"type": "json_object"}
+        elif self.provider == "zhipu":
+            # 官方 GLM-5.3-Flash 仅支持思考；上限包含思考与正文。
+            request_payload["thinking"] = {"type": "enabled" if self.model_id == GLM_OFFICIAL_MODEL else "disabled"}
+            request_payload["response_format"] = {"type": "json_object"}
+        if self.provider == "zhipu" and self.model_id == GLM_OFFICIAL_MODEL:
+            request_payload.update(reasoning_effort="low", max_tokens=GLM_REASONING_OUTPUT_LIMIT)
+        return request_payload
+
     def complete_json(self, *, system: str, user: str, stage: str, request_id: str) -> dict:
         started = time.monotonic()
         attempts = 0
@@ -138,26 +214,14 @@ class OpenAICompatibleJsonClient:
         error_code = "provider_error"
         exception_type = None
         review_usage = None
+        provider_error_code = None
+        local_rejection_diagnostic = None
         try:
             key = self.key_loader()
             if not key:
                 error_code = "missing_api_key"
                 raise ModelAdapterError("missing_api_key", model_id=self.model_id, attempts=0)
-            request_payload = {
-                "model": self.model_id,
-                "messages": [{"role": "system", "content": system},
-                             {"role": "user", "content": user}],
-                "temperature": 0,
-                "max_tokens": _max_output_tokens(stage),
-            }
-            if self.provider == "deepseek":
-                # Planning and synthesis are limited to supplied, precomputed evidence;
-                # disable hidden reasoning so the bounded JSON answer is not truncated.
-                request_payload["thinking"] = {"type": "disabled"}
-                request_payload["response_format"] = {"type": "json_object"}
-            elif self.provider == "ai_ping":
-                request_payload["reasoning_effort"] = "low"
-                request_payload["response_format"] = {"type": "json_object"}
+            request_payload = self._request_payload(system=system, user=user, stage=stage)
             payload = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
             request = urllib.request.Request(
                 self.url, data=payload,
@@ -203,13 +267,36 @@ class OpenAICompatibleJsonClient:
                     return parsed
                 except urllib.error.HTTPError as error:
                     http_status = error.code
+                    if self.provider == "zhipu":
+                        # Only a bounded ASCII numeric code is retained. At the
+                        # read limit the body may be incomplete: keep it unknown.
+                        try:
+                            error_body = error.read(8192)
+                            if isinstance(error_body, bytes) and len(error_body) < 8192:
+                                error_envelope = json.loads(error_body.decode("utf-8"),
+                                    object_pairs_hook=_unique_object)
+                                provider_error = (error_envelope.get("error")
+                                    if isinstance(error_envelope, dict) else None)
+                                raw_code = (provider_error.get("code")
+                                    if isinstance(provider_error, dict) else None)
+                                code_text = (str(raw_code) if type(raw_code) is int
+                                    else raw_code if isinstance(raw_code, str) else None)
+                                if isinstance(code_text, str) and re.fullmatch(r"[0-9]{1,8}", code_text):
+                                    provider_error_code = code_text
+                        except Exception:
+                            # No body, message, headers, hashes or usage inferred
+                            # from an error response are persisted or accepted.
+                            pass
                     retryable = error.code in (408, 409, 425, 429) or error.code >= 500
                     if retryable and attempt < self.max_retries:
                         time.sleep(min(0.25 * (attempt + 1), 0.5))
                         continue
                     error_code = "provider_http_error"
-                    raise ModelAdapterError(error_code, model_id=self.model_id,
-                                            attempts=attempts, http_status=http_status) from None
+                    failure = ModelAdapterError(error_code, model_id=self.model_id,
+                                                attempts=attempts, http_status=http_status)
+                    if provider_error_code is not None:
+                        failure.provider_error_code = provider_error_code
+                    raise failure from None
                 except (urllib.error.URLError, TimeoutError, OSError) as error:
                     if attempt < self.max_retries:
                         time.sleep(min(0.25 * (attempt + 1), 0.5))
@@ -226,7 +313,12 @@ class OpenAICompatibleJsonClient:
                                             attempts=attempts, http_status=http_status) from None
             raise ModelAdapterError(error_code, model_id=self.model_id, attempts=attempts,
                                     http_status=http_status)
-        except ModelAdapterError:
+        except ModelAdapterError as error:
+            local_rejection_diagnostic=safe_local_rejection_diagnostic(error,stage=stage,wire=locals().get('payload'))
+            if local_rejection_diagnostic is not None:
+                error.local_rejection_diagnostic=local_rejection_diagnostic
+                error_code=error.code
+                attempts=0
             raise
         except Exception as error:
             # Keep unexpected library/provider shape failures diagnosable without
@@ -250,6 +342,8 @@ class OpenAICompatibleJsonClient:
                 "error_code": error_code,
                 "exception_type": exception_type,
                 **({"usage": review_usage} if review_usage is not None else {}),
+                **({"provider_error_code": provider_error_code} if provider_error_code is not None else {}),
+                **({"local_rejection_diagnostic":local_rejection_diagnostic} if local_rejection_diagnostic is not None else {}),
             }, self.log_path)
 
 

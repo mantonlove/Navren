@@ -25,7 +25,7 @@ sys.path.insert(0,str(ROOT))
 from scripts.run_jev_ab import Recorder, digest, paired_plan, write
 from evaluation.jev_business.catalog import load_dataset, selected_cases
 
-DEFAULT_PUBLIC = Path(os.environ.get('NAVREN_PUBLIC_KNOWLEDGE_DB') or ROOT/'data/public-knowledge.sqlite3')
+DEFAULT_PUBLIC = Path('/Users/manton/Library/Application Support/Qingzhou/simulated-bank.knowledge.sqlite3')
 
 # 这是一笔有实际双审原件的有限阶段迁移，不是通用 PASS 旗标豁免。
 V2_REVIEW_ID = 'e44ec998-61b0-47d6-9f7f-9a53b6d95f68'

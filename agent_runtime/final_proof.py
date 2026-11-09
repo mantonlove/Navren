@@ -181,7 +181,9 @@ def restore_review_projection(boundary, projection, *, raw_projection=None,
     # raw fields are copied; typed offsets and issued history keep their paths.
     if not quotes and type(raw_projection) is dict:
         raw_draft = raw_projection.get('draft')
-        if type(raw_draft) is dict and not any(k in raw_draft for k in ('amount_claims', 'ratio_claims')):
+        if (type(raw_draft) is dict and all(k not in raw_draft
+                or (type(raw_draft[k]) is list and raw_draft[k] == [])
+                for k in ('amount_claims', 'ratio_claims'))):
             import unicodedata
             if (type(draft) is not dict or type(target) is not dict
                     or type(raw_draft.get('text')) is not str):
@@ -226,11 +228,24 @@ def expected_review_projection(boundary, raw, *, historical_quote_market=None,
         fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
     allowed = {'question','history','server_context','evidence','draft','monetary_evidence',
         'amount_contract','ratio_contract','operations','calendar_widgets','policy',
-        'financial_evidence_transport','presentation_review','provider_review','public_evidence_limits','catalog_information'}
+        'financial_evidence_transport','presentation_review','provider_review','public_evidence_limits','catalog_information',
+        'saved_payee_record_basis'}
     if set(raw) - allowed:
         fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
     b = deepcopy(boundary)  # local expected aliases/counts cannot mutate the real turn
     out = {}
+    # The independent composer consumes the exact new host contract too. It
+    # must never copy the reviewed result or call the reviewed review_packet.
+    from .payment_completion import validate_saved_payee_review_basis
+    payee_basis = None
+    query_ref = None
+    if 'saved_payee_record_basis' in raw:
+        try:
+            payee_basis = validate_saved_payee_review_basis(raw)
+        except (ValueError, TypeError, KeyError):
+            fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+        if payee_basis['query_name'] is not None:
+            query_ref = b._alias(payee_basis['query_name'], 'person')
     if 'financial_evidence_transport' in raw:
         if raw['financial_evidence_transport'] != 'catalog-v1': fail()
         out['financial_evidence_transport'] = 'catalog-v1'
@@ -258,6 +273,36 @@ def expected_review_projection(boundary, raw, *, historical_quote_market=None,
                 projected['data'].update(b._cashflow_scenario_sources(row['data'], assessment_days))
         out['evidence'].append({'id': projected['evidence_id'], 'tool': row['tool'],
             'data': projected['data'], 'source': b._text(row['source'], maximum=100)})
+    if payee_basis is not None:
+        source_id = b._alias(payee_basis['evidence_id'])
+        source = next((e for e in out['evidence'] if e['id'] == source_id), None)
+        rows = source.get('data', {}).get('beneficiaries') if source else None
+        if type(rows) is not list:
+            fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+        by_record = {}
+        for row in rows:
+            if type(row) is not dict or 'id' not in row:
+                fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+            if row['id'] in by_record and not strict_equal(by_record[row['id']], row):
+                fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+            by_record[row['id']] = row
+        source_ids = [b._alias(i) for i in payee_basis['source_record_ids']]
+        matched_ids = [b._alias(i) for i in payee_basis['matched_record_ids']]
+        if set(source_ids) != set(by_record) or len(set(source_ids)) != len(source_ids):
+            fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+        facts = []
+        for row in payee_basis['row_facts']:
+            identifier = b._alias(row['record_id'])
+            if any(not strict_equal(by_record[identifier].get(k), row[k]) for k in ('verified', 'status')):
+                fail('AGENT_FINAL_PARTIAL_PROJECTION', 503)
+            facts.append({**row, 'record_id': identifier})
+        out['saved_payee_record_basis'] = {
+            'contract': payee_basis['contract'], 'evidence_id': source_id,
+            'query_ref': query_ref, 'query_scope': payee_basis['query_scope'],
+            'source_record_ids': source_ids, 'matched_record_ids': matched_ids,
+            'source_record_count': len(source_ids), 'matched_record_count': len(matched_ids),
+            'row_facts': facts, 'record_identity_key': 'id',
+            'local_current_query_binding': True, 'execution_authority': False}
     out['operations'] = b._project(raw.get('operations', []), 'operations') if 'operations' in _TASK_DOMAINS[b.task] else []
     out['calendar_widgets'] = b._project(raw.get('calendar_widgets', []), 'calendar') if 'calendar' in _TASK_DOMAINS[b.task] else []
     if 'presentation_review' in raw:
@@ -316,7 +361,42 @@ def _unique_json(pairs):
     return out
 
 
-def validate_review_projection(boundary, raw, actual, *, review_wire, reviewer_model,
+def _review_wire_parameters_match(wire, reviewer_model, reviewer):
+    """新官方模型仅接受实际标准审核器的完整发送参数；旧模型保留原1400合同。"""
+    from .model_adapters import GLM_OFFICIAL_MODEL, GLM_OFFICIAL_URL, OpenAICompatibleJsonClient
+    if reviewer_model != GLM_OFFICIAL_MODEL:
+        return type(wire.get('max_tokens')) is int and wire['max_tokens'] == 1400
+    from .conversation import GLMConversationReviewer, _repair_input_reviewer
+    try:
+        inner = _repair_input_reviewer(reviewer)
+        if inner is None:
+            return False
+        methods = ('_payload', '_request_parts', 'request_payload', 'serialized_request',
+                   'review_system', '_catalog_route_supported')
+        if any(name in vars(inner) or getattr(type(inner), name, None)
+                is not getattr(GLMConversationReviewer, name) for name in methods):
+            return False
+        client = vars(inner).get('client')
+        if (type(client) is not OpenAICompatibleJsonClient
+                or any(name in vars(client) for name in ('_request_payload', 'complete_json'))
+                or vars(inner).get('model_route') != 'official'
+                or inner.model_id != reviewer_model or client.model_id != reviewer_model
+                or client.provider != 'zhipu' or client.url != GLM_OFFICIAL_URL
+                or client.env_name != 'GLM_API_KEY' or client.keychain_service != 'CC/GLM_API_KEY'
+                or type(client.max_retries) is not int or client.max_retries != 0 or client.timeout != 35):
+            return False
+        expected = OpenAICompatibleJsonClient._request_payload(
+            client, system='', user='', stage='reviewer.conversation')
+        if (type(inner.output_token_limit) is not int
+                or not strict_equal(inner.output_token_limit, expected['max_tokens'])):
+            return False
+        return strict_equal({k: v for k, v in wire.items() if k != 'messages'},
+                            {k: v for k, v in expected.items() if k != 'messages'})
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def validate_review_projection(boundary, raw, actual, *, review_wire, reviewer_model, reviewer=None,
                                review_carrier_version=CARRIER_LITERAL,
                                review_carrier_witness=None, transport=None,
                                historical_quote_market=None, historical_quote_session=None,
@@ -327,12 +407,16 @@ def validate_review_projection(boundary, raw, actual, *, review_wire, reviewer_m
     try:
         carrier_version(review_carrier_version)
         wire = json.loads(review_wire, object_pairs_hook=_unique_json)
-        if (type(wire) is not dict or wire.get('model') != reviewer_model or wire.get('max_tokens') != 1400
+        if (type(wire) is not dict or wire.get('model') != reviewer_model or not _review_wire_parameters_match(wire, reviewer_model, reviewer)
                 or type(wire.get('messages')) is not list or len(wire['messages']) != 2
                 or wire['messages'][0].get('role') != 'system' or wire['messages'][1].get('role') != 'user'
                 or type(wire['messages'][1].get('content')) is not str):
             fail('AGENT_FINAL_REVIEW_WIRE_INVALID', 503)
         sent = json.loads(wire['messages'][1]['content'], object_pairs_hook=_unique_json)
+        # Only actual wire table slots are decoded. The logical packet, Base
+        # originals and both independent complete comparisons below stay intact.
+        from .primary_tool_transport import restore_review_data_tables
+        sent = restore_review_data_tables(sent, wire['messages'][0].get('content'))
         expanded = _expand_review(boundary, actual, review_carrier_version=review_carrier_version,
             review_carrier_witness=review_carrier_witness)
         if not strict_equal(_expand_review(boundary, sent, review_carrier_version=review_carrier_version,
@@ -392,7 +476,7 @@ class FinalResponseProofs:
 
     def approved(self, *, gateway, workspace, request_id, language, round_number, reviewer_model,
                  verdict, projection, raw_projection, actual_projection, metric_batches, observer_batches,
-                 publication_sources, deadline, boundary, review_wire,
+                 publication_sources, deadline, boundary, review_wire, reviewer=None,
                  review_carrier_version=CARRIER_LITERAL, review_carrier_witness=None,
                  private_context_disabled=False, generated_code_session=None, operation_tools=None,
                  historical_quote_session=None, historical_quote_proof=None):
@@ -450,7 +534,7 @@ class FinalResponseProofs:
         require_complete(projection)
         review_transport={}
         restored = validate_review_projection(boundary, raw_projection, actual_projection,
-            review_wire=review_wire, reviewer_model=reviewer_model,
+            review_wire=review_wire, reviewer_model=reviewer_model, reviewer=reviewer,
             review_carrier_version=review_carrier_version,review_carrier_witness=review_carrier_witness,
             transport=review_transport,historical_quote_market=quote_market,
             historical_quote_session=historical_quote_session,historical_quote_proof=historical_quote_proof)

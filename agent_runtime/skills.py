@@ -56,6 +56,10 @@ def _definition(path):
         if directory.is_symlink():
             raise ValueError('invalid_skill_file')
         for reference in sorted(directory.glob('*.md')):
+            # AppleDouble 仅是外盘辅助文件；软链接和目录仍走原拒绝路径。
+            if (reference.name.startswith('._') and not reference.is_symlink()
+                    and reference.is_file()):
+                continue
             if not REFERENCE.fullmatch(reference.name):
                 raise ValueError('invalid_skill_reference')
             _read(reference)

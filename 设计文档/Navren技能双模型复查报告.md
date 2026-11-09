@@ -1,12 +1,10 @@
 # Navren 技能与 RAG 消费合同双模型复查
 
-> 历史设计或实施记录：保留文内注明版本的测试结论，不能作为当前版本的验收结果。当前实现与运行方式见 [README](../README.md) 和 [技术说明](../TECHNICAL.md)。本机机器信息已清理，未发布的历史产物不提供仓库链接。
-
-复查日期：2026-10-05。产出者：Codex。正式源码：`项目根目录`。
+复查日期：2026-10-05。产出者：Codex。正式源码：`/Users/manton/CC/projects/Navren`。
 
 **最终门禁：PASS。初审两位均 REVISE；修复及本地验证后，两位复审均 PASS，审查覆盖 complete，置信度分别 0.86 与 0.85，无阻断项。** 两轮均真实调用，均走 Aiping 主路由，没有使用备用渠道、续审或以本地自检代替正式双审。
 
-本轮复查采用 deepseek-review 技能（本机历史资料未发布）。
+本轮复查采用 [deepseek-review 技能](/Users/manton/.codex/skills/deepseek-review/SKILL.md)。
 
 ## 两位模型的独立意见
 
@@ -53,14 +51,14 @@ GLM 另建议强调直接消费类调用者展示前必须执行 `assert_fresh`�
 
 ## 原始记录
 
-- 初审完整双模型结果（历史资料未随仓库发布）
-- 初审源码与旧漏洞证据（历史资料未随仓库发布）
-- 逐项处置与初审原意见（历史资料未随仓库发布）
-- 二审完整双模型结果（历史资料未随仓库发布）
-- 75项完整测试输出（历史资料未随仓库发布）
-- 测试、格式及源hash清单（历史资料未随仓库发布）
-- 修复后实际复现结果（历史资料未随仓库发布）
-- 独立本地补充探针（历史资料未随仓库发布）
-- 当前实施验收记录（历史资料未随仓库发布）
+- [初审完整双模型结果](/Users/manton/CC/projects/Navren/outputs/skills-review-20261005/round-1/review.json)
+- [初审源码与旧漏洞证据](/Users/manton/CC/projects/Navren/outputs/skills-review-20261005/round-1/local-code-review.md)
+- [逐项处置与初审原意见](/Users/manton/CC/projects/Navren/outputs/skills-review-20261005/round-2/prior-review-and-disposition.json)
+- [二审完整双模型结果](/Users/manton/CC/projects/Navren/outputs/skills-review-20261005/round-2/review.json)
+- [75项完整测试输出](/Users/manton/CC/projects/Navren/outputs/skills-review-20261005/round-2/test-output.txt)
+- [测试、格式及源hash清单](/Users/manton/CC/projects/Navren/outputs/skills-review-20261005/round-2/test-summary.json)
+- [修复后实际复现结果](/Users/manton/CC/projects/Navren/outputs/skills-review-20261005/round-2/fix-proof.json)
+- [独立本地补充探针](/Users/manton/CC/projects/Navren/outputs/skills-review-20261005/extra-local-checks.md)
+- [当前实施验收记录](/Users/manton/CC/projects/Navren/outputs/skills-acceptance/validation.json)
 
 初审 review_id：`9ec4aed5-237b-40c9-8558-033007c026cf`。复审 review_id：`7b049e57-4abb-4d42-af27-98df484ca3c4`；复审包 SHA256：`afb3686454b1d5eeba7dcdb8eb3d925864fd63a9dec7e5a2625a674ebdf955f4`。

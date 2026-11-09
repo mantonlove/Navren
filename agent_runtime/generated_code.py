@@ -23,12 +23,24 @@ from .sandbox_runtime.sandbox import (Limits, SandboxExecutor, Scope,
                                       TrustedDatasetRegistry)
 
 TOOL_NAME = 'run_generated_code'
+_IDENTITY_MINOR_ABI_EXAMPLE = '(module\n  (memory (export "memory") 1)\n  (func (export "run") (param $p i32) (param $n i32) (result i64)\n    (i64.store (local.get $p) (i64.load (local.get $p)))\n    (i64.or\n      (i64.shl (i64.const 8) (i64.const 32))\n      (i64.extend_i32_u (local.get $p)))))'
+_SUCCESS_EXPLANATION = ('工具成功只表示隔离执行结果与既有指标一致。'
+                        '该代码回执不提供金融操作权限。')
 TOOL_SPEC = (
     '在受限 WAT worker 中复现本轮已读取、完整且可计算的既有金额指标。'
     '先读取正式指标，只传原 metric_id 和 WAT；不得提交身份、路径、数据、配方或权限。'
-    'WAT 必须仅导出 memory 和 run(i32输入指针,i32个数)->i64，'
-    '将单个输入 i64 原样写入内存，返回 (输出字节数<<32)|输出地址。'
-    '禁止 imports/WASI；结果只核对原指标，不形成新金额事实或授权交易。',
+    '只支持 identity_minor/1：宿主已把一个小端 i64 输入值放在参数 $p 指向的内存中，'
+    '$n 是值的个数，本工具为 1，不是字节数。复现必须读取该输入，不写死金额或地址。'
+    '仅导出 memory 和 run(i32输入指针,i32个数)->i64。run 结束时栈只能留下一个 i64；'
+    '不要留下额外的独立 const/shl/or 结果。返回值高32位为输出字节数8，低32位为输出地址，'
+    '即 (8<<32)|输出指针；若原位写回，输出地址用 $p，而不是常数8。'
+    '完整合法的最小 ABI 结构示例，不包含任何业务金额：\n'
+    + _IDENTITY_MINOR_ABI_EXAMPLE
+    + '\n示例只说明 ABI；模型仍须显式提交本轮 metric_id 和实际 WAT。'
+    '成功返回中的 explanation 只在真实成功回执成立时可引用；失败只能说明未形成代码复现结果。'
+    '不要用代码回执推断金融状态或复制账户字段清单。'
+    '禁止 imports/WASI；原代码大小、内存、fuel、时间与工具额度不变。'
+    '结果只核对原指标，不形成新金额事实或授权交易；失败不自动重试。',
     {'type': 'object', 'properties': {
         'metric_id': {'type': 'string', 'minLength': 1, 'maxLength': 128},
         'wat': {'type': 'string', 'minLength': 1, 'maxLength': 65536}},
@@ -47,6 +59,25 @@ def _sha(value):
 def _need(condition, code):
     if not condition:
         raise BankError(code, '受限代码或原指标的权限、来源、计算条件未满足。', 409)
+
+
+def _worker_rejected(receipt):
+    """仅把受信 worker 的固定阶段/原因映射成安全提示，不回传原异常。"""
+    reason = receipt.get('reason') if type(receipt) is dict else None
+    phases = receipt.get('worker_phases') if type(receipt) is dict else None
+    phase = phases[-1] if type(phases) is list and phases else None
+    if reason == 'wasm_validation_compile_or_resource_error' and phase == 'compile':
+        message = ('受限 WAT 在编译/验证阶段未通过，本次未形成可用的代码复现结果。'
+                   '请按工具中的完整 ABI 检查指令类型和栈：run 结束只能留下一个 i64，'
+                   '输出长度为8字节，地址由输入参数 $p 取得，不写死金额或地址。')
+    elif reason == 'wasm_validation_compile_or_resource_error' and phase == 'parse_wat':
+        message = ('受限 WAT 文本解析未通过，本次未形成可用的代码复现结果。'
+                   '请按工具中的完整 module/函数 ABI 检查括号和指令结构。')
+    else:
+        message = ('受限 WAT 未通过既有沙箱校验，本次未形成可用的代码复现结果。'
+                   '请核对工具规定的导出、输入/输出 ABI 和资源限制。')
+    raise BankError('GENERATED_CODE_WORKER_REJECTED', message +
+                    'imports/WASI及原资源、调用额度保持，不自动重试。', 409)
 
 
 def _knowledge(tools):
@@ -224,8 +255,8 @@ class GeneratedCodeSession:
                     limits=Limits(total_seconds=left))
                 receipt = executor.execute(scope, handle, wat, cancel=self.cancel)
                 self._live()
-                _need(receipt['status'] == 'COMPLETED_CANDIDATE',
-                      'GENERATED_CODE_WORKER_REJECTED')
+                if receipt['status'] != 'COMPLETED_CANDIDATE':
+                    _worker_rejected(receipt)
                 with self._guard() as db:
                     current = self._snapshot(metric_id, db)
                     _need(current == snapshot, 'GENERATED_CODE_AUTHORIZED_SNAPSHOT_CHANGED')
@@ -241,6 +272,7 @@ class GeneratedCodeSession:
                     'metric_id': metric_id, 'execution_id': receipt['execution_id'],
                     'code_sha256': receipt['code_sha256'], 'binding_sha256': binding_sha,
                     'receipt_sha256': _sha(receipt), 'independent_review_required': True,
+                    'explanation': _SUCCESS_EXPLANATION,
                     'financial_execution_authorized': False, 'new_financial_metric_registered': False,
                     'formal_fresh_and_publication_guard_required': True}
                 self._jobs.append({'metric_id': metric_id, 'snapshot': snapshot,

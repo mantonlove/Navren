@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="navren-shell">
 <head>
 <meta charset="UTF-8">
+<script src="js/page_load.js"></script>
 <script data-navren-theme-bootstrap>
 (() => {
   try {
@@ -9,7 +10,7 @@
     if(theme!=='light'&&theme!=='dark')return;
     const root=document.documentElement;
     root.dataset.theme=theme;root.style.colorScheme=theme;
-    root.style.backgroundColor=theme==='dark'?'#0d1725':'#edf3fa';
+    root.style.backgroundColor=theme==='dark'?'#111a24':'#f6f7f8';
   } catch(_) {}
 })();
 </script>
@@ -29,6 +30,9 @@
 <link rel="stylesheet" href="css/payment_contacts.css?dq=3d0552fd4949">
 <link rel="stylesheet" href="css/form_controls.css?dq=546db5bc506d">
 <link rel="stylesheet" href="css/personal_profile.css?v=20261014-avatar-1">
+<link rel="stylesheet" href="css/page_load.css">
+<link rel="stylesheet" href="css/product_frame.css?v=local-20261028">
+<link rel="stylesheet" href="css/product_surfaces.css?v=local-20261028">
 <link rel="stylesheet" href="css/quiet_focus.css?v=fb63a47fe877">
 </head>
 <body data-page="mine">
@@ -40,15 +44,17 @@
     <a class="nav-item" href="chat.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="nav-label">对话</span></a>
     <a class="nav-item" href="account.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 9h18m-5 5h3"/></svg><span class="nav-label">账户</span></a>
     <a class="nav-item" href="recommend.html"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M16 3a8 8 0 0 1 5 5h-5z"/></svg><span class="nav-label">发现</span></a>
+    <a class="nav-item" href="messages.html" data-navren-messages><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg><span class="nav-label" data-i18n-skip>消息</span></a>
     <a class="nav-item active" href="mine.html" aria-current="page"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="nav-label">我的</span></a>
+    <a id="navrenSettings" class="shell-settings-entry" href="mine.html?view=settings#settings" aria-label="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 5 .6-2h4.4l.6 2 1.8 1.1 2-.5 2.2 3.8-1.4 1.5v2.2l1.4 1.5-2.2 3.8-2-.5-1.8 1.1-.6 2H9.8l-.6-2-1.8-1.1-2 .5-2.2-3.8 1.4-1.5V9.9L3.2 8.4l2.2-3.8 2 .5Z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></a>
   </nav>
 
   <main class="main" id="mainContent" tabindex="-1">
     <header class="header">
       <div class="header-identity"><a class="brand" href="chat.html" aria-label="Navren对话"><img class="brand-wordmark" src="assets/brand/navren-wordmark.png" width="2172" height="724" alt=""></a><h1 class="header-location" id="mineViewTitle" tabindex="-1" data-view-heading>我的</h1><span id="mineViewEyebrow" hidden>长期安排与个人理解</span></div>
 
-    </header>
-    <section id="accountSwitcher" aria-label="演示账户" class="account-switcher" hidden></section>
+    <div class="shell-tools" data-navren-shell-tools></div></header>
+    <section id="accountSwitcher" aria-label="账户切换" class="account-switcher" hidden></section>
 
     <div class="page-scroll">
       <div class="mine-page mine-workspace" id="mineWorkspace">
@@ -78,7 +84,7 @@
   </div>
 </section>
 <section id="mineRelationsSection" class="mine-home-section" aria-labelledby="mineRelationsTitle"><div class="mine-section-heading"><h2 id="mineRelationsTitle" data-i18n-skip>财务关系</h2><a href="mine.html?view=graph" data-mine-open="graph">进入关系概览 ›</a></div><div class="mine-domain-grid" id="mineDomainOverview"></div></section>
-<section id="mineRiskSection" class="mine-home-section" aria-labelledby="mineRiskSectionTitle"><div class="mine-section-heading"><h2 id="mineRiskSectionTitle" data-home-section-title="资金与风险">资金与风险</h2></div><div class="mine-risk-grid"><article class="card" id="riskCard"><h3>聊天中的风险态度</h3><div id="riskDetail"></div></article><article class="card" id="mineBusinessRisk"><h3>模拟业务风险配置</h3><p>正在核对来源…</p></article><article class="card"><h3>正式风险测评</h3><p>未取得可核验的正式测评结果，状态与有效期未知。</p></article></div></section>
+<section id="mineRiskSection" class="mine-home-section" aria-labelledby="mineRiskSectionTitle"><div class="mine-section-heading"><h2 id="mineRiskSectionTitle" data-home-section-title="资金与风险">资金与风险</h2></div><div class="mine-risk-grid"><article class="card" id="riskCard"><h3>聊天中的风险态度</h3><div id="riskDetail"></div></article><article class="card" id="mineBusinessRisk"><h3>资金与风险设置</h3><p>正在核对来源…</p></article><article class="card"><h3>正式风险测评</h3><p>未取得可核验的正式测评结果，状态与有效期未知。</p></article></div></section>
 <section id="minePreferencesSection" class="mine-home-section" aria-labelledby="minePreferencesSectionTitle">
   <div class="mine-section-heading"><h2 id="minePreferencesSectionTitle" data-home-section-title="偏好与记忆">偏好与记忆</h2><button type="button" class="p-btn mine-preferences-add" id="addMemoryButton" onclick="openFinancialMemoryEditor()">添加记忆</button></div>
   <div class="mine-preferences-board">

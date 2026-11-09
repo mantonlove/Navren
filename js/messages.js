@@ -116,6 +116,7 @@ window.NavrenMessages = (() => {
     if(openingDetail&&!detail)return;
     if(background&&(busy||mutating||openingDetail||revoked||destroyed||document.visibilityState!=='visible'||byId('messageCategoryControl')?.getAttribute('aria-expanded')==='true'))return;
     const target=background?Math.max(state.offset,state.limit):state.limit;
+    const pageLoad=!append&&!background&&(verify||phase==='loading')?window.NavrenPageLoad?.begin():null;
     const token=++epoch;busy=true;if(!background)status('');byId('messageList').setAttribute('aria-busy','true');
     if(!append&&!background){phase='loading';state.items=[];state.offset=0;state.has_more=false;byId('messageList').replaceChildren(empty('正在核对消息…',''));byId('messagePagination').hidden=true;}
     syncControls();
@@ -129,9 +130,9 @@ window.NavrenMessages = (() => {
       }while(background&&data.has_more&&offset<target);
       if(background&&byId('messageCategoryControl')?.getAttribute('aria-expanded')==='true')return;
       const active=document.activeElement,focusedCard=active?.closest?.('[data-message-id]'),focus=focusedCard?{id:focusedCard.dataset.messageId}:{controlId:active?.id},scroll=background?document.querySelector('.page-scroll')?.scrollTop:null;
-      state.items=append?[...state.items,...items]:items;state.offset=offset;state.has_more=data.has_more;phase='ready';adopt(data);busy=false;status('');paint();
+      state.items=append?[...state.items,...items]:items;state.offset=offset;state.has_more=data.has_more;phase='ready';adopt(data);busy=false;status('');paint();pageLoad?.ready();
       if(background){if(scroll!=null)document.querySelector('.page-scroll').scrollTop=scroll;if(focus.id)focusCard(focus.id);else if(focus.controlId){const control=byId(focus.controlId);if(control&&!control.disabled&&control.getClientRects().length)control.focus({preventScroll:true});}}
-    }catch(e){if(token!==epoch||destroyed||revoked)return;busy=false;if(!append&&!background)phase='error';status('消息暂时无法读取',true);if(background)syncControls();else paint();}
+    }catch(e){if(token!==epoch||destroyed||revoked)return;busy=false;if(!append&&!background)phase='error';status('消息暂时无法读取',true);if(background)syncControls();else paint();pageLoad?.fail(e);}
     finally{if(token===epoch){busy=false;byId('messageList').setAttribute('aria-busy','false');syncControls();}}
   }
   async function readAll(){

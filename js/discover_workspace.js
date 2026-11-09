@@ -14,7 +14,7 @@ window.DiscoverWorkspace = (() => {
   let researchPool = null, researchFlight = null;
   let catalogHead = null, headFlight = null, insuranceCatalog = null, officialFlight = null, officialTimer = null, pageActive = true;
   const officialInterval = 300000, officialPage = 'https://www.webank.com/inquiryCenter/query';
-  const names = { bank_product: '模拟业务产品', public_catalog: '微众官方公开目录', public_nav: '历史管理人资料（已移出产品研究）' };
+  const names = { bank_product: '账户产品', public_catalog: '微众官方公开目录', public_nav: '历史管理人资料（已移出产品研究）' };
   const key = p => p.source_scope + ':' + p.id;
   const has = value => value !== null && value !== undefined && value !== '';
   const value = (v, fallback = '未披露') => has(v) ? String(v) : fallback;
@@ -341,7 +341,7 @@ window.DiscoverWorkspace = (() => {
     };
     if (!/^\d{6}$/.test(p.id)) { paint('未披露近1周收益'); return; }
     paint('正在读取收益…');
-    readListReturn(p, head, guard).then(data => {
+    return readListReturn(p, head, guard).then(data => {
       const row = data.products[0], metric = row?.metric;
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
       if (!metric) paint('未披露近1周收益', null, isoDate(row?.as_of) ? row.as_of : null);
@@ -456,7 +456,7 @@ window.DiscoverWorkspace = (() => {
       try { const data = await readPerformance(p, force, guard); if (!guard() || currentAttempt !== attempt) return; result = data; draw(data); }
       catch (e) { if (guard() && currentAttempt === attempt) draw(null, e.message || '官方资料读取失败，请重试。'); }
     }
-    fetch();
+    return fetch();
   }
   function preview(p, token, epoch) {
     const card = node('article', undefined, 'discover-preview'), link = viewLink(null, 'product', routeMetadata(p), 'discover-preview-link'), publicFund = isPublicFund(p), moneyFund = p.source_scope === 'official_money_market', research = p.source_scope === 'public_product_research'; card.id = 'discover-preview-' + p.source_scope + '-' + encodeURIComponent(p.id);
@@ -465,7 +465,7 @@ window.DiscoverWorkspace = (() => {
     if (research) { const host = node('section'); card.append(host); researchPerformance(host, p); }
     else if (moneyFund) { const host = node('section'); card.append(host); moneyPerformance(host, p); }
     else if (publicFund) { const host = node('section'); card.append(host); queueMicrotask(() => performancePanel(host, p, token, epoch, 'preview')); }
-    else card.append(node('small', p.source_scope === 'bank_product' ? '本地模拟业务；条件需再次核对' : '公开资料 · 只读', 'discover-note'), node('p', p.returns, 'discover-note'));
+    else card.append(node('small', p.source_scope === 'bank_product' ? '账户产品；办理条件需再次核对' : '公开资料 · 只读', 'discover-note'), node('p', p.returns, 'discover-note'));
     return card;
   }
   function title(text, intro) { const h = document.getElementById('discoverHeading'), p = document.getElementById('discoverIntro'), header = document.querySelector('.header-location'); if (h) h.textContent = text; if (p) p.textContent = intro; if (header) header.textContent = text; }
@@ -552,7 +552,7 @@ window.DiscoverWorkspace = (() => {
       let pageRound = 0;
       function redraw(save = false) {
         if (!allowed()) return;
-        const round = ++pageRound; cancelListReturns();
+        const round = ++pageRound, returnsReady = []; cancelListReturns();
         const f = applied, maximum = maximumMinor(f.maximum);
         const rows = catalogue.filter(p => {
           if (f.q && !(p.name + ' ' + p.manager + ' ' + p.id).toLowerCase().includes(f.q.toLowerCase())) return false;
@@ -584,15 +584,16 @@ window.DiscoverWorkspace = (() => {
           const returnHost = node('section', undefined, 'discover-row-return'); returnHost.setAttribute('aria-label', p.name + '近期收益');
           row.append(choice, link, returnHost, actions); results.append(row);
           const head = catalogHead, identity = performanceIdentity();
-          listReturnPanel(returnHost, p, head, () => pageActive && allowed() && round === pageRound && returnHost.isConnected && head?.catalog_version === catalogHead?.catalog_version && identity === performanceIdentity());
+          returnsReady.push(listReturnPanel(returnHost, p, head, () => pageActive && allowed() && round === pageRound && returnHost.isConnected && head?.catalog_version === catalogHead?.catalog_version && identity === performanceIdentity()));
         }
         if (!rows.length) results.append(node('p', '没有匹配的产品，试试其他条件。', 'discover-empty'));
         range.textContent = rows.length ? (offset + 1) + '–' + (offset + shown.length) + ' / ' + rows.length.toLocaleString('zh-CN') + ' 项' : '0 项';
         pageNumber.textContent = page + ' / ' + pages; previous.disabled = page === 1; next.disabled = page >= pages;
         if (comparisonMode) selectionBar(bar, () => redraw(), allowed);
+        return Promise.allSettled(returnsReady);
       }
       toolbar.onsubmit = e => { e.preventDefault(); if (!allowed()) return; if (amount.input.value !== '' && !Number.isFinite(maximumMinor(amount.input.value))) { amount.input.setCustomValidity('请输入有效金额，最多两位小数。'); amount.input.reportValidity(); return; } amount.input.setCustomValidity(''); applied = readInputs(); page = 1; redraw(true); };
-      amount.input.oninput = guarded(() => amount.input.setCustomValidity('')); redraw();
+      amount.input.oninput = guarded(() => amount.input.setCustomValidity('')); await redraw();
     } catch (e) { if (live(token, epoch)) error(root, e, () => refresh(true)); }
   }
   const specRows = p => [['产品身份 / 管理人', names[p.source_scope] + '\n' + p.manager], ['风险', p.risk], ['产品类型 / 期限', p.term], ['起购', p.minimum], ['费用', p.fees], ['申赎与到账', p.liquidity], ['收益指标类型与期间', p.returns], ['资料日期', date(p.as_of)], ['资料来源', p.source], ['条件与缺项', p.eligibility + '\n' + p.gaps]];
@@ -620,7 +621,7 @@ window.DiscoverWorkspace = (() => {
   }
   async function product(context, token, epoch) {
     title('产品资料', '先辨认身份、日期与缺项，操作条件另行核对。'); const root = resetSubview(); root.append(node('p', '正在读取产品资料…', 'discover-note'));
-    try { if (context.source_scope === 'public_product_research') return await researchDetail(context, token, epoch, root); if (context.source_scope === 'official_money_market') return await moneyDetail(context, token, epoch, root); await loadCatalogue(); if (!live(token, epoch)) return; const p = lookup(context); if (!p) { error(root, new Error(context.source_scope === 'public_nav' ? '管理人净值资料已移出当前产品研究。历史模拟组合仍可在账户中回看，请返回研究列表查看微众披露。' : '没有找到这份产品资料。可能已删除或目录变化，请返回研究列表。'), () => open('research')); return; }
+    try { if (context.source_scope === 'public_product_research') return await researchDetail(context, token, epoch, root); if (context.source_scope === 'official_money_market') return await moneyDetail(context, token, epoch, root); await loadCatalogue(); if (!live(token, epoch)) return; const p = lookup(context); if (!p) { error(root, new Error(context.source_scope === 'public_nav' ? '管理人净值资料已移出当前产品研究。历史组合仍可在账户中回看，请返回研究列表查看微众披露。' : '没有找到这份产品资料。可能已删除或目录变化，请返回研究列表。'), () => open('research')); return; }
       root.replaceChildren(action('‹ 返回', () => window.NavrenViews?.back()));
       if (p.source_scope === 'public_catalog' && p.raw.type === '保险') {
         title('保险资料');
@@ -636,7 +637,7 @@ window.DiscoverWorkspace = (() => {
       if (p.version == null) box.append(node('p', '资料缺少可核验版本，暂不能作为比较或对话中的稳定引用。', 'discover-note'));
       if (p.source_scope === 'bank_product') { const buy = action('准备申购', () => purchase(p, box), 'primary'); buy.disabled = changed || !p.executable; controls.append(buy); }
       else box.append(node('p', '这份公开资料只用于查看和比较，不能据此创建申购草案。', 'discover-note'));
-      if (p.source_scope !== 'bank_product') box.append(productEvidence(p)); box.append(controls); root.append(box); if (performanceHost) performancePanel(performanceHost, p, token, epoch, 'detail');
+      if (p.source_scope !== 'bank_product') box.append(productEvidence(p)); box.append(controls); root.append(box); if (performanceHost) await performancePanel(performanceHost, p, token, epoch, 'detail');
     } catch (e) { if (live(token, epoch)) error(root, e, () => refresh(true)); }
   }
   async function compare(context, token, epoch) {
@@ -653,7 +654,7 @@ window.DiscoverWorkspace = (() => {
       const body = node('tbody'), fields = rows.map(specRows), performanceCells = []; fields[0].forEach(([label], i) => { const row = node('tr'), h = node('th', label); h.scope = 'row'; row.append(h); fields.forEach((f, index) => { const td = node('td', f[i][1]); if (label === '收益指标类型与期间' && isPublicFund(rows[index])) { td.replaceChildren(); performanceCells.push([td, rows[index]]); } row.append(td); }); body.append(row); });
       const operations = node('tr'), heading = node('th', '明确操作'); heading.scope = 'row'; operations.append(heading);
       for (const p of rows) { const td = node('td'); td.append(viewLink('查看完整资料', 'product', routeMetadata(p))); if (p.source_scope === 'bank_product') { const buy = action('准备申购', () => purchase(p, root)); buy.disabled = !p.executable; td.append(buy); } else td.append(node('p', '公开资料 · 只读')); operations.append(td); } body.append(operations); table.append(body); wrap.append(table);
-      root.append(node('p', rows.length === 3 ? '共 3 款。手机可在表格内横向查看第三款，左侧字段保持对应。' : '手机可在表格内横向查看，左侧字段保持对应。', 'discover-compare-help'), wrap); for (const [cell, p] of performanceCells) performancePanel(cell, p, token, epoch, 'compare');
+      root.append(node('p', rows.length === 3 ? '共 3 款。手机可在表格内横向查看第三款，左侧字段保持对应。' : '手机可在表格内横向查看，左侧字段保持对应。', 'discover-compare-help'), wrap); await Promise.allSettled(performanceCells.map(([cell, p]) => performancePanel(cell, p, token, epoch, 'compare')));
     } catch (e) { if (live(token, epoch)) error(root, e, () => refresh(true)); }
   }
   function fingerprint(plan) { let h = 2166136261; for (const c of JSON.stringify(plan)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return 'legacy-' + (h >>> 0).toString(16); }
@@ -852,11 +853,12 @@ window.DiscoverWorkspace = (() => {
   }
   async function home(token, epoch) {
     title('发现', '了解市场变化，研究产品，再核对你的安排。');
-    const restoredId = active.listposition; planPreview();
-    MarketUI.recommend().then(() => { if (!live(token, epoch)) return; adaptWeeklyCover(); if (restoredId) MarketUI.restoreHotspot?.(restoredId); }).catch(() => {});
+    const restoredId = active.listposition, plansReady = planPreview();
+    const marketReady = MarketUI.recommend().then(async () => { if (!live(token, epoch)) return; await adaptWeeklyCover(); if (live(token, epoch) && restoredId) MarketUI.restoreHotspot?.(restoredId); }).catch(() => {});
     const target = document.getElementById('productPreview'), insuranceTarget = document.getElementById('insurancePreview');
     if (!insuranceTarget?.querySelector('.insurance-root')) insuranceTarget?.replaceChildren(node('p', '正在读取保险资料…', 'discover-note'));
-    try { await syncOfficialHome(token, epoch); } catch (e) { if (live(token, epoch)) { drawCatalogSync(target, catalogFailure(), '本次校对未完成'); if (!target.querySelector('.discover-preview')) error(target, e, () => refresh(true)); } } finally { scheduleOfficial(token, epoch); }
+    const officialReady = (async () => { try { await syncOfficialHome(token, epoch); } catch (e) { if (live(token, epoch)) { drawCatalogSync(target, catalogFailure(), '本次校对未完成'); if (!target.querySelector('.discover-preview')) error(target, e, () => refresh(true)); } } finally { scheduleOfficial(token, epoch); } })();
+    await Promise.allSettled([plansReady,marketReady,officialReady]);
   }
   async function render(context = {}) {
     pauseOfficial(); officialFlight = null;

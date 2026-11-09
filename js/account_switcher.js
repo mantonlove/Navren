@@ -2,7 +2,7 @@
 window.NavrenAccountSwitcher = (() => {
   const ids = new Set(['tycoon','grain_farmer','working_landlady','retired_entrepreneur']);
   const words = {
-    '演示账户':'Demo account','选择账户':'Choose account','账户目录尚未接通':'Account directory is not connected yet',
+    '当前账户':'Current account','选择账户':'Choose account','账户目录尚未接通':'Account directory is not connected yet',
     '正在核对账户…':'Verifying account…','正在切换账户…':'Switching account…','重试':'Retry','取消':'Cancel',
     '继续切换':'Continue switching','切换账户':'Switch account','切换账号':'Switch account','关闭':'Close','当前账户':'Current account',
     '账户身份暂时无法核对':'Account identity could not be verified',
@@ -62,7 +62,7 @@ window.NavrenAccountSwitcher = (() => {
     root.classList.add('account-switcher');
     const live=token=>!destroyed&&root.isConnected&&token===epoch;
     function settingsStatus(text){const status=document.getElementById('accountAccessStatus');if(status)status.textContent=t(text);}
-    function message(text,isError=false){root.hidden=root.id==='accountSwitcher';root.replaceChildren(n('span','演示账户','account-switch-label'),n('span',text,'account-switch-status'));root.lastChild.role=isError?'alert':'status';settingsStatus(text);}
+    function message(text,isError=false){root.hidden=root.id==='accountSwitcher';root.replaceChildren(n('span','当前账户','account-switch-label'),n('span',text,'account-switch-status'));root.lastChild.role=isError?'alert':'status';settingsStatus(text);}
     function gate(value){document.documentElement.classList.toggle('navren-switch-pending',value);document.documentElement.classList.toggle('navren-private-locked',value);root.setAttribute('aria-busy',String(value));document.querySelectorAll('.chat-input-area,.page-scroll,.chat-messages').forEach(e=>{e.inert=value;});}
     function validate(data,fresh){
       if(data?.schema_version!==1||data.data_scope!=='navren_synthetic'||!Array.isArray(data.accounts)||data.accounts.length!==4||new Set(data.accounts.map(a=>a.account_id)).size!==4||data.accounts.some(a=>!ids.has(a.account_id)||typeof a.label!=='string'||!a.label||!a.source_version))throw Error(t('账户目录不完整'));
@@ -72,7 +72,7 @@ window.NavrenAccountSwitcher = (() => {
       if(!directory||!identity)return;
       root.hidden=root.id==='accountSwitcher';settingsStatus('');
       const current=directory.accounts.find(a=>a.account_id===identity.account_id);
-      root.replaceChildren(n('span','演示账户','account-switch-label'));
+      root.replaceChildren(n('span','当前账户','account-switch-label'));
       const chooser=button('',()=>{dialog.hidden=!dialog.hidden;chooser.setAttribute('aria-expanded',String(!dialog.hidden));if(!dialog.hidden)dialog.querySelector('[aria-current="true"]')?.focus();});
       chooser.className='account-switch-trigger';chooser.textContent=current?.label||t('当前账户');chooser.dataset.i18nSkip='';chooser.setAttribute('aria-label',t('选择账户')+' · '+(current?.label||t('当前账户')));chooser.setAttribute('aria-expanded','false');root.append(chooser);
       dialog=n('div',null,'account-switch-menu');dialog.hidden=true;dialog.setAttribute('role','group');dialog.setAttribute('aria-label',t('选择账户'));

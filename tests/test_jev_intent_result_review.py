@@ -460,7 +460,7 @@ class ResultReviewTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'forbidden'):
                 urllib.request.urlopen('https://api.typesafe.ai')
             with self.assertRaisesRegex(RuntimeError, 'forbidden'):
-                subprocess.run(['/opt/navren/bin/cc-with-secrets', 'true'])
+                subprocess.run(['/Users/manton/CC/services/cc-secrets/cc-with-secrets', 'true'])
 
     def test_families_are_clustered_repetitions_not_counted_as_new_tasks(self):
         self.assertIsNone(s.bootstrap({'same-family': [1, 1, 1]}))

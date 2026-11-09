@@ -28,7 +28,17 @@ class BankError(Exception):
         self.code, self.message, self.status, self.persist = code, message, status, persist
 
     def as_dict(self):
-        return {'code': self.code, 'message': self.message, 'environment': 'simulation'}
+        value = {'code': self.code, 'message': self.message, 'environment': 'simulation'}
+        meta = getattr(self, 'sms_verification', None)
+        if self.code == 'SMS_VERIFICATION_FAILED' and isinstance(meta, dict):
+            from sms_aliyun import SMS_VERIFICATION_REASONS
+            if (set(meta) == {'reason_code', 'same_challenge_retry'}
+                    and isinstance(meta['reason_code'], str) and meta['reason_code'] in SMS_VERIFICATION_REASONS
+                    and type(meta['same_challenge_retry']) is bool
+                    and (not meta['same_challenge_retry'] or meta['reason_code'] == 'SMS_CODE_REJECTED')):
+                value['sms_verification'] = {'reason_code': meta['reason_code'],
+                    'same_challenge_retry': meta['same_challenge_retry']}
+        return value
 
 
 def encoded(value):

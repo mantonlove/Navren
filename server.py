@@ -496,7 +496,9 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                 # 接收原始图片/无转写录音不等于识别内容，也不触发模型或伪造助手审核。
                 result = {'bank': True, 'bank_response_id': request_id, 'workspace_id': workspace,
                           'privacy_revision': request_privacy, 'personal_revision': request_personal,
-                          'reply': '附件已保存。你可以继续补充希望了解的问题。',
+                          'reply': ('附件已保存。如需解读文档，请将文档与问题放在同一条消息发送。'
+                                    if any(item.get('kind') == 'document' for item in archived_user.get('attachments', []))
+                                    else '附件已保存。你可以继续补充希望了解的问题。'),
                           'attachment_receipt': {'status': 'archived', 'request_id': request_id},
                           'user_attachments': archived_user.get('attachments', []),
                           'isFallback': True}
@@ -505,13 +507,15 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
                     if stream: stream.finish(result)
                     else: self._finance_json(200, result)
                 return
-            # 同一现有研究组合服务先完成只读投影缓存，再固定输入版本。
-            # BankTools同样会调用provision；不能把首次缓存创建误判成用户资料变更。
+            if text.strip() and any(item.get('kind') == 'document' for item in archived_user.get('attachments', [])):
+                # 仅宿主消费本轮已绑定的用户原件；HTTP不能提交正文、信任级别或权限。
+                options['document_context'] = self._read_document_attachments(
+                    gateway, workspace, request_id, archived_user['attachments'])
+            # 仅固定既有资料版本；只读请求不隐式创建历史示例组合。
             if request_policy.private_context_disabled:
                 request_metrics=None
                 memory_enabled=False
             else:
-                gateway.wealth.provision(workspace)
                 request_metrics=gateway.financial_metrics.snapshot(workspace,60)
                 memory_enabled=gateway.memories.state(workspace)['enabled']
             if memory_enabled and text.strip():
@@ -715,6 +719,33 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         event_id=('agent:http' if request_id is not None else 'agent:http:'+uuid.uuid4().hex)
         _host_security_rejection(self.server.finance,workspace,error,
             request_id=request_id,event_id=event_id,phase='http')
+
+    @staticmethod
+    def _read_document_attachments(gateway, workspace, request_id, attachments):
+        service = getattr(gateway, 'chat_media', None)
+        if service is None or not callable(getattr(service, 'read_document_text', None)):
+            raise BankError('CHAT_DOCUMENT_READER_UNAVAILABLE', '文档读取暂不可用。', 503)
+        documents = []
+        remaining = 24000
+        for index, attachment in enumerate(attachments, 1):
+            if attachment.get('kind') != 'document':
+                continue
+            with gateway.bank.transaction() as bank_db:
+                value = service.read_document_text(workspace, attachment['media_id'],
+                                                  request_id=request_id, bank_db=bank_db)
+            media, original = value['media'], value['extracted_text']
+            if media != attachment or type(original) is not str or len(original) != media['text_chars']:
+                raise BankError('CHAT_MEDIA_CHANGED', '文档原件或绑定已变化。', 409)
+            selected = original[:remaining]
+            remaining -= len(selected)
+            documents.append({'attachment_index': index, 'file_name': media['file_name'],
+                'document_format': media['document_format'], 'text_chars': media['text_chars'],
+                'extraction_status': media['extraction_status'], 'extraction_warning': media['extraction_warning'],
+                'text': selected, 'truncated': len(selected) < len(original)})
+        return {'contract': 'navren.user-document-context/1', 'source_scope': 'user_uploaded_document',
+                'verified': False, 'current_fact_eligible': False, 'execution_authority': False,
+                'documents': documents,
+                'unread_media_kinds': sorted({item['kind'] for item in attachments if item['kind'] in ('image', 'audio')})}
 
     def _archive_user_request(self,gateway,workspace,request_id,text,personal,privacy,contexts,*,has_image,media_ids=None):
         archive=getattr(gateway,'dialogue_archive',None)

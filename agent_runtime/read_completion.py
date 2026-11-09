@@ -818,11 +818,233 @@ def required_monthly_income_read(tools, *, monthly_attempts=0):
             'context_hash': tools.start_context, 'scope': 'explicit_month_income_no_future_income_inference'}
 
 
+
+def allocation_base_read_obligation(tools):
+    """Current personal allocation method prerequisites; no amount output rule.
+
+    Loading a method is not itself permission to read a hypothetical person's
+    accounts. Bind this obligation only to an actual personal/current-data flow
+    in this turn. Source failure is distinct from a read that was never made.
+    """
+    if tools.private_context_disabled or tools._history_reference is not None:
+        return None
+    value = _explicit_read_request(tools.user_text)
+    if (value is None or re.search(r'不是本人|非本人|他人|别人|朋友|对方|客户|'
+            r'他(?:的|现在|目前)|她(?:的|现在|目前)', value)):
+        return None
+    evidence = [e for e in tools.evidence.values()
+                if e.get('context_hash') == tools.start_context]
+    if not any(e.get('tool') == 'load_skill' and e.get('data', {}).get('skill') == 'asset-allocation'
+               for e in evidence):
+        return None
+    summaries = [e for e in evidence if e.get('tool') == 'account_summary'
+                 and e.get('parameters') == {}]
+    if not summaries and not re.search(r'我|本人|本账户', value):
+        return None
+    result = {'contract': 'navren.allocation-base-read-obligation/1',
+              'context_hash': tools.start_context, 'complete': False,
+              'account_summary_evidence_id': None, 'account_ids': [],
+              'completed_account_ids': [], 'missing_account_ids': [],
+              'missing': ['account_summary'], 'unavailable': False}
+    if not summaries:
+        result['unavailable'] = any(row.get('tool') == 'account_summary'
+            and row.get('status') == 'rejected' and type(row.get('status_code')) is int
+            and row['status_code'] >= 500 for row in tools.trace)
+        return result
+    summary = summaries[-1]
+    accounts = summary.get('data', {}).get('accounts')
+    if (not isinstance(accounts, list) or not accounts
+            or any(not isinstance(a, dict) or not isinstance(a.get('id'), str) or not a['id']
+                   or not isinstance(a.get('name'), str) or not a['name']
+                   or not isinstance(a.get('currency'), str) for a in accounts)
+            or len({a['id'] for a in accounts}) != len(accounts)):
+        result['missing'] = ['valid_account_summary']
+        return result
+    result['account_summary_evidence_id'] = summary['id']
+    explicit = [a for a in accounts if a['id'] in tools.user_text]
+    named = _named_current_accounts(tools.user_text, accounts)
+    if not explicit and any(sum(a['name'] == b['name'] for b in accounts) != 1 for a in named):
+        result['missing'] = ['unambiguous_account']
+        return result
+    selected = explicit or named
+    if not selected and re.search(r'主[账帐]户', value):
+        selected = [a for a in accounts if a['id'].endswith('-main')]
+        if len(selected) != 1:
+            result['missing'] = ['unambiguous_account']
+            return result
+    selected = selected or accounts
+    targets = [a['id'] for a in selected]
+    currencies = {a['id']: a['currency'] for a in selected}
+    completed = set()
+    for e in evidence:
+        if e.get('tool') != 'budget':
+            continue
+        data, parameters = e.get('data', {}), e.get('parameters', {})
+        account_id = data.get('account_id')
+        if (account_id in targets and account_id == parameters.get('account_id')
+                and data.get('budget_scope') == 'current_budget'
+                and data.get('planning_reserves') == []
+                and data.get('currency') == currencies[account_id]
+                and data.get('as_of') == summary['data'].get('as_of')
+                and data.get('version') == summary['data'].get('version')
+                and type(parameters.get('floor_minor', 0)) is int
+                and parameters.get('floor_minor', 0) == 0
+                and parameters.get('reserves', []) == []
+                and type(data.get('investable_minor')) is int):
+            completed.add(account_id)
+    missing = [account_id for account_id in targets if account_id not in completed]
+    failed = {row.get('account_id') for row in tools.trace
+              if row.get('tool') == 'budget' and row.get('status') == 'rejected'
+              and type(row.get('status_code')) is int and row['status_code'] >= 500}
+    result.update(account_ids=targets, completed_account_ids=sorted(completed),
+        missing_account_ids=missing, missing=['budget'] if missing else [],
+        complete=not missing, unavailable=bool(missing) and set(missing) <= failed)
+    return result
+
+
+def explicit_liquidity_horizon_days(text):
+    """Finite personal use-by constraint; no money, date guess or authority."""
+    value = _explicit_read_request(text)
+    if (value is None
+            or not re.search(r'(?:我|本人|本账户)[^。；;\n]{0,24}(?:资金|现金|钱|余额)', value)
+            or re.search(r'不是本人|非本人|他人|别人|朋友|对方|客户', value)
+            or not re.search(r'配置|投资|理财|收益|产品|资金用途|资金安排', value)):
+        return None
+    digits = {'一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5,
+              '六': 6, '七': 7, '八': 8, '九': 9}
+    def count(token):
+        if token.isascii() and token.isdigit():
+            return int(token)
+        if token in digits:
+            return digits[token]
+        if token.count('十') == 1:
+            left, right = token.split('十')
+            if (not left or left in digits) and (not right or right in digits):
+                return (digits[left] if left else 1) * 10 + (digits[right] if right else 0)
+        return None
+    horizons = set()
+    pattern = (r'(?<![0-9一二两三四五六七八九十百千万])'
+               r'(?P<number>[1-9][0-9]{0,2}|[一二两三四五六七八九十]{1,3})'
+               r'(?:个)?(?P<unit>天|日|周|星期)(?:之后|后|之内|以内|内)'
+               r'[ \t,，]{0,2}(?:(?:届时|全部|全额|都|必须|一定|确定|要|需要|将)){0,4}'
+               r'(?:使用|用|取出|支付|花)')
+    for clause in re.split(r'[。；;\n]', value):
+        if re.search(r'可能|大概|也许|如果|假如|不确定|不需要|不必|不用|并非', clause):
+            continue
+        for match in re.finditer(pattern, clause):
+            number = count(match['number'])
+            if number is None:
+                return None
+            days = number * (7 if match['unit'] in ('周', '星期') else 1)
+            if not 1 <= days <= 365:
+                return None
+            horizons.add(days)
+    return next(iter(horizons)) if len(horizons) == 1 else None
+
+
+def liquidity_product_read_obligation(tools):
+    """Current simulated rule read only; it cannot certify cash availability."""
+    if (tools.private_context_disabled or tools._history_reference is not None
+            or tools.changed or tools.drafts):
+        return None
+    days = explicit_liquidity_horizon_days(tools.user_text)
+    if days is None:
+        return None
+    current = [e for e in tools.evidence.values()
+               if e.get('context_hash') == tools.start_context]
+    if not any(e.get('tool') == 'load_skill'
+               and e.get('data', {}).get('skill') in ('asset-allocation', 'product-research')
+               for e in current):
+        return None
+    result = {'contract': 'navren.liquidity-product-read-obligation/1',
+              'context_hash': tools.start_context, 'horizon_days': days,
+              'complete': False, 'products_evidence_id': None,
+              'scope': 'current_simulated_product_rules_not_public_sale_or_arrival_guarantee'}
+    for entry in reversed(current):
+        if (entry.get('tool') != 'products' or entry.get('parameters') != {}
+                or entry.get('source') != 'simulation'
+                or not isinstance(entry.get('id'), str)
+                or tools.evidence.get(entry['id']) is not entry):
+            continue
+        rows = entry.get('data')
+        if (not isinstance(rows, list)
+                or any(not isinstance(row, dict) or not isinstance(row.get('id'), str)
+                       or not row['id'] or not isinstance(row.get('name'), str)
+                       or not row['name'] for row in rows)
+                or len({row['id'] for row in rows}) != len(rows)):
+            return result
+        # Missing rule fields remain visible source gaps for the full reviewer;
+        # a successful catalogue read does not make unknown terms executable.
+        result.update(complete=True, products_evidence_id=entry['id'])
+        return result
+    return result
+
+
+def required_short_horizon_account_read(tools, *, summary_attempts=0):
+    """Only fill the current-account prerequisite of an explicit all-use plan.
+
+    Keep method selection, portfolio parameters and the complete review model
+    path unchanged. This returns an ordinary read request, never an answer.
+    """
+    allocation = allocation_base_read_obligation(tools)
+    liquidity = liquidity_product_read_obligation(tools)
+    if (allocation is None or liquidity is None
+            or allocation.get('missing') != ['account_summary']
+            or allocation.get('unavailable') is not False
+            or type(summary_attempts) is not int or summary_attempts != 0
+            or any(row.get('tool') == 'account_summary' for row in tools.trace)):
+        return None
+    value = _explicit_read_request(tools.user_text)
+    clauses = re.split(r'[。；;\n]', value or '')
+    if not any(
+            re.search(r'(?:我|本人|本账户)(?:当前|现在|目前)可安排的?(?:资金|现金|钱|余额)', clause)
+            and re.search(r'(?:全部|全额|都)(?:要|需要|将|必须|一定|确定){0,3}(?:使用|用|取出|支付|花)', clause)
+            and not re.search(r'可能|大概|也许|如果|假如|不确定|不需要|不必|不用|并非', clause)
+            for clause in clauses):
+        return None
+    return {'contract': 'navren.short-horizon-current-account-prerequisite/1',
+            'context_hash': tools.start_context,
+            'horizon_days': liquidity['horizon_days'],
+            'requests': [{'name': 'account_summary', 'arguments': {}}],
+            'scope': 'current_allocation_baseline_existing_read_contract',
+            'financial_side_effects': False,
+            'ordinary_full_review_and_publication_required': True}
+
+
+def required_liquidity_product_read(tools, *, product_attempts=0):
+    """At most one ordinary products request before terminal budget admission."""
+    obligation = liquidity_product_read_obligation(tools)
+    if obligation is None or obligation['complete']:
+        return None
+    if (type(product_attempts) is not int or product_attempts != 0
+            or any(row.get('tool') == 'products' for row in tools.trace)):
+        return None
+    return {**obligation, 'requests': [{'name': 'products', 'arguments': {}}]}
+
+
 def require_explicit_source_completion(name, final, tools):
     """Actual current-turn evidence is mandatory even if a local plan did not run."""
     if (name not in ('answer_facts', 'answer_reviewed') or tools.private_context_disabled
             or tools._history_reference is not None):
         return
+    liquidity = liquidity_product_read_obligation(tools)
+    if liquidity is not None and not liquidity['complete']:
+        raise BankError('READ_COMPLETION_REQUIRED',
+            '明确本人资金用款期限的配置或产品用途规划须取得本轮products模拟规则原件；'
+            '未读取、失败或旧上下文不能当作已核实，不能以稍后可查或类别流动性保证替代。'
+            '不得据此新增购买、改写期限或绕过原预算；真实缺项仍须如实保留。')
+    allocation = allocation_base_read_obligation(tools)
+    if allocation is not None:
+        if name != 'answer_reviewed':
+            raise BankError('REVIEW_REQUIRED', '本人当前资料的资产配置判断仍须本轮独立审核。')
+        if not allocation['complete']:
+            source = ('account_summary' if allocation['missing'] == ['account_summary'] else 'budget')
+            missing = set(allocation['missing_account_ids']) if source == 'budget' else None
+            if (not allocation['unavailable'] or not _gap_answer(source, final, tools.trace, missing)):
+                raise BankError('READ_COMPLETION_REQUIRED',
+                    '本人当前资产配置须先完成本轮account_summary及所问账户的current baseline budget；'
+                    '未指定单账户时逐一核对当前账户，不猜默认账户。可读取但尚未读取不是资料不可得，'
+                    '不能仅以“可以再查询”结束；若真实服务不可用则明确该缺项及可作判断的范围。')
     missing_statement = [tool for tool, parameters in explicit_statement_read_sources(tools.user_text)
         if not any(e.get('tool') == tool and e.get('parameters') == parameters
                    and e.get('context_hash') == tools.start_context for e in tools.evidence.values())]
@@ -881,11 +1103,12 @@ def require_explicit_source_completion(name, final, tools):
 
 def required_budget_reads(tools, *, budget_attempts=0):
     """本轮明确账户的缺失基线读取；不选默认账户、不生成答复或规划。"""
+    allocation = allocation_base_read_obligation(tools)
     assessment = current_funding_assessment_days(tools.user_text) is not None
     reserve_plan = (explicit_reserve_planning_read(tools.user_text)
         and not tools.private_context_disabled and tools._history_reference is None
         and not tools.changed and not tools.drafts)
-    if cash_query_kind(tools.user_text) != 'budget' and not assessment and not reserve_plan:
+    if cash_query_kind(tools.user_text) != 'budget' and not assessment and not reserve_plan and allocation is None:
         return None
     summaries = [e for e in tools.evidence.values() if e.get('tool') == 'account_summary'
                  and e.get('context_hash') == tools.start_context and e.get('parameters') == {}]
@@ -911,7 +1134,7 @@ def required_budget_reads(tools, *, budget_attempts=0):
         targets = explicit_ids
     else:
         named = _named_current_accounts(tools.user_text, accounts)
-        if not named and not assessment:
+        if not named and not assessment and allocation is None:
             value = unicodedata.normalize('NFKC', tools.user_text or '')
             if (not re.search(r'我|本人', value)
                     or re.search(r'朋友|他人|别人|对方|客户|他(?:的|现在|目前)|她(?:的|现在|目前)', value)):
@@ -922,6 +1145,10 @@ def required_budget_reads(tools, *, budget_attempts=0):
         # a personal budget query names none. Read those same targets locally;
         # do not select a default account or ask the model to repeat the lookup.
         targets = [a['id'] for a in (named or accounts)]
+    if allocation is not None:
+        targets = allocation['account_ids']
+        if not targets:
+            return None
     budget_trace = [r for r in tools.trace if r.get('tool') == 'budget']
     # An invalid/failed prior attempt is not permission to silently try again.
     if type(budget_attempts) is not int or budget_attempts > len(budget_trace):
@@ -939,6 +1166,8 @@ def required_budget_reads(tools, *, budget_attempts=0):
                 and type(args.get('floor_minor', 0)) is int and args.get('floor_minor', 0) == 0
                 and args.get('reserves', []) == [] and type(data.get('investable_minor')) is int):
             completed.add(data['account_id'])
+    if allocation is not None:
+        completed = set(allocation['completed_account_ids'])
     missing = [account_id for account_id in targets if account_id not in completed]
     if not missing:
         return None
@@ -1131,6 +1360,43 @@ def _require_statement_budget_comparison(kind, name, final, tools, targets, budg
             covered_count=len(required&covered))
 
 
+def _budget_advice_without_result_query(text):
+    """A finite advice-only request; unknown or explicit queries keep coverage.
+
+    This changes no read, amount, permission or review requirement. Cash context
+    is declarative; a request to look up/calculate cash is never advice-only.
+    """
+    value = unicodedata.normalize('NFKC', text or '').strip()
+    if re.search(r'查|核对|计算|算一?下|多少|几(?:元|块|笔)|余额|结余|剩余|'
+                 r'告诉|列出|报出|显示|读出|读一下|读取|数额|具体金额|可用额|'
+                 r'是否|能否|可否|够不够|够用|怎样|怎么样|什么|哪|吗|呢|[?？]|'
+                 r'\b(?:query|read|check|calculate|balance|how much)\b', value, re.I):
+        return False
+    number = r'[0-9一二三四五六七八九十百千万两]+'
+    period = (r'(?:' + number + r'(?:个)?(?:天|周|星期|月|年)|'
+              r'明天|后天|月底|年底|下周|下个月|'
+              r'\d{4}[-/]\d{1,2}[-/]\d{1,2})')
+    context = (r'(?:我|本人)的?(?:当前|目前|现在)?可(?:以)?(?:安排|支配|用|投资)的?'
+               r'(?:钱|资金|金额)(?:(?:在)?' + period + r'(?:后|内|前)?'
+               r'(?:都|全|全部)?(?:要|需要|将)?(?:用|使用|用掉|支出))?')
+    objective = (r'(?:为了|为|以)(?:收益|回报|利息|风险|流动性|安全性|安全)'
+                 r'(?:更|较)?(?:高|低|好|优|最大|最小|稳健)?')
+    request = (r'(?:' + objective + r')?(?:你)?(?:请)?(?:直接)?'
+               r'(?:给(?:我|出)?|提供|制定|设计|帮我(?:做|制定)|需要|想要|希望得到)'
+               r'(?:一?(?:个|份)|些|点)?(?:稳健|合理|可行|最优|具体|投资|资金|资产|短期|长期|保守|的)*'
+               r'(?:建议|规划|配置|方案)(?:建议|规划|配置|方案|组合|比例|及|和|与|预期收益率?|预计收益率?|期望收益率?|预期回报率?|风险|说明)*')
+    qualifier = (r'(?:(?:这|本)(?:一?轮|次))?(?:我)?(?:只|仅)(?:问|要|求|讨论)'
+                 r'(?:方案|建议|规划)(?:不(?:购买|买入|操作|交易|执行))?')
+    no_action = r'(?:不|不要|暂不|先不|无需)(?:购买|买入|操作|交易|执行)'
+    uptake = r'(?:我|本人)(?:先|会|想|打算|准备)?(?:照着|按照(?:方案|建议)?)(?:做|执行|安排)'
+    clauses = [part.strip() for part in re.split(r'[，,；;。.!！\n]+', value) if part.strip()]
+    return bool(clauses and any(re.fullmatch(request, part) for part in clauses)
+                and all(re.fullmatch(context, part) or re.fullmatch(request, part)
+                        or re.fullmatch(qualifier, part) or re.fullmatch(objective, part)
+                        or re.fullmatch(no_action, part) or re.fullmatch(uptake, part)
+                        for part in clauses))
+
+
 def require_cash_query_complete(kind, name, final, tools):
     request = getattr(tools, 'recorded_cashflow_fact_query', None)
     if request is not None:
@@ -1182,6 +1448,12 @@ def require_cash_query_complete(kind, name, final, tools):
     else:
         required_evidence = {summaries[-1]['id']}
         field, metric_names = 'balance_minor', {'settled_cash_balance'}
+    # Advice still requires the original current reads above and the full
+    # downstream amount/source/permission/GLM contract; only cash-result
+    # enumeration is inapplicable to this finite advice-only request.
+    if (kind == 'budget' and name == 'answer_reviewed'
+            and _budget_advice_without_result_query(tools.user_text)):
+        return
     if name == 'answer_facts':
         selected = [tools.facts[i] for i in final['fact_ids'] if i in tools.facts]
         covered, subjects = set(), set()
@@ -1233,3 +1505,143 @@ def require_cash_query_complete(kind, name, final, tools):
         raise ReadResultReferenceIncomplete(message, kind=kind,
             required_count=len(required), covered_count=len(required.intersection(completed)))
     raise BankError('READ_RESULT_REQUIRED', message)
+
+
+def _holding_horizon_facts(summary, user_text):
+    """Pure calendar-day arithmetic over one summary; never a cash conclusion."""
+    from calendar_events import day
+    from datetime import timedelta
+    result = {'as_of': None, 'profile_days': None, 'profile_end': None,
+              'use_days': explicit_liquidity_horizon_days(user_text) if isinstance(user_text, str) else None,
+              'lock_days': {}, 'invalid_lock_date': False}
+    if not isinstance(summary, dict):
+        return result
+    try:
+        result['as_of'] = day(summary.get('as_of'))
+    except BankError:
+        return result
+    profile = summary.get('profile')
+    horizon = profile.get('horizon_days') if isinstance(profile, dict) else None
+    if type(horizon) is int and 0 <= horizon <= 3650:
+        try:
+            result['profile_end'] = result['as_of'] + timedelta(days=horizon)
+            result['profile_days'] = horizon
+        except OverflowError:
+            pass
+    holdings = summary.get('holdings')
+    if type(holdings) is not list:
+        result['invalid_lock_date'] = True
+        return result
+    for holding in holdings:
+        try:
+            locked = day(holding.get('locked_until') if isinstance(holding, dict) else None)
+        except BankError:
+            result['invalid_lock_date'] = True
+            continue
+        result['lock_days'][locked.isoformat()] = max(0, (locked - result['as_of']).days)
+    return result
+
+
+def holding_horizon_basis_text(summary, user_text):
+    """Short deterministic explanation appended to existing scope prose only."""
+    facts = _holding_horizon_facts(summary, user_text)
+    if facts['as_of'] is None:
+        return '\n持仓期限比较未知：本轮业务日期缺失或无效，不能推断剩余锁定天数。'
+    pieces = ['\n期限比较以本轮业务日期' + facts['as_of'].isoformat() + '为起点。']
+    if facts['profile_days'] is None:
+        pieces.append('正式画像投资期限缺失或无效，不能判断与其是否冲突。')
+    else:
+        pieces.append('正式画像' + str(facts['profile_days']) + '天截止' + facts['profile_end'].isoformat() + '。')
+    for locked, remaining in sorted(facts['lock_days'].items()):
+        sentence = '锁定截止' + locked + '：剩余锁定' + str(remaining) + '天'
+        if facts['profile_days'] is not None:
+            sentence += '，' + ('超过' if remaining > facts['profile_days'] else '未超过') + '正式画像期限'
+        if facts['use_days'] is not None:
+            sentence += '，' + ('超过' if remaining > facts['use_days'] else '未超过') + '本轮明确用款期限' + str(facts['use_days']) + '天'
+        pieces.append(sentence + '。')
+    if facts['invalid_lock_date']:
+        pieces.append('部分持仓锁定日期缺失或无效，对这些持仓不能推断期限关系。')
+    pieces.append('上述比较仅说明锁定截止与期限；不证明解锁即赎回或到账，也不证明适当性或资金足额。')
+    return ''.join(pieces)
+
+
+def validate_holding_horizon_wording(final, tools):
+    """Hard-check one finite lock-date/horizon relation without new bank reads.
+
+    Normal OP and later metric/publication checks retain their original scope.
+    Month-only references require one complete matching lock date in this
+    turn's trusted summary; no host date, model horizon or guessed year is used.
+    """
+    from calendar_events import day
+    from .operation_claims import OperationWordingError
+    if not isinstance(final, dict):
+        return
+    fields = []
+    text = final.get('text', final.get('reply', ''))
+    if isinstance(text, str):
+        fields.append(('text', text))
+    for index, claim in enumerate(final.get('claims') or ()):
+        if isinstance(claim, dict) and isinstance(claim.get('text'), str):
+            fields.append(('claims[' + str(index) + '].text', claim['text']))
+    for index, followup in enumerate(final.get('followups') or ()):
+        if isinstance(followup, str):
+            fields.append(('followups[' + str(index) + ']', followup))
+    relation = re.compile(
+        r'(?:^|[。；;！!\n])\s*在\s*(?P<days>[0-9]{1,4})\s*天(?:的)?\s*'
+        r'(?P<basis>最长投资期限|正式画像期限|明确用款期限|用款期限)\s*(?:下|内)\s*[，,]\s*'
+        r'锁定(?:到|至)\s*(?P<date>[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}\s*月)\s*'
+        r'(?:的)?(?:那笔|这笔|该笔|持仓)与(?:该|上述)?(?:期限|用款)(?:约束)?'
+        r'(?P<verdict>不存在冲突|没有冲突|不冲突|无冲突|存在冲突|有冲突|冲突)(?=$|[，,。；;！!\n])')
+    found = [(location, match) for location, value in fields
+             for match in relation.finditer(unicodedata.normalize('NFKC', value))]
+    if not found:
+        return
+    evidence, trace = getattr(tools, 'evidence', None), getattr(tools, 'trace', None)
+    context = getattr(tools, 'start_context', None)
+    summaries = []
+    if type(evidence) is dict and type(trace) is list and isinstance(context, str) and context:
+        for evidence_id, item in evidence.items():
+            if (isinstance(item, dict) and item.get('id') == evidence_id and item.get('tool') == 'account_summary'
+                    and item.get('source') == 'simulation' and item.get('context_hash') == context
+                    and item.get('parameters') == {} and isinstance(item.get('data'), dict)
+                    and any(isinstance(row, dict) and row.get('tool') == 'account_summary'
+                        and row.get('status') == 'completed' and row.get('evidence_id') == evidence_id for row in trace)):
+                summaries.append(item['data'])
+    unique = summaries and all(all(item.get(key) == summaries[-1].get(key)
+        for key in ('as_of', 'profile', 'holdings')) for item in summaries)
+    facts = _holding_horizon_facts(summaries[-1], getattr(tools, 'user_text', '')) if unique else None
+    def reason_for(match):
+        if facts is None or facts['as_of'] is None or facts['invalid_lock_date']:
+            return 'current_summary_dates_missing_invalid_or_ambiguous'
+        expected = facts['profile_days'] if match['basis'] in ('最长投资期限', '正式画像期限') else facts['use_days']
+        if expected is None or int(match['days']) != expected:
+            return 'horizon_not_bound_to_current_profile_or_explicit_use_by'
+        target = match['date'].replace(' ', '')
+        if target.endswith('月'):
+            month = int(target[:-1])
+            candidates = [value for value in facts['lock_days'] if int(value[5:7]) == month]
+            if not 1 <= month <= 12 or len(candidates) != 1:
+                return 'month_reference_does_not_resolve_unique_current_lock_date'
+            target = candidates[0]
+        else:
+            try:
+                target = day(target).isoformat()
+            except BankError:
+                return 'claimed_lock_date_invalid'
+            if target not in facts['lock_days']:
+                return 'claimed_lock_date_not_in_current_holdings'
+        conflict = facts['lock_days'][target] > expected
+        claimed = not match['verdict'].startswith(('不', '没', '无'))
+        return 'lock_days_and_bound_horizon_relation_mismatch' if claimed != conflict else None
+    failures = [(location, match, reason) for location, match in found
+                if (reason := reason_for(match)) is not None]
+    if failures:
+        locations = tuple(dict.fromkeys(location for location, _, _ in failures))
+        error = OperationWordingError('OPERATION_STATUS_EVIDENCE_REQUIRED',
+            '持仓锁定与期限比较未通过本轮原件日期复算；只修正该比较，不改写画像、不虚构到账或资金状态。',
+            422, location=locations[0], locations=locations,
+            assertion_details=tuple((location, match.group(0).lstrip('。；;！!\n').strip(), ('unsupported',))
+                                    for location, match, _ in failures))
+        error.operation_wording_instruction = '按本轮业务日期、原持仓锁定截止及正式画像或明确用款期限复算，只修正错误的期限关系。'
+        error.holding_horizon_reasons = tuple(reason for _, _, reason in failures)
+        raise error
