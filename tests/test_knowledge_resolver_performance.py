@@ -66,7 +66,7 @@ class FullScanLocatorProvider(LocalKnowledgeProvider):
 
 class ResolverSafetyTests(unittest.TestCase):
     def fixture(self, count=4):
-        directory = tempfile.TemporaryDirectory(prefix='navren-resolver-fixture-')
+        directory = tempfile.TemporaryDirectory(prefix='navren-resolver-fixture-', ignore_cleanup_errors=True)
         self.addCleanup(directory.cleanup)
         return build_fixture(Path(directory.name)/'public.sqlite3', count)
 
@@ -285,7 +285,7 @@ class ResolverSafetyTests(unittest.TestCase):
 class WebankDisclosureOrderTests(unittest.TestCase):
     """Actual registered JSONP parser, synthetic originals, temporary SQLite."""
     def setUp(self):
-        directory = tempfile.TemporaryDirectory(prefix='navren-webank-order-')
+        directory = tempfile.TemporaryDirectory(prefix='navren-webank-order-', ignore_cleanup_errors=True)
         self.addCleanup(directory.cleanup)
         self.p = LocalKnowledgeProvider(Path(directory.name)/'public.sqlite3')
         from webank_catalog import URL
@@ -401,7 +401,7 @@ class WebankDisclosureOrderTests(unittest.TestCase):
 def benchmark(repeats=3):
     records = []
     for size in (100, 1000, 5000):
-        with tempfile.TemporaryDirectory(prefix='navren-resolver-benchmark-') as directory:
+        with tempfile.TemporaryDirectory(prefix='navren-resolver-benchmark-', ignore_cleanup_errors=True) as directory:
             p, _, release, ids = build_fixture(Path(directory)/'synthetic.sqlite3', size)
             control = FullScanLocatorProvider(p.path)
             for count in (1, 8, 32):

@@ -79,49 +79,138 @@ def connect(path):
     return sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=5)
 
 
-def prepare(args):
-    state = args.state_dir.expanduser().resolve(strict=True)
-    paths = {name: readable(state / filename) for name, filename in {
-        'bank': 'ordinary-bank.sqlite3', 'personal': 'ordinary-bank.personal.sqlite3',
-        'auth': 'ordinary-auth.sqlite3', 'knowledge': 'ordinary-knowledge.sqlite3',
-    }.items()}
-    paths['financial'] = readable(args.financial_database)
-    paths['market'] = readable(args.market_database)
+def probe_prerequisites(args):
+    """逐项探测启动前置条件，供 prepare() 与 scripts/check_environment.py 共用。
+
+    返回 (paths, metadata, findings)。findings 按固定顺序记录每一项：
+
+        ok=True   通过
+        ok=False  失败，prepare() 取序号最小的一项抛错（因此启动报错顺序不变）
+        ok=None   前序项未通过，本次未执行
+
+    诊断脚本据此一次列出全部缺口；启动路径仍只报第一个问题。
+    """
+    findings = []
+    paths = {}
+    metadata = {}
+    state = None
+
+    def record(seq, name, code, ok, detail=''):
+        findings.append({'seq': seq, 'check': name, 'code': code, 'ok': ok, 'detail': detail})
+
+    try:
+        state = args.state_dir.expanduser().resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        record(10, 'state-dir', 'STATE_DIR_UNAVAILABLE', False, f'{type(exc).__name__}: {exc}')
+    else:
+        record(10, 'state-dir', 'STATE_DIR_UNAVAILABLE', True, str(state))
+
+    if state is None:
+        record(20, 'state-databases', 'REQUIRED_DATABASE_UNAVAILABLE', None, '状态目录不存在，未检查')
+    else:
+        missing = []
+        for name, filename in {
+            'bank': 'ordinary-bank.sqlite3', 'personal': 'ordinary-bank.personal.sqlite3',
+            'auth': 'ordinary-auth.sqlite3', 'knowledge': 'ordinary-knowledge.sqlite3',
+        }.items():
+            try:
+                paths[name] = readable(state / filename)
+            except (OSError, RuntimeError) as exc:
+                missing.append(f'{filename}（{type(exc).__name__}）')
+        if missing:
+            record(20, 'state-databases', 'REQUIRED_DATABASE_UNAVAILABLE', False, '、'.join(missing))
+        else:
+            record(20, 'state-databases', 'REQUIRED_DATABASE_UNAVAILABLE', True, '四库齐全')
+
+    for seq, name, attribute in ((30, 'financial-database', 'financial_database'),
+                                 (40, 'market-database', 'market_database')):
+        try:
+            paths[name.split('-')[0]] = readable(getattr(args, attribute))
+        except (OSError, RuntimeError) as exc:
+            record(seq, name, 'REQUIRED_DATABASE_UNAVAILABLE', False, f'{type(exc).__name__}: {exc}')
+        else:
+            record(seq, name, 'REQUIRED_DATABASE_UNAVAILABLE', True, str(paths[name.split('-')[0]]))
+
     if not all(os.environ.get(name) for name in ('DEEPSEEK_API_KEY', 'GLM_API_KEY')):
-        raise RuntimeError('OFFICIAL_MODEL_KEYS_REQUIRED_USE_CC_WITH_SECRETS')
+        record(50, 'model-keys', 'OFFICIAL_MODEL_KEYS_REQUIRED_USE_CC_WITH_SECRETS', False,
+               'DEEPSEEK_API_KEY 或 GLM_API_KEY 未设置')
+    else:
+        record(50, 'model-keys', 'OFFICIAL_MODEL_KEYS_REQUIRED_USE_CC_WITH_SECRETS', True,
+               '两把模型密钥均在环境变量中')
+
     key = os.environ.get('NAVREN_PERSONAL_DATA_KEY')
     if not key:
-        raise RuntimeError('EXISTING_PERSONAL_KEY_REQUIRED_USE_CC_WITH_SECRETS')
-    from cryptography.fernet import Fernet
-    with connect(paths['personal']) as db:
-        check = db.execute("SELECT value FROM private_crypto WHERE key='key_check'").fetchone()
-    if not check or not check[0].startswith('pd1:'):
-        raise RuntimeError('PERSONAL_KEY_CHECK_UNAVAILABLE')
-    if Fernet(key.encode('ascii')).decrypt(check[0][4:].encode()).decode() != 'navren-personal-v1':
-        raise RuntimeError('EXISTING_PERSONAL_KEY_MISMATCH')
-    with connect(paths['bank']) as db:
-        has_legacy=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='navren_demo_accounts'").fetchone()
-        bindings = dict(db.execute("SELECT user_id,workspace_id FROM navren_demo_accounts WHERE status='ready'")) if has_legacy else {}
-        has_instances=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='registered_user_instances'").fetchone()
-        registered_count=db.execute("SELECT COUNT(*) FROM registered_user_instances WHERE status='ready'").fetchone()[0] if has_instances else 0
-    with connect(paths['financial']) as db:
-        subjects = dict(db.execute('SELECT subject_id,workspace_id FROM subjects'))
-        metadata = dict(db.execute('SELECT key,value FROM metadata'))
-    expected_personas={'tycoon','grain_farmer','working_landlady','retired_entrepreneur'}
-    if set(subjects)!=expected_personas or (bindings and bindings!=subjects):
-        raise RuntimeError('SEALED_FOUR_TEMPLATES_MISMATCH')
-    if metadata.get('schema_version') != 'navren.financial.v1':
-        raise RuntimeError('FINANCIAL_SCHEMA_UNSUPPORTED')
-    if metadata.get('history_profile') != 'realistic_three_year':
-        raise RuntimeError('REGISTERED_THREE_YEAR_TEMPLATE_REQUIRED')
-    metadata['existing_registered_instance_count']=registered_count
-    metadata['legacy_workspace_count']=len(bindings)
+        record(60, 'personal-key', 'EXISTING_PERSONAL_KEY_REQUIRED_USE_CC_WITH_SECRETS', False,
+               'NAVREN_PERSONAL_DATA_KEY 未设置')
+    else:
+        record(60, 'personal-key', 'EXISTING_PERSONAL_KEY_REQUIRED_USE_CC_WITH_SECRETS', True, '密钥已设置')
+
+    if not key or 'personal' not in paths:
+        record(70, 'personal-key-check', 'PERSONAL_KEY_CHECK_UNAVAILABLE', None, '缺少密钥或私库，未检查')
+    else:
+        from cryptography.fernet import Fernet
+        with connect(paths['personal']) as db:
+            check = db.execute("SELECT value FROM private_crypto WHERE key='key_check'").fetchone()
+        if not check or not check[0].startswith('pd1:'):
+            record(70, 'personal-key-check', 'PERSONAL_KEY_CHECK_UNAVAILABLE', False, '私库缺少 pd1: 密钥校验值')
+        elif Fernet(key.encode('ascii')).decrypt(check[0][4:].encode()).decode() != 'navren-personal-v1':
+            record(70, 'personal-key-check', 'EXISTING_PERSONAL_KEY_MISMATCH', False, '密钥与私库校验值不匹配')
+        else:
+            record(70, 'personal-key-check', 'EXISTING_PERSONAL_KEY_MISMATCH', True, '密钥与私库一致')
+
+    if 'bank' not in paths or 'financial' not in paths:
+        record(80, 'sealed-templates', 'SEALED_FOUR_TEMPLATES_MISMATCH', None, '缺少启动库或财务库，未检查')
+    else:
+        with connect(paths['bank']) as db:
+            has_legacy=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='navren_demo_accounts'").fetchone()
+            bindings = dict(db.execute("SELECT user_id,workspace_id FROM navren_demo_accounts WHERE status='ready'")) if has_legacy else {}
+            has_instances=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='registered_user_instances'").fetchone()
+            registered_count=db.execute("SELECT COUNT(*) FROM registered_user_instances WHERE status='ready'").fetchone()[0] if has_instances else 0
+        with connect(paths['financial']) as db:
+            subjects = dict(db.execute('SELECT subject_id,workspace_id FROM subjects'))
+            metadata = dict(db.execute('SELECT key,value FROM metadata'))
+        expected_personas={'tycoon','grain_farmer','working_landlady','retired_entrepreneur'}
+        if set(subjects)!=expected_personas or (bindings and bindings!=subjects):
+            record(80, 'sealed-templates', 'SEALED_FOUR_TEMPLATES_MISMATCH', False,
+                   f'财务库角色={sorted(subjects)}，绑定={sorted(bindings)}')
+        else:
+            record(80, 'sealed-templates', 'SEALED_FOUR_TEMPLATES_MISMATCH', True, '四个封存模板一致')
+        if metadata.get('schema_version') != 'navren.financial.v1':
+            record(90, 'financial-schema', 'FINANCIAL_SCHEMA_UNSUPPORTED', False,
+                   f"schema_version={metadata.get('schema_version')!r}")
+        else:
+            record(90, 'financial-schema', 'FINANCIAL_SCHEMA_UNSUPPORTED', True, 'navren.financial.v1')
+        if metadata.get('history_profile') != 'realistic_three_year':
+            record(100, 'history-profile', 'REGISTERED_THREE_YEAR_TEMPLATE_REQUIRED', False,
+                   f"history_profile={metadata.get('history_profile')!r}")
+        else:
+            record(100, 'history-profile', 'REGISTERED_THREE_YEAR_TEMPLATE_REQUIRED', True, 'realistic_three_year')
+        metadata['existing_registered_instance_count']=registered_count
+        metadata['legacy_workspace_count']=len(bindings)
+
     sdk = ROOT / 'outputs/financial-mcp/venv/bin/python'
     if not sdk.is_file() or not os.access(sdk, os.X_OK):
-        raise RuntimeError('ISOLATED_MCP_SDK_UNAVAILABLE')
+        record(110, 'isolated-mcp-sdk', 'ISOLATED_MCP_SDK_UNAVAILABLE', False, f'缺少可执行文件 {sdk}')
+    else:
+        record(110, 'isolated-mcp-sdk', 'ISOLATED_MCP_SDK_UNAVAILABLE', True, str(sdk))
+
     if not 1024 <= args.port <= 65535 or not 1024 <= args.upstream_port <= 65535 or args.port == args.upstream_port:
-        raise RuntimeError('INVALID_LOCAL_PORTS')
-    return paths, metadata
+        record(120, 'ports', 'INVALID_LOCAL_PORTS', False, f'port={args.port} upstream_port={args.upstream_port}')
+    else:
+        record(120, 'ports', 'INVALID_LOCAL_PORTS', True, f'port={args.port} upstream_port={args.upstream_port}')
+
+    findings.sort(key=lambda item: item['seq'])
+    return paths, metadata, findings
+
+def prepare(args):
+    paths, metadata, findings = probe_prerequisites(args)
+    failed = next((item for item in findings if item['ok'] is False), None)
+    if failed is None:
+        return paths, metadata
+    if failed['code'] == 'STATE_DIR_UNAVAILABLE':
+        # 保持原有行为：状态目录不存在时由 resolve(strict=True) 抛 FileNotFoundError。
+        raise FileNotFoundError(failed['detail'])
+    raise RuntimeError(failed['code'])
 
 
 def save_receipt(value, output_dir=None):

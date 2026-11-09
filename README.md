@@ -27,6 +27,34 @@ Navren 是面向银行与个人财务场景的 Multi-Agent 协同应用原型。
 
 Navren 尚未连接真实银行、支付平台或证券资金接口。模型输出不构成执行授权；需要变更账务或账户状态时，仍须通过独立的用户核对、确认和对应验证流程。
 
+## 快速开始（本地）
+
+仓库不含运行数据库、媒体原件与任何密钥，干净检出**不能**直接启动；缺数据时启动脚本按设计拒绝启动，而不是退回匿名账户。完整步骤：
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+
+# 0) 补齐体积较大的分词器资源（约 33 MB，按清单下载并校验 sha256）
+.venv/bin/python scripts/fetch_dependency_resources.py --fetch
+
+# 1) 一次看清缺什么（不写文件、不启动服务）
+.venv/bin/python scripts/check_environment.py \
+  --state-dir <已初始化的注册状态目录> \
+  --financial-database <封存的四模板财务库> \
+  --market-database <公开市场库>
+
+# 2) 密钥只经环境变量注入，不写进 .env 或仓库
+#    下面用 macOS 钥匙串读取作为示例，其他环境替换成等价的密钥注入方式
+DEEPSEEK_API_KEY="$(security find-generic-password -s CC/DEEPSEEK_API_KEY -w)" \
+GLM_API_KEY="$(security find-generic-password -s CC/GLM_API_KEY -w)" \
+NAVREN_PERSONAL_DATA_KEY="$(security find-generic-password -s CC/NAVREN_PERSONAL_DATA_KEY -w)" \
+.venv/bin/python scripts/serve_financial_frontend.py \
+  --state-dir <同上> --financial-database <同上> --market-database <同上>
+```
+
+自检会列出状态目录、四个启动库、财务库模板、模型密钥、私库密钥校验、隔离 MCP SDK 和端口；每项失败都给出修复方向。全部通过后再启动，避免在启动日志里逐个试错。
+
 ## 部署准备
 
 前端使用 HTML、CSS 和 JavaScript。Python 依赖见 `requirements.txt`；以下命令适用于已有仓库访问权限的 macOS 或 Linux 环境：
@@ -58,7 +86,9 @@ python3 -m venv .venv
 | `NAVREN_PORT` | 注册欢迎入口端口，也可显式指定 `--port` |
 | `NAVREN_PERSONAL_DATA_KEY` | 个人资料和媒体原件加密密钥；恢复已有数据时保持一致 |
 | `NAVREN_SMS_CONFIG` | 部署环境的短信通道配置文件路径 |
-| `AIPING_API_KEY` | 主 Agent、独立审核和市场编辑的模型调用凭据 |
+| `DEEPSEEK_API_KEY` | 主 Agent 的模型调用凭据（缺失时启动脚本直接拒绝启动） |
+| `GLM_API_KEY` | 独立审核与市场编辑的模型调用凭据（同上） |
+| `NAVREN_SMS_ACCESS_KEY_ID` 等 | 阿里云号码认证短信通道凭据；未配置时短信登录与高风险操作验证不可用 |
 | `DASHSCOPE_API_KEY` | 启用百炼语音时的服务端凭据 |
 | `DASHSCOPE_API_HOST` / `DASHSCOPE_WORKSPACE_ID` | 语音业务空间配置，按服务商实际设置填写 |
 
@@ -78,12 +108,16 @@ python3 -m venv .venv
 | `mine.html` | 个人资料、设置、记忆与收藏 |
 | `copilot.html` | 顾问工作台 |
 
-## 验证与资料
+## 测试与验收状态
 
-仓库包含账务、身份隔离、用户确认、幂等、资料绑定和前端交互等专项测试。按影响面运行对应测试；完整 Python 测试入口如下，部分测试另需数据与运行环境：
+仓库包含账务、身份隔离、用户确认、幂等、资料绑定和前端交互等专项测试。**全量套件在干净检出下并非全绿**：2026-11-09 对 `main@5eca2da` 的实测为 3041 个测试中 299 failures + 591 errors，原因集中在缺少封存数据库夹具、未配置短信 MFA、模型密钥缺失与历史测试未跟上门禁变更。逐项原因与复现命令见 [测试现状](docs/test-status.md)。
+
+因此 CI 只门禁已确认可在无状态环境通过的模块（`tests/ci_green.txt`、`tests/ci_green_js.txt`），全量结果作为不阻塞的报告单独发布：
 
 ```sh
-.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
+.venv/bin/python scripts/run_ci_tests.py      # 门禁子集
+npm ci && npm run test:ci                     # 前端门禁子集
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py'   # 全量（当前会红）
 ```
 
 本次代码同步不代表执行了全部测试或通过了真实模型、当前入口及全产品验收。旧版量表和评分不代表真实用户效果或比赛成绩。

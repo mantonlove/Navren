@@ -1,0 +1,16 @@
+{
+  "name": "navren",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Navren 财富顾问 Agent：前端无构建步骤，本文件只声明浏览器测试所需的 Node 开发依赖。",
+  "scripts": {
+    "test": "node --test tests/test_*.js",
+    "test:ci": "node --test $(tr '\n' ' ' < tests/ci_green_js.txt)"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -12,11 +12,17 @@ from concurrent.futures import ThreadPoolExecutor
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
 import finance_agent
 from server import create_server, ProxyHandler
+from base_runtime.service_assembly import AssembledGateway
+try:  # 兼容 `python -m unittest tests.xxx` 与 CI 把 tests/ 放进顶层路径两种入口。
+    from tests import sms_fixture
+except ImportError:  # pragma: no cover - 由 tests/ 作为顶层路径时走这里。
+    import sms_fixture
 from simulated_bank import BankError
 from agent_runtime.cashflow_finance import deterministic_cashflow_agents
 
@@ -34,6 +40,25 @@ class Browser:
         self.cookies=http.cookiejar.CookieJar()
         self.client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
         self.csrf=None
+        self._conversation_scope=None
+
+    def conversation_scope(self):
+        if self._conversation_scope is None:
+            status,data,_=self.call('/api/finance/dialogue/new-conversation','POST',{})
+            assert status==200,(status,data)
+            self._conversation_scope=data['conversation_scope']
+        return self._conversation_scope
+
+    def chat(self,body,**kwargs):
+        body=dict(body);body.setdefault('conversation_scope',self.conversation_scope())
+        result=self.call('/api/agent','POST',body,**kwargs)
+        # 修改记忆/个人资料会推进 revision，使旧范围失效；界面此时点「新对话」，测试同样重取。
+        if (result[0]==409 and isinstance(result[1],dict)
+                and result[1].get('error',{}).get('code')=='CONVERSATION_SCOPE_STALE'):
+            self._conversation_scope=None
+            body['conversation_scope']=self.conversation_scope()
+            result=self.call('/api/agent','POST',body,**kwargs)
+        return result
 
     def call(self,path,method='GET',body=None,headers=None,raw=None,bind_personal_version=True):
         # 正常界面先读取当前个人资料版本；缺版本拒绝的反例由私库/基座专测覆盖。
@@ -66,8 +91,23 @@ class IntegrationTest(unittest.TestCase):
         cls.tmp=tempfile.TemporaryDirectory()
         cls.quiet=patch.object(ProxyHandler,'log_message',lambda *args:None);cls.quiet.start()
         models=deterministic_cashflow_agents()
+        cls.now=[time.time()];cls.clock=lambda:cls.now[0]
+        cls.sms_lock=threading.Lock()
+        cls.provider=sms_fixture.LocalSms(cls.clock)
+        def factory(database,**options):
+            gateway=AssembledGateway(database,sms_provider=cls.provider,
+                                     allow_test_sms_provider=True,**options)
+            # 短信发送限流按银行时钟判定；测试用可控时钟推进窗口，不改变生产判定逻辑。
+            gateway.bank.clock=cls.clock
+            return gateway
+        cls.finance_factory=factory
         cls.server=create_server(0,Path(cls.tmp.name)/'bank.sqlite3',model_agents=models,
-                                 conversation_agent=LegacyFinanceRegression(models))
+                                 conversation_agent=LegacyFinanceRegression(models),
+                                 finance_factory=factory)
+        cls.registered_user_id=uuid.uuid4().hex
+        cls.server.finance.configure_dialogue_archive(
+            lambda workspace,_db:{'registered_user_id':cls.registered_user_id,
+                                  'workspace_id':workspace,'persona_id':'tycoon'})
         cls.base=f'http://127.0.0.1:{cls.server.server_port}'
         cls.thread=threading.Thread(target=cls.server.serve_forever,daemon=True);cls.thread.start()
 
@@ -94,7 +134,16 @@ class IntegrationTest(unittest.TestCase):
 
     def confirm(self,view,pin=True,**extra):
         op=view['operation'];payload={'confirmed':True,'confirmation_digest':op['confirmation_digest'],**extra}
-        if pin:payload['verification_code']=self.b.call('/api/finance/demo-code')[1]['code']
+        if pin:
+            path='/api/finance/operations/'+op['id']+'/sms'
+            for _ in range(3):
+                status,data,headers=self.b.call(path,'POST',{})
+                if status!=403 or data.get('error',{}).get('code')!='SMS_SEND_RATE_LIMITED':break
+                with self.sms_lock:self.now[0]+=61
+            # 操作已失效/已取消时短信挑战也会被拒；调用方仍应看到 409。
+            if status!=200:return status,data,headers
+            payload['verification_code']=sms_fixture.CODE
+            payload['challenge_id']=data['challenge_id']
         return self.b.call('/api/finance/operations/'+op['id']+'/confirm','POST',payload)
 
     def test_session_cookie_persistence_and_isolation(self):
@@ -111,7 +160,7 @@ class IntegrationTest(unittest.TestCase):
         self.assertEqual(self.b.call('/api/finance/operations/prepare','POST',self.draft(),headers={'X-QZ-CSRF':''})[0],403)
         self.assertEqual(self.b.call('/api/finance/session','POST',{},headers={'Origin':'https://attacker.invalid'})[0],403)
         self.assertEqual(self.b.call('/api/finance/overview',headers={'Sec-Fetch-Site':'cross-site'})[0],403)
-        self.assertEqual(self.b.call('/api/agent','POST',{'text':'余额'},headers={'X-QZ-CSRF':''})[0],403)
+        self.assertEqual(self.b.chat({'text':'余额'},headers={'X-QZ-CSRF':''})[0],403)
 
     def test_user_memory_is_opt_in_scoped_editable_and_only_used_by_cashflow(self):
         status,state,_=self.b.call('/api/finance/memories')
@@ -122,23 +171,23 @@ class IntegrationTest(unittest.TestCase):
         item=state['items'][0]
         self.assertEqual(item['origin'],'user_declared');self.assertTrue(item['user_confirmed'])
 
-        _,without_memory,_=self.b.call('/api/agent','POST',{'text':'查看未来30天资金时间轴'})
+        _,without_memory,_=self.b.chat({'text':'查看未来30天资金时间轴'})
         self.assertEqual(without_memory['user_memory_context'],[])
         self.assertNotIn(item['value'],without_memory['reply'])
 
         status,enabled,_=self.b.call('/api/finance/memories/settings','POST',{'enabled':True})
         self.assertEqual(status,200);self.assertTrue(enabled['enabled'])
-        _,with_memory,_=self.b.call('/api/agent','POST',{'text':'查看未来30天资金时间轴'})
+        _,with_memory,_=self.b.chat({'text':'查看未来30天资金时间轴'})
         used=with_memory['agent_workflow']['memory_context']
         self.assertEqual([row['node_id'] for row in used],[item['node_id']])
         self.assertTrue(any(row['evidence_id']==item['node_id'] for row in with_memory['agent_workflow']['evidence']))
         self.assertIn('不改变账户余额和现金流计算',with_memory['reply'])
         self.assertEqual(with_memory['bank_actions'],[])
 
-        _,bill_answer,_=self.b.call('/api/agent','POST',{'text':'分析9月账单和异常消费'})
+        _,bill_answer,_=self.b.chat({'text':'分析9月账单和异常消费'})
         self.assertNotIn('user_memory_context',bill_answer)
         self.assertEqual(self.b.call('/api/finance/memories/settings','POST',{'enabled':False})[1]['enabled'],False)
-        _,disabled_answer,_=self.b.call('/api/agent','POST',{'text':'查看未来30天资金时间轴'})
+        _,disabled_answer,_=self.b.chat({'text':'查看未来30天资金时间轴'})
         self.assertEqual(disabled_answer['user_memory_context'],[])
 
         status,corrected,_=self.b.call('/api/finance/memories/'+item['node_id']+'/correct','POST',
@@ -157,7 +206,7 @@ class IntegrationTest(unittest.TestCase):
         item=state['items'][0]
         self.assertEqual(item['expires_on'],'2026-10-03')
         self.assertEqual(self.b.call('/api/finance/memories/settings','POST',{'enabled':True})[0],200)
-        _,active,_=self.b.call('/api/agent','POST',{'text':'查看未来30天资金时间轴'})
+        _,active,_=self.b.chat({'text':'查看未来30天资金时间轴'})
         self.assertEqual(len(active['user_memory_context']),1)
 
         self.g.bank.advance_days(self.w,1)
@@ -165,25 +214,25 @@ class IntegrationTest(unittest.TestCase):
         state=self.b.call('/api/finance/memories')[1]
         self.assertTrue(state['items'][0]['expired'])
         self.assertEqual(state['items'][0]['node_id'],item['node_id'])
-        _,expired,_=self.b.call('/api/agent','POST',{'text':'查看未来30天资金时间轴'})
+        _,expired,_=self.b.chat({'text':'查看未来30天资金时间轴'})
         self.assertEqual(expired['user_memory_context'],[])
 
     def test_read_monthly_annual_and_real_budget(self):
         self.assertEqual(self.initial['total_cash_minor'],2439000);self.assertEqual(self.initial['upcoming_due_minor'],261400)
         self.assertEqual(self.initial['investable_minor'],1177600)
-        _,r,_=self.b.call('/api/agent','POST',{'text':'分析9月账单和异常消费'})
+        _,r,_=self.b.chat({'text':'分析9月账单和异常消费'})
         self.assertTrue(r['bank']);self.assertEqual(r['report']['month'],'2026-09');self.assertEqual(r['bank_actions'],[])
         _,annual,_=self.b.call('/api/finance/annual-analysis?year=2025');self.assertTrue(annual['complete_calendar_year']);self.assertEqual(len(annual['covered_months']),12)
         self.assertEqual(self.b.call('/api/finance/anomalies')[1]['duplicates'].__len__(),1)
 
     def test_balance_query_does_not_read_out_unsolicited_product_catalog(self):
-        _,balance,_=self.b.call('/api/agent','POST',{'text':'查看我的模拟账户余额'})
+        _,balance,_=self.b.chat({'text':'查看我的模拟账户余额'})
         self.assertEqual(balance['products'],[])
         self.assertIn('现金合计 24,390.00元',balance['reply'])
         self.assertIn('可投资 10,276.00元',balance['reply'])
         self.assertNotIn('products.catalog',balance['capabilities_used'])
         self.assertNotIn('SIM-BOND-30',balance['reply'])
-        _,comparison,_=self.b.call('/api/agent','POST',{'text':'对比模拟活钱和30天产品'})
+        _,comparison,_=self.b.chat({'text':'对比模拟活钱和30天产品'})
         self.assertEqual({product['id'] for product in comparison['products']},{'SIM-CASH-01','SIM-BOND-30'})
 
     def test_csv_preview_commit_source_switch_and_agent_use_imported_dataset(self):
@@ -213,7 +262,7 @@ class IntegrationTest(unittest.TestCase):
         self.assertEqual(report['totals_minor']['income'],10000)
         self.assertEqual(self.b.call('/api/finance/transactions')[1][0]['id'],'outside-1')
         self.assertEqual(self.b.call('/api/finance/overview')[1]['total_cash_minor'],before['total_cash_minor'])
-        _,answer,_=self.b.call('/api/agent','POST',{'text':'分析2026年9月账单消费'})
+        _,answer,_=self.b.chat({'text':'分析2026年9月账单消费'})
         self.assertIn('本地导入数据集',answer['reply'])
         self.assertEqual(answer['statement_source']['active_source'],'imported')
         self.assertEqual(answer['report']['totals_minor']['expense'],1234)
@@ -228,11 +277,11 @@ class IntegrationTest(unittest.TestCase):
         self.assertIn('statement_csv_import',capabilities['enabled'])
 
     def test_natural_language_never_executes_and_external_catalog_is_excluded(self):
-        _,r,_=self.b.call('/api/agent','POST',{'text':'保留一万元，购买模拟活钱产品3000元','profile':{'amount':999999,'risk_level':5}})
+        _,r,_=self.b.chat({'text':'保留一万元，购买模拟活钱产品3000元','profile':{'amount':999999,'risk_level':5}})
         self.assertEqual(len(r['bank_actions']),1);self.assertEqual(r['budget']['reserve_minor'],1000000)
         self.assertEqual(self.b.call('/api/finance/overview')[1]['orders'],[])
         self.assertNotIn('verification_code',json.dumps(r))
-        _,r,_=self.b.call('/api/agent','POST',{'text':'确认购买模拟活钱3000元'})
+        _,r,_=self.b.chat({'text':'确认购买模拟活钱3000元'})
         self.assertEqual(self.b.call('/api/finance/overview')[1]['total_cash_minor'],2439000)
         status,result,_=self.b.call('/api/finance/operations/prepare','POST',self.draft(product='000001'))
         self.assertEqual(status,404);self.assertEqual(result['error']['code'],'NOT_FOUND')
@@ -257,16 +306,16 @@ class IntegrationTest(unittest.TestCase):
         self.assertIn(state['total_cash_minor'],[2139000,2039000]);self.assertTrue(state['integrity']['ok'])
 
     def test_negative_intent_and_amount_precision(self):
-        _,result,_=self.b.call('/api/agent','POST',{'text':'不要购买模拟活钱产品3000元'})
+        _,result,_=self.b.chat({'text':'不要购买模拟活钱产品3000元'})
         self.assertEqual(result['bank_actions'],[])
-        _,result,_=self.b.call('/api/agent','POST',{'text':'购买模拟活钱产品100.01元'})
+        _,result,_=self.b.chat({'text':'购买模拟活钱产品100.01元'})
         self.assertEqual(result['bank_actions'][0]['draft']['amount_minor'],10001)
         self.assertEqual(finance_agent.parse_amount('3千元'),300000)
         self.assertIsNone(finance_agent.parse_amount('100.001元'))
 
     def test_verification_wrong_digest_and_code_do_not_change_money(self):
         v=self.prepare()
-        self.assertEqual(self.confirm(v,pin=False)[0],400)
+        self.assertEqual(self.confirm(v,pin=False)[0],403)
         self.assertEqual(self.confirm(v,confirmation_digest='wrong')[0],409)
         self.assertEqual(self.confirm(v,pin=False,verification_code='000000')[0],403)
         self.assertEqual(self.b.call('/api/finance/overview')[1]['total_cash_minor'],2439000)
@@ -289,7 +338,7 @@ class IntegrationTest(unittest.TestCase):
         self.assertEqual(self.b.call('/api/finance/overview')[1]['orders'],[])
 
     def test_close_mandate_does_not_cancel_merchant_contract(self):
-        _,r,_=self.b.call('/api/agent','POST',{'text':'关闭视频会员的银行代扣'})
+        _,r,_=self.b.chat({'text':'关闭视频会员的银行代扣'})
         status,v,_=self.b.call('/api/finance/operations/prepare','POST',r['bank_actions'][0]['draft']);self.assertEqual(status,200)
         self.assertFalse(v['verification_required']);status,result,_=self.confirm(v,pin=False);self.assertEqual(status,200)
         self.assertEqual(result['operation']['result']['merchant_contract_status'],'unchanged')
@@ -399,9 +448,9 @@ class IntegrationTest(unittest.TestCase):
         self.assertEqual(self.b.call('/api/finance/operations/prepare','POST',self.draft(amount=True))[0],400)
         self.assertEqual(self.b.call('/api/finance/operations/prepare','POST',self.draft(key={}))[0],400)
         self.assertEqual(self.b.call('/api/finance/products?workspace_id=evil')[0],400)
-        _,r,_=self.b.call('/api/agent','POST',{'text':'转账1000元'})
+        _,r,_=self.b.chat({'text':'转账1000元'})
         self.assertEqual(r['bank_actions'],[]);self.assertIn('明确的模拟收款人',r['reply'])
-        _,r,_=self.b.call('/api/agent','POST',{'text':'转给妈妈1000元'})
+        _,r,_=self.b.chat({'text':'转给妈妈1000元'})
         self.assertEqual(r['bank_actions'][0]['draft']['action'],'transfer')
         self.assertEqual(r['bank_actions'][0]['draft']['amount_minor'],100000)
         view=self.prepare_payload(r['bank_actions'][0]['draft'])
@@ -409,10 +458,10 @@ class IntegrationTest(unittest.TestCase):
         self.assertEqual(self.b.call('/api/finance/overview')[1]['total_cash_minor'],2439000)
 
     def test_agent_creates_subscription_and_cross_scene_confirmation_drafts(self):
-        _,cancel,_=self.b.call('/api/agent','POST',{'text':'取消视频会员订阅'})
+        _,cancel,_=self.b.chat({'text':'取消视频会员订阅'})
         self.assertEqual(len(cancel['bank_actions']),1)
         self.assertEqual(cancel['bank_actions'][0]['draft']['action'],'cancel_subscription')
-        _,task,_=self.b.call('/api/agent','POST',{'text':'帮我安排妈妈生日礼物'})
+        _,task,_=self.b.chat({'text':'帮我安排妈妈生日礼物'})
         self.assertEqual(len(task['bank_actions']),1)
         self.assertEqual(task['bank_actions'][0]['draft']['action'],'reserve_funds')
         self.assertIn('不扣款',task['reply'])
@@ -446,21 +495,18 @@ class IntegrationTest(unittest.TestCase):
 
     def test_bank_failure_has_no_fake_success_or_private_error(self):
         with patch.object(self.g,'overview',side_effect=RuntimeError('sensitive-internal-detail')):
-            status,data,_=self.b.call('/api/agent','POST',{'text':'购买模拟活钱3000元'})
+            status,data,_=self.b.chat({'text':'购买模拟活钱3000元'})
         self.assertEqual(status,500);self.assertNotIn('sensitive',json.dumps(data));self.assertIn('没有确认执行',data['reply'])
         self.assertEqual(self.b.call('/api/finance/overview')[1]['orders'],[])
 
     def test_commit_with_lost_response_survives_server_restart_and_replays_once(self):
         view=self.prepare(key='lost-response')
-        original=self.g.overview
-        calls=0
-        def lose_response_after_commit(workspace):
-            nonlocal calls
-            calls+=1
-            # 确认前的操作视图也会做两次 overview；第三次是银行记账完成后的响应组装。
-            if calls==3: raise RuntimeError('simulated response loss after commit')
-            return original(workspace)
-        with patch.object(self.g,'overview',side_effect=lose_response_after_commit):
+        # 直接让银行在提交成功之后抛出：提交已落盘，但客户端拿不到回执。
+        original_confirm=self.g.bank.confirm
+        def commit_then_lose_response(*args,**kwargs):
+            original_confirm(*args,**kwargs)
+            raise RuntimeError('simulated response loss after commit')
+        with patch.object(self.g.bank,'confirm',side_effect=commit_then_lose_response):
             status,error,_=self.confirm(view)
         self.assertEqual(status,500)
         self.assertEqual(error['error']['code'],'BANK_UNAVAILABLE')
@@ -471,7 +517,11 @@ class IntegrationTest(unittest.TestCase):
         old_thread=self.__class__.thread
         models=deterministic_cashflow_agents()
         replacement=create_server(0,Path(self.tmp.name)/'bank.sqlite3',model_agents=models,
-                                  conversation_agent=LegacyFinanceRegression(models))
+                                  conversation_agent=LegacyFinanceRegression(models),
+                                  finance_factory=self.__class__.finance_factory)
+        replacement.finance.configure_dialogue_archive(
+            lambda workspace,_db:{'registered_user_id':self.__class__.registered_user_id,
+                                  'workspace_id':workspace,'persona_id':'tycoon'})
         replacement_thread=threading.Thread(target=replacement.serve_forever,daemon=True)
         replacement_thread.start()
         old_server.shutdown();old_server.server_close();old_thread.join(5)
@@ -495,9 +545,9 @@ class IntegrationTest(unittest.TestCase):
     def test_http_timeout_while_backend_continues_recovers_receipt_without_duplicate(self):
         view=self.prepare(key='http-timeout')
         operation_id=view['operation']['id']
-        verification=self.b.call('/api/finance/demo-code')[1]['code']
+        challenge=self.b.call('/api/finance/operations/'+operation_id+'/sms','POST',{})[1]
         body={'confirmed':True,'confirmation_digest':view['operation']['confirmation_digest'],
-              'verification_code':verification}
+              'verification_code':sms_fixture.CODE,'challenge_id':challenge['challenge_id']}
         cookie='; '.join(f'{item.name}={item.value}' for item in self.b.cookies)
         request=urllib.request.Request(self.b.base+'/api/finance/operations/'+operation_id+'/confirm',
             data=json.dumps(body).encode(),headers={'Content-Type':'application/json','X-QZ-CSRF':self.b.csrf,
@@ -611,7 +661,7 @@ class IntegrationTest(unittest.TestCase):
             self.g.query_read_capability(self.w,'transaction.execute',{})
         self.assertEqual(caught.exception.code,'CAPABILITY_NOT_FOUND')
 
-        status,response,_=self.b.call('/api/agent','POST',{'text':'请展示未来30天资金时间轴'})
+        status,response,_=self.b.chat({'text':'请展示未来30天资金时间轴'})
         self.assertEqual(status,200)
         self.assertEqual(response['cashflow_timeline']['horizon_days'],30)
         self.assertEqual(response['cashflow_timeline']['workspace_id'],self.w)
@@ -634,7 +684,7 @@ class IntegrationTest(unittest.TestCase):
         self.assertTrue(any(item['evidence_id'].startswith('event:') for item in workflow['evidence']))
 
     def test_colloquial_balance_question_reads_account_data_without_risk_profile_or_product_recommendation(self):
-        status,response,_=self.b.call('/api/agent','POST',{'text':'我还有多少钱'})
+        status,response,_=self.b.chat({'text':'我还有多少钱'})
         self.assertEqual(status,200)
         self.assertTrue(response['bank'])
         self.assertEqual(response['intent'],'bank_wealth')
@@ -650,14 +700,14 @@ class IntegrationTest(unittest.TestCase):
         self.assertIn('备用账户',response['reply'])
         self.assertIn('可投资 10,276.00元',response['reply'])
 
-        _,available_amount,_=self.b.call('/api/agent','POST',{'text':'我有多少钱可以投资'})
+        _,available_amount,_=self.b.chat({'text':'我有多少钱可以投资'})
         self.assertTrue(available_amount['bank'])
         self.assertEqual(available_amount['products'],[])
         self.assertNotIn('风险画像',available_amount['reply'])
 
     def test_conversation_memory_is_proposed_but_saved_only_after_explicit_confirmation(self):
         self.assertEqual(self.b.call('/api/finance/memories/settings','POST',{'enabled':True})[0],200)
-        status,response,_=self.b.call('/api/agent','POST',{
+        status,response,_=self.b.chat({
             'text':'我的长期目标是毕业前存下 30,000 元；请查看余额。'})
         self.assertEqual(status,200)
         self.assertEqual(len(response['memory_proposals']),1)
@@ -674,7 +724,7 @@ class IntegrationTest(unittest.TestCase):
     def test_service_benefit_negotiation_uses_synthetic_rules_and_two_step_confirmation(self):
         initial=self.b.call('/api/finance/overview')[1]['total_cash_minor']
         text='我愿意迁入工资账户，但不接受购买理财作为优惠条件；希望协商服务费减免。'
-        _,chat,_=self.b.call('/api/agent','POST',{'text':text})
+        _,chat,_=self.b.chat({'text':text})
         self.assertIn('service_negotiation_request',chat)
         status,preview,_=self.b.call('/api/finance/service-negotiations/preview','POST',
                                      {'text':text,'share_memory':False})
@@ -697,7 +747,7 @@ class IntegrationTest(unittest.TestCase):
             'evidence_sources':{},'claims':[],'attempts':0,'bank_actions':[],
         }
         with patch.object(finance_agent,'run_cashflow_workflow',return_value=blocked):
-            status,response,_=self.b.call('/api/agent','POST',{'text':'请展示未来30天资金时间轴'})
+            status,response,_=self.b.chat({'text':'请展示未来30天资金时间轴'})
 
         self.assertEqual(status,200)
         self.assertEqual(response['agent_workflow']['status'],'blocked')

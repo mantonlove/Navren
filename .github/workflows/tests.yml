@@ -1,0 +1,79 @@
+name: tests
+
+# 门禁只覆盖可在无状态、无密钥环境下通过的模块（tests/ci_green.txt、
+# tests/ci_green_js.txt）；全量套件另设 report 任务，长期红但不阻塞合并。
+# 背景与刷新方法见 docs/test-status.md。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python 门禁（子集）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: 安装依赖
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+      - name: 获取大体积资源（tokenizer）
+        run: python scripts/fetch_dependency_resources.py --fetch
+      - name: 运行清单内测试
+        run: python scripts/run_ci_tests.py -v
+
+  javascript:
+    name: 前端门禁（子集）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: 安装测试依赖
+        run: npm ci
+      - name: 运行清单内测试
+        run: node --test $(tr '\n' ' ' < tests/ci_green_js.txt)
+
+  full-suite-report:
+    name: 全量测试（仅报告）
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: 安装依赖
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+      - name: 获取大体积资源（tokenizer）
+        run: python scripts/fetch_dependency_resources.py --fetch
+      - name: 全量运行并汇总
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' > full-suite.log 2>&1 || true
+          tail -n 40 full-suite.log
+          {
+            echo '### 全量 unittest 结果（不阻塞合并）'
+            echo '```'
+            grep -E '^Ran |^FAILED|^OK' full-suite.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-suite-log
+          path: full-suite.log

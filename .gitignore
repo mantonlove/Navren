@@ -29,3 +29,6 @@ outputs/
 /-.wav
 *.lock
 ._*
+
+# 大文件 tokenizer 资产按清单获取，不入库；见 dependency-resources/README.md
+dependency-resources/*/tokenizer.json

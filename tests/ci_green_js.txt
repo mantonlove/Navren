@@ -1,0 +1,10 @@
+tests/test_account_workspace_calendar.js
+tests/test_market_deck.js
+tests/test_market_public_projection_ui.js
+tests/test_market_same_day_ui.js
+tests/test_persona_display_profile_ui.js
+tests/test_research_service_compat.js
+tests/test_research_workspace_ui.js
+tests/test_view_context.js
+tests/test_welcome_login_profile_flow.js
+tests/test_welcome_session_client.js

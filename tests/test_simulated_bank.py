@@ -2,6 +2,7 @@
 import json
 import sqlite3
 import tempfile
+import time
 import threading
 import unittest
 from unittest.mock import patch
@@ -15,6 +16,10 @@ from simulated_bank import BankError, SimulatedBank
 from simulated_bank.http_api import create_server
 from simulated_bank.tools import BankTools
 from simulated_bank.customer_schema import SPECS
+try:  # 兼容 `python -m unittest tests.xxx` 与 CI 把 tests/ 放进顶层路径两种入口。
+    from tests import sms_fixture
+except ImportError:  # pragma: no cover - 由 tests/ 作为顶层路径时走这里。
+    import sms_fixture
 
 
 class BankTests(unittest.TestCase):
@@ -22,8 +27,11 @@ class BankTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.now = [1791018000.0]
+        self.clock = lambda: self.now[0]
         self.path = Path(self.temp.name)/'bank.sqlite3'
-        self.bank = SimulatedBank(self.path,clock=lambda:self.now[0])
+        self.provider = sms_fixture.LocalSms(self.clock)
+        self.bank = SimulatedBank(self.path,clock=self.clock,sms_provider=self.provider,
+                                  allow_test_sms_provider=True)
         self.credentials = self.bank.create_workspace()
         self.ws = self.credentials['workspace_id']
         self.account = next(r['id'] for r in self.bank.snapshot(self.ws)['accounts'] if r['name']=='模拟日常账户')
@@ -42,7 +50,9 @@ class BankTests(unittest.TestCase):
     def confirm_body(self, operation, strong=True):
         data = {'confirmed':True,'confirmation_digest':operation['confirmation_digest']}
         if strong and operation['permission']=='red':
-            data['verification_token']=self.bank.verify(self.ws,operation['id'],{'verification_code':self.credentials['human_verification_code']})['verification_token']
+            data['verification_token']=sms_fixture.authorize(
+                self.bank,self.ws,operation,
+                advance_clock=lambda seconds:self.now.__setitem__(0,self.now[0]+seconds))
         return data
 
     def execute(self, operation):
@@ -145,7 +155,7 @@ class BankTests(unittest.TestCase):
 
     def test_red_operation_requires_verification(self):
         op = self.prepare()
-        self.assert_code('VERIFICATION_REQUIRED',lambda:self.bank.confirm(self.ws,op['id'],self.confirm_body(op,False)))
+        self.assert_code('SMS_PROOF_REQUIRED',lambda:self.bank.confirm(self.ws,op['id'],self.confirm_body(op,False)))
         self.assertEqual(self.bank.operation(self.ws,op['id'])['state'],'pending_confirmation')
         self.assertEqual(self.bank.snapshot(self.ws)['total_cash_minor'],2439000)
 
@@ -214,26 +224,32 @@ class BankTests(unittest.TestCase):
         op = self.prepare()
         body = self.confirm_body(op)
         self.now[0]+=121
-        self.assert_code('VERIFICATION_REQUIRED',lambda:self.bank.confirm(self.ws,op['id'],body))
+        self.assert_code('SMS_PROOF_REQUIRED',lambda:self.bank.confirm(self.ws,op['id'],body))
         self.now[0]+=180
-        self.assert_code('EXPIRED',lambda:self.bank.confirm(self.ws,op['id'],body))
-        self.assertEqual(self.bank.operation(self.ws,op['id'])['state'],'expired')
+        self.assert_code('CONFIRMATION_EXPIRED',lambda:self.bank.confirm(self.ws,op['id'],body))
+        self.assertEqual(self.bank.operation(self.ws,op['id'])['state'],'pending_confirmation')
 
     def test_verification_token_is_bound_to_operation(self):
         a,b = self.prepare(),self.prepare(amount=300000)
         first = self.confirm_body(a)
         forged = dict(confirmed=True,confirmation_digest=b['confirmation_digest'],verification_token=first['verification_token'])
-        self.assert_code('VERIFICATION_REQUIRED',lambda:self.bank.confirm(self.ws,b['id'],forged))
+        self.assert_code('SMS_PROOF_REQUIRED',lambda:self.bank.confirm(self.ws,b['id'],forged))
 
-    def test_failed_verification_locks_then_recovers(self):
+    def test_failed_verification_locks_and_requires_recovery(self):
         op = self.prepare()
-        pin = self.credentials['human_verification_code']
-        wrong = f'{(int(pin)+1)%1000000:06d}'
+        challenge = sms_fixture.request_challenge(self.bank,self.ws,op,
+            advance_clock=lambda seconds:self.now.__setitem__(0,self.now[0]+seconds))
+        wrong = '000001' if sms_fixture.CODE != '000001' else '000002'
         for _ in range(3):
-            self.assert_code('VERIFICATION_FAILED',lambda:self.bank.verify(self.ws,op['id'],{'verification_code':wrong}))
-        self.assert_code('VERIFICATION_LOCKED',lambda:self.bank.verify(self.ws,op['id'],{'verification_code':pin}))
+            self.assert_code('SMS_VERIFICATION_FAILED',lambda:self.bank.verify(
+                self.ws,op['id'],{'verification_code':wrong,'challenge_id':challenge['challenge_id']}))
+        self.assert_code('FINANCIAL_WRITE_LOCKED',lambda:self.bank.verify(
+            self.ws,op['id'],{'verification_code':sms_fixture.CODE,'challenge_id':challenge['challenge_id']}))
         self.now[0]+=61
-        self.assertEqual(self.execute(op)['state'],'succeeded')
+        self.assert_code('FINANCIAL_WRITE_LOCKED',lambda:self.confirm_body(op))
+        # 锁定期间只允许原收据与只读查询；没有按时间自动解锁的产品行为。
+        self.assertEqual(self.bank.snapshot(self.ws)['total_cash_minor'],2439000)
+        self.assertEqual(self.bank.orders(self.ws),[])
 
     def test_cross_workspace_isolation(self):
         second = self.bank.create_workspace()['workspace_id']
@@ -541,9 +557,9 @@ class BankTests(unittest.TestCase):
             after = {t:[tuple(r) for r in db.execute('SELECT * FROM '+t+' ORDER BY rowid')] for t in before}
             self.assertEqual(before,after)
         self.assertTrue(migrated.customer_archive(self.ws)['integrity']['ok'])
-        self.assertTrue(list(self.path.parent.glob('*.before-v5-*.sqlite3')))
+        self.assertTrue(list(self.path.parent.glob('*.before-v6-*.sqlite3')))
         SimulatedBank(self.path)
-        self.assertEqual(len(list(self.path.parent.glob('*.before-v5-*.sqlite3'))),1)
+        self.assertEqual(len(list(self.path.parent.glob('*.before-v6-*.sqlite3'))),1)
 
     def test_failed_migration_rolls_back_and_can_retry(self):
         before = self.legacy_copy()
@@ -569,7 +585,7 @@ class BankTests(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM investment_lots WHERE workspace_id=?',(self.ws,)).fetchone()[0],lots_before)
             self.assertEqual(db.execute('SELECT count(*) FROM card_controls WHERE workspace_id=? AND card_id=? AND enabled<>0',
                                         (self.ws,self.ws[:12]+'-lost-card-online')).fetchone()[0],0)
-            self.assertEqual(db.execute('SELECT max(version) FROM schema_migrations').fetchone()[0],5)
+            self.assertEqual(db.execute('SELECT max(version) FROM schema_migrations').fetchone()[0],6)
             self.assertEqual(db.execute('SELECT dataset_version FROM workspace_datasets WHERE workspace_id=?',(self.ws,)).fetchone()[0],
                              'customer-bank-2026-10-06-v5')
 
@@ -594,7 +610,9 @@ class HTTPTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()
-        cls.bank = SimulatedBank(Path(cls.temp.name)/'http.sqlite3')
+        cls.provider = sms_fixture.LocalSms(time.time)
+        cls.bank = SimulatedBank(Path(cls.temp.name)/'http.sqlite3',sms_provider=cls.provider,
+                                 allow_test_sms_provider=True)
         cls.server = create_server(cls.bank,0)
         cls.base = f'http://127.0.0.1:{cls.server.server_port}'
         cls.thread = threading.Thread(target=cls.server.serve_forever,daemon=True)
@@ -650,7 +668,9 @@ class HTTPTests(unittest.TestCase):
         for action,body in [('confirm',dict(confirmed=True,confirmation_digest=op['confirmation_digest'])),('verify',dict(verification_code=c['human_verification_code']))]:
             status,error,_ = self.request(f'/api/sim-bank/operations/{op["id"]}/{action}',body,c['agent_token'])
             self.assertEqual((status,error['error']['code']),(403,'HUMAN_REQUIRED'))
-        _,grant,_ = self.request(f'/api/sim-bank/operations/{op["id"]}/verify',dict(verification_code=c['human_verification_code']),c['session_token'])
+        _,challenge,_ = self.request(f'/api/sim-bank/operations/{op["id"]}/sms',{},c['session_token'])
+        _,grant,_ = self.request(f'/api/sim-bank/operations/{op["id"]}/verify',
+                                 dict(verification_code=sms_fixture.CODE,challenge_id=challenge['challenge_id']),c['session_token'])
         body = dict(confirmed=True,confirmation_digest=op['confirmation_digest'],verification_token=grant['verification_token'])
         self.assertEqual(self.request(f'/api/sim-bank/operations/{op["id"]}/confirm',body,c['session_token'])[1]['state'],'succeeded')
         self.assertEqual(self.request(f'/api/sim-bank/operations/{op["id"]}/confirm',body,c['session_token'])[1]['state'],'succeeded')
