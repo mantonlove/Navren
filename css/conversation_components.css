@@ -1,0 +1,287 @@
+/* 正文的语义重点与组件数值共用清晰字重，不放大字号。 */
+.message-body.message-prose > :is(p, ul, ol) strong { font-weight: 700; }
+
+/* Navren 静态对话组件；在 chat_reading.css 后加载。 */
+.ncc-component {
+  --ncc-text: calc(var(--font-size-msg, 16px) * .9375);
+  --ncc-small: calc(var(--font-size-msg, 16px) * .875);
+  --ncc-value: var(--font-size-msg, 16px);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 12px 0;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--ncc-text);
+  font-weight: 400;
+  line-height: 1.6;
+  text-align: start;
+  text-indent: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.ncc-component *,
+.ncc-component *::before,
+.ncc-component *::after { box-sizing: border-box; }
+
+.ncc-component h3.ncc-title,
+.message-body.message-prose .ncc-component .ncc-title {
+  margin: 0 0 10px;
+  padding: 0;
+  color: var(--ink);
+  font-size: var(--ncc-text);
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-indent: 0;
+}
+
+/* 要点使用一条共同的阅读轴，不将每个值包成小卡片。 */
+.ncc-component.ncc-facts {
+  padding-block: 8px;
+  border-block: 1px solid var(--border);
+}
+
+.ncc-component .ncc-facts-list { margin: 0; padding: 0; }
+
+.ncc-component .ncc-fact {
+  display: grid;
+  grid-template-columns: minmax(84px, .45fr) minmax(0, 1.55fr);
+  column-gap: 18px;
+  align-items: baseline;
+  padding-block: 6px;
+}
+
+.ncc-component .ncc-fact:first-child { padding-top: 0; }
+.ncc-component .ncc-fact:last-child { padding-bottom: 0; }
+.ncc-component .ncc-fact + .ncc-fact { border-top: 1px solid var(--border); }
+
+.ncc-component .ncc-label {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink-70);
+  font-size: var(--ncc-small);
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.ncc-component .ncc-value {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--ncc-value);
+  font-weight: 650;
+  line-height: 1.6;
+}
+
+.ncc-component .ncc-value-text { font-variant-numeric: tabular-nums; }
+
+.ncc-component .ncc-description {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-70);
+  font-size: var(--ncc-small);
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+/* 比较只保留一个表面；窄屏局部滚动，所有单元格完整显示。 */
+.ncc-component .ncc-table-wrap {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-card);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: var(--border) transparent;
+  scrollbar-width: thin;
+}
+
+.ncc-component table.ncc-table,
+.message-body.message-prose .ncc-component .ncc-table {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--ncc-text);
+  font-weight: 400;
+  line-height: 1.6;
+  text-align: start;
+  font-variant-numeric: tabular-nums;
+}
+
+.ncc-component.ncc-columns-3 table.ncc-table,
+.message-body.message-prose .ncc-component.ncc-columns-3 .ncc-table { min-width: 300px; }
+.ncc-component.ncc-columns-4 table.ncc-table,
+.message-body.message-prose .ncc-component.ncc-columns-4 .ncc-table { min-width: 420px; }
+
+.ncc-component .ncc-table .ncc-cell,
+.message-body.message-prose .ncc-component .ncc-table .ncc-cell {
+  min-width: 0;
+  max-width: none;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--ncc-text);
+  font-weight: 400;
+  line-height: 1.6;
+  text-align: start;
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.ncc-component .ncc-table-head .ncc-cell,
+.message-body.message-prose .ncc-component .ncc-table-head .ncc-cell {
+  background: var(--surface-raised);
+  color: var(--ink-70);
+  font-weight: 600;
+}
+
+.ncc-component .ncc-table-body th.ncc-cell,
+.message-body.message-prose .ncc-component .ncc-table-body th.ncc-cell {
+  color: var(--ink-70);
+  font-weight: 400;
+}
+
+.ncc-component .ncc-table-body .ncc-compare-row:last-child .ncc-cell,
+.message-body.message-prose .ncc-component .ncc-table-body .ncc-compare-row:last-child .ncc-cell {
+  border-bottom: 0;
+}
+
+/* 顺序由细竖线连接；序号只占一行正文的高度。 */
+.ncc-component ol.ncc-steps-list,
+.message-body.message-prose .ncc-component .ncc-steps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ncc-component li.ncc-step,
+.message-body.message-prose .ncc-component .ncc-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 10px;
+  text-indent: 0;
+}
+
+.ncc-component .ncc-step:not(:last-child)::after {
+  position: absolute;
+  inset-inline-start: 11.5px;
+  top: 28px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--border);
+  content: '';
+}
+
+.ncc-component li.ncc-step:last-child,
+.message-body.message-prose .ncc-component .ncc-step:last-child { padding-bottom: 0; }
+
+.ncc-component .ncc-step-number {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-card);
+  color: var(--ink-50);
+  font-size: calc(var(--font-size-msg, 16px) * .8125);
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ncc-component .ncc-step-copy { min-width: 0; }
+
+.ncc-component .ncc-step-name {
+  display: block;
+  color: var(--ink);
+  font-size: var(--ncc-text);
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.ncc-component p.ncc-step-description,
+.message-body.message-prose .ncc-component .ncc-step-description {
+  margin: 3px 0 0;
+  padding: 0;
+  color: var(--ink-70);
+  font-size: var(--ncc-text);
+  font-weight: 400;
+  line-height: 1.6;
+  text-indent: 0;
+}
+
+/* 旁注是段落的补充，用开放边界区别于方案或步骤。 */
+.ncc-component.ncc-note {
+  padding: 4px 0 4px 14px;
+  border-inline-start: 2px solid var(--border);
+}
+
+.ncc-component.ncc-note h3.ncc-title,
+.message-body.message-prose .ncc-component.ncc-note .ncc-title {
+  margin-bottom: 4px;
+  color: var(--primary-deep);
+}
+
+.ncc-component p.ncc-note-text,
+.message-body.message-prose .ncc-component .ncc-note-text {
+  margin: 0;
+  padding: 0;
+  color: var(--ink-70);
+  font-size: var(--ncc-text);
+  font-weight: 400;
+  line-height: 1.6;
+  text-indent: 0;
+  white-space: pre-wrap;
+}
+
+.ncc-component:focus-visible,
+.ncc-component .ncc-table-wrap:focus-visible {
+  outline: 1px solid var(--ink-50);
+  outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  .ncc-component { margin-block: 12px; }
+  .ncc-component .ncc-fact {
+    grid-template-columns: minmax(72px, .4fr) minmax(0, 1fr);
+    column-gap: 12px;
+  }
+  .ncc-component .ncc-table .ncc-cell,
+  .message-body.message-prose .ncc-component .ncc-table .ncc-cell { padding: 9px 10px; }
+}
+
+/* 窄屏按比较维度排列，保留每个方案与值的对应关系。 */
+.ncc-component .ncc-mobile-label { display: none; }
+@media (max-width: 480px) {
+ .message-body.message-prose .ncc-component.ncc-compare .ncc-table {display:block;min-width:0;}
+ .ncc-component .ncc-table-head {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
+ .ncc-component .ncc-table-body {display:block;}
+ .ncc-component .ncc-table-body .ncc-compare-row {display:block;padding:12px;border-bottom:1px solid var(--border);}
+ .ncc-component .ncc-table-body .ncc-compare-row:last-child {border-bottom:0;}
+ .message-body.message-prose .ncc-component .ncc-table .ncc-table-body th.ncc-cell {display:block;padding:0 0 5px;border:0;color:var(--ink);font-weight:550;}
+ .message-body.message-prose .ncc-component .ncc-table .ncc-table-body td.ncc-cell {display:grid;grid-template-columns:minmax(76px,.55fr) minmax(0,1.45fr);gap:10px;padding:4px 0;border:0;}
+ .ncc-component .ncc-mobile-label {display:block;color:var(--ink-70);font-size:var(--ncc-small);}
+}

@@ -1,0 +1,345 @@
+/* 对话组件的统一表面与排版。只作用于聊天消息，不改变数据、折叠状态或业务动作。 */
+body[data-page="chat"] .message .bubble :is(.ncc-component, .ncp-panel, .navren-reply-component, .calendar-widget, .cashflow-panel, .workflow-evidence-panel, .bank-action-card, .memory-context-card, .memory-proposal-card, .service-negotiation-card, .reply-interaction) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--chat-line, var(--border));
+  border-radius: var(--chat-radius, 12px);
+  background: var(--chat-paper, var(--surface-card));
+  color: var(--ink);
+  box-shadow: none;
+  font-family: inherit;
+  font-size: var(--chat-component-text, .94em);
+  line-height: 1.6;
+  text-align: start;
+  text-indent: 0;
+  overflow-wrap: anywhere;
+}
+body[data-page="chat"] .message .bubble [hidden] { display: none !important; }
+body[data-page="chat"] .message .bubble :is(.ncc-component, .ncp-panel, .navren-reply-component, .calendar-widget, .cashflow-panel, .workflow-evidence-panel, .memory-context-card, .memory-proposal-card, .service-negotiation-card, .reply-interaction):last-child { margin-bottom: 0; }
+
+/* 轻组件：同一张纸面内以轴线和间距分组，不为每条信息叠加小卡。 */
+body[data-page="chat"] .message .ncc-component {
+  --ncc-text: 1em;
+  --ncc-small: max(13px, .86em);
+  --ncc-value: 1.08em;
+}
+body[data-page="chat"] .message .ncc-component .ncc-title { margin: 0 0 10px; color: var(--ink); font-size: 1em; font-weight: 650; line-height: 1.5; }
+body[data-page="chat"] .message .ncc-component .ncc-fact { grid-template-columns: minmax(90px, .6fr) minmax(0, 1.4fr); column-gap: 18px; padding-block: 8px; }
+body[data-page="chat"] .message .ncc-component .ncc-fact + .ncc-fact { border-color: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .ncc-component .ncc-label { color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .ncc-component .ncc-value { font-weight: 650; color: var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .ncc-component .ncc-description { margin-top: 3px; color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .ncc-component .ncc-table-wrap { border: 0; border-radius: 7px; background: transparent; }
+body[data-page="chat"] .message .ncc-component .ncc-table .ncc-cell { padding: 9px 12px; border-color: var(--chat-line, var(--border)); font-size: 1em; line-height: 1.6; }
+body[data-page="chat"] .message .ncc-component .ncc-table-head .ncc-cell { background: var(--chat-soft, var(--surface-raised)); color: var(--ink-70); font-weight: 600; }
+body[data-page="chat"] .message .ncc-component .ncc-table-body th.ncc-cell { color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .ncc-component .ncc-step { gap: 12px; padding-bottom: 12px; }
+body[data-page="chat"] .message .ncc-component .ncc-step-number { width: 24px; height: 24px; color: var(--chat-accent, var(--primary-deep)); background: var(--chat-soft, var(--surface-raised)); border-color: var(--chat-line, var(--border)); font-size: max(13px, .82em); }
+body[data-page="chat"] .message .ncc-component .ncc-step:not(:last-child)::after { background: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .ncc-component .ncc-step-description { margin-top: 3px; color: var(--ink-70); }
+body[data-page="chat"] .message .ncc-component.ncc-note { padding-block: 12px; border-inline-start: 3px solid var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .ncc-component.ncc-note .ncc-title { margin-bottom: 4px; color: var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .ncc-component .ncc-note-text { color: var(--ink-70); }
+
+/* 可展开面板：标题是一行正文尺度，展开后继续同一阅读轴。 */
+body[data-page="chat"] .message details.ncp-panel {
+  --ncp-text: 1em;
+  --ncp-small: max(13px, .86em);
+  --ncp-title: 1em;
+  --ncp-value: 1.25em;
+}
+body[data-page="chat"] .message .ncp-panel > .ncp-summary { min-height: 36px; padding: 0; gap: 14px; }
+body[data-page="chat"] .message .ncp-panel .ncp-heading { gap: 2px 12px; }
+body[data-page="chat"] .message .ncp-panel .ncp-title { font-weight: 650; }
+body[data-page="chat"] .message .ncp-panel :is(.ncp-description, .ncp-toggle, .ncp-answer-toggle, .ncp-note, .ncp-due) { color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .ncp-panel[open] > .ncp-body { margin-top: 10px; padding: 12px 0 0; border-top: 1px solid var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .ncp-panel .ncp-block + .ncp-block { margin-top: 14px; padding-top: 14px; border-color: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .ncp-panel .ncp-block-title { margin-bottom: 8px; font-size: 1em; font-weight: 600; }
+body[data-page="chat"] .message .ncp-panel .ncp-metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr)); gap: 14px 22px; }
+body[data-page="chat"] .message .ncp-panel .ncp-metric { display: grid; align-content: start; gap: 4px; }
+body[data-page="chat"] .message .ncp-panel .ncp-metric > strong.ncp-value { font-size: 1.25em; color: var(--chat-accent, var(--primary-deep)); line-height: 1.4; }
+body[data-page="chat"] .message .ncp-panel .ncp-metric > .ncp-note { margin-top: 0; }
+body[data-page="chat"] .message .ncp-panel :is(.ncp-label, .ncp-detail) { color: var(--ink-70); }
+body[data-page="chat"] .message .ncp-panel .ncp-timeline-item { padding-bottom: 12px; }
+body[data-page="chat"] .message .ncp-panel .ncp-timeline-item::before { border-color: var(--chat-accent, var(--primary-deep)); background: var(--chat-paper, var(--surface-card)); }
+body[data-page="chat"] .message .ncp-panel .ncp-timeline-item:not(:last-child)::after { background: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .ncp-panel .ncp-at { color: var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .ncp-panel .ncp-checklist-item + .ncp-checklist-item { margin-top: 8px; padding-top: 8px; border-color: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .ncp-panel .ncp-checklist-label { gap: 10px; }
+body[data-page="chat"] .message .ncp-panel .ncp-checkbox { accent-color: var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .ncp-panel .ncp-measure-heading > strong.ncp-value { font-size: 1em; font-weight: 650; }
+body[data-page="chat"] .message .ncp-panel .ncp-meter { height: 6px; margin-top: 6px; background: var(--chat-soft, var(--surface-raised)); color: var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .ncp-panel .ncp-meter::-webkit-progress-bar { background: var(--chat-soft, var(--surface-raised)); }
+body[data-page="chat"] .message .ncp-panel .ncp-meter::-webkit-progress-value { background: var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .ncp-panel .ncp-meter::-moz-progress-bar { background: var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .ncp-panel .ncp-question + .ncp-question { border-color: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .ncp-panel .ncp-question-summary { min-height: 40px; padding-block: 9px; }
+body[data-page="chat"] .message .ncp-panel .ncp-answer { padding: 8px 12px; margin-bottom: 9px; border-color: var(--chat-line, var(--border)); background: var(--chat-soft, var(--surface-raised)); color: var(--ink-70); }
+
+/* 已核验的事实、交易、分类、资金拆解、账户和序列共享同一种记录表面。 */
+body[data-page="chat"] .message .bubble .navren-reply-component { --nrc-accent: var(--chat-accent, var(--primary-deep)); padding: 0; overflow: visible; }
+body[data-page="chat"] .message .navren-reply-component .nrc-head { padding: 12px 16px; gap: 4px 16px; background: transparent; border-color: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .navren-reply-component .nrc-title { font-size: 1em; font-weight: 650; color: var(--ink); }
+body[data-page="chat"] .message .navren-reply-component .nrc-period { font-size: max(13px, .86em); color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .navren-reply-component .nrc-metrics { grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 16px 24px; padding: 14px 16px; }
+body[data-page="chat"] .message .navren-reply-component .nrc-metric { gap: 4px; }
+body[data-page="chat"] .message .navren-reply-component .nrc-metric-label { font-size: max(13px, .86em); color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .navren-reply-component .nrc-metric-value { font-size: 1.25em; color: var(--chat-accent, var(--primary-deep)); font-weight: 650; line-height: 1.4; }
+body[data-page="chat"] .message .navren-reply-component .nrc-metric-primary { grid-column: auto; padding-bottom: 0; border: 0; }
+body[data-page="chat"] .message .navren-reply-component .nrc-metric-primary .nrc-metric-value { font-size: 1.6em; }
+body[data-page="chat"] .message .navren-reply-component .nrc-rows { padding-inline: 16px; }
+body[data-page="chat"] .message .navren-reply-component .nrc-row { border-color: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .navren-reply-component .nrc-row-summary { min-height: 46px; padding-block: 9px; gap: 4px 12px; }
+body[data-page="chat"] .message .navren-reply-component .nrc-row-label { font-weight: 550; }
+body[data-page="chat"] .message .navren-reply-component .nrc-row-value { font-size: 1em; font-weight: 650; white-space: normal; overflow-wrap: anywhere; }
+body[data-page="chat"] .message .navren-reply-component .nrc-row-subtitle { font-size: max(13px, .84em); color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .navren-reply-component .nrc-detail-fields { padding: 10px 12px; gap: 7px 14px; border-radius: 8px; background: var(--chat-soft, var(--surface-raised)); font-size: max(13px, .86em); }
+body[data-page="chat"] .message .navren-reply-component .nrc-detail-fields dt { color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .navren-reply-component :is(.nrc-coverage, .nrc-note, .nrc-compact-note, .nrc-count, .nrc-empty, .nrc-account-name, .nrc-section-label, .nrc-remainder-toggle, .nrc-source, .nrc-detail-action) { font-size: max(13px, .84em); line-height: 1.6; }
+body[data-page="chat"] .message .navren-reply-component :is(.nrc-coverage, .nrc-note, .nrc-compact-note, .nrc-source, .nrc-account-name) { color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .navren-reply-component .nrc-source { padding: 10px 16px; background: transparent; border-color: var(--chat-line, var(--border)); border-radius: 0 0 var(--chat-radius, 12px) var(--chat-radius, 12px); }
+body[data-page="chat"] .message .navren-reply-component .nrc-remainder-toggle { min-height: 40px; }
+body[data-page="chat"] .message .navren-reply-component .nrc-bar-track { height: 5px; margin-top: 4px; background: var(--chat-soft, var(--surface-raised)); }
+body[data-page="chat"] .message .navren-reply-component .nrc-bar-fill { background: var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .navren-reply-component .nrc-series-chart { height: 128px; margin-block: 14px 8px; }
+body[data-page="chat"] .message .reply-components .nrc-other-toggle { min-height: 40px; font-size: max(13px, .86em); color: var(--chat-accent, var(--primary-deep)); }
+
+/* 收入卡仍保留账本/图形切换及精确金额；取消独立650px窄列。 */
+body[data-page="chat"] .message .navren-reply-component.nrc-income.ni-card {
+  --ni-paper: var(--chat-paper, var(--surface-card));
+  --ni-line: var(--chat-line, var(--border));
+  --ni-soft: var(--chat-soft, var(--surface-raised));
+  --ni-muted: var(--chat-muted, var(--ink-50));
+  --ni-blue: var(--chat-accent, var(--primary-deep));
+  max-width: 100%;
+  margin-inline: 0;
+  padding: 14px 16px;
+}
+body[data-page="chat"] .message .ni-card .ni-top h3 { font-size: 1em; font-weight: 650; line-height: 1.5; letter-spacing: 0; }
+body[data-page="chat"] .message .ni-card :is(.ni-period, .ni-eyebrow, .ni-percent, .ni-foot, .ni-exact, .ni-view-switch > button) { font-size: max(13px, .84em); }
+body[data-page="chat"] .message .ni-card .ni-total { margin: 18px 0 14px; }
+body[data-page="chat"] .message .ni-card .ni-number { font-size: 1.6em; line-height: 1.3; font-weight: 650; letter-spacing: -.025em; }
+body[data-page="chat"] .message .ni-card .ni-unit { font-size: .86em; }
+body[data-page="chat"] .message .ni-card .ni-view-switch { border-radius: 8px; box-shadow: none; }
+body[data-page="chat"] .message .ni-card .ni-view-switch > button { min-height: 34px; padding: 5px 10px; }
+body[data-page="chat"] .message .ni-card .ni-view-switch > button[aria-pressed="true"] { border-color: var(--chat-line, var(--border)); box-shadow: none; }
+body[data-page="chat"] .message .ni-card .ni-distribution { height: 6px; margin-bottom: 12px; }
+body[data-page="chat"] .message .ni-card .ni-row > summary { min-height: 44px; padding-block: 10px; }
+body[data-page="chat"] .message .ni-card .ni-label { font-size: 1em; }
+body[data-page="chat"] .message .ni-card .ni-value { font-size: 1em; font-weight: 650; }
+body[data-page="chat"] .message .ni-card .ni-row-body { margin-bottom: 10px; padding: 10px 12px; }
+body[data-page="chat"] .message .ni-card .ni-row-body .nrc-detail-fields { padding: 0; font-size: max(13px, .86em); }
+body[data-page="chat"] .message .ni-card[data-income-view="overview"] .ni-ring-layout { grid-template-columns: 112px minmax(0, 1fr); gap: 24px; margin: 16px 0; }
+body[data-page="chat"] .message .ni-card .ni-ring { width: 112px; height: 112px; }
+body[data-page="chat"] .message .ni-card .ni-ring-core { width: 91px; height: 91px; }
+body[data-page="chat"] .message .ni-card .ni-ring-number { font-size: 1.35em; }
+body[data-page="chat"] .message .ni-card .ni-ring-label { font-size: max(13px, .78em); }
+body[data-page="chat"] .message .ni-card .ni-foot { margin-top: 12px; }
+
+/* 正式任务结果不再形成一个额外的大外框，指标与条件才各自成组。 */
+body[data-page="chat"] .message .navren-task-result { gap: 16px; font-size: var(--chat-body, var(--font-size-msg)); line-height: 1.7; }
+body[data-page="chat"] .message .navren-task-result :is(h3, h4, h5) { font-size: 1em; font-weight: 650; line-height: 1.5; }
+body[data-page="chat"] .message .navren-task-result .task-component-conclusion { font-size: 1em; line-height: 1.8; }
+body[data-page="chat"] .message .navren-task-result .task-component-conditions { padding: 12px 16px; border-color: var(--chat-line, var(--border)); border-radius: var(--chat-radius, 12px); background: var(--chat-soft, var(--surface-raised)); font-size: var(--chat-component-text, .94em); }
+body[data-page="chat"] .message .navren-task-result .task-component-conditions ul { margin-top: 6px; }
+body[data-page="chat"] .message .navren-task-result .task-component-metrics-section { gap: 10px; }
+body[data-page="chat"] .message .navren-task-result .task-component-metrics { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
+body[data-page="chat"] .message .navren-task-result .task-component-metric { padding: 14px 16px; border-color: var(--chat-line, var(--border)); border-radius: var(--chat-radius, 12px); background: var(--chat-paper, var(--surface-card)); font-size: var(--chat-component-text, .94em); }
+body[data-page="chat"] .message .navren-task-result .task-component-amount { margin: 7px 0 3px; font-size: 1.25em; font-weight: 650; line-height: 1.4; }
+body[data-page="chat"] .message .navren-task-result :is(.task-component-status, .task-component-meta, .task-component-basis-row, .task-component-fixture, .task-component-analysis-state, .task-component-notice, .task-component-reference span, .task-component-evidence-id) { font-size: max(13px, .84em); line-height: 1.65; }
+body[data-page="chat"] .message .navren-task-result .task-component-meta { gap: 6px; margin-top: 10px; }
+body[data-page="chat"] .message .navren-task-result .task-component-meta-row { grid-template-columns: minmax(58px, .3fr) minmax(0, 1fr); gap: 12px; }
+body[data-page="chat"] .message .navren-task-result .task-component-evidence { border-color: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .navren-task-result .task-component-evidence > summary { padding: 9px 2px; font-size: max(13px, .88em); color: var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .navren-task-result .task-component-evidence-body { padding: 4px 2px 12px; gap: 12px; font-size: var(--chat-component-text, .94em); }
+body[data-page="chat"] .message .navren-task-result .task-component-evidence-body section { border-color: var(--chat-line, var(--border)); padding-bottom: 12px; }
+body[data-page="chat"] .message .navren-task-result .task-component-actions { gap: 8px; }
+body[data-page="chat"] .message .navren-task-result .task-component-fixture { background: var(--chat-soft, var(--surface-raised)); }
+
+/* 确认、选择和保存均沿用原动作身份；这里只统一控件轮廓和文字比例。 */
+body[data-page="chat"] .message .bubble :is(.task-component-button, .reply-interaction-button, .bank-button, .p-btn, .calendar-button, .nrc-detail-action) { min-height: 38px; max-width: 100%; padding: 8px 12px; border-radius: 8px; font: inherit; font-size: max(13px, .9em); line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
+body[data-page="chat"] .message .bubble :is(.task-component-button, .p-btn, .calendar-button) { border-color: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .bubble :is(.task-component-button, .p-btn):hover:enabled { background: var(--chat-soft, var(--surface-raised)); color: var(--chat-accent, var(--primary-deep)); }
+body[data-page="chat"] .message .reply-interaction { padding: 12px 16px; }
+body[data-page="chat"] .message .reply-interaction-prompt { margin-bottom: 10px; font-size: 1em; font-weight: 600; }
+body[data-page="chat"] .message .reply-interaction-options { gap: 8px; }
+body[data-page="chat"] .message .reply-interaction-status { font-size: max(13px, .86em); color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .reply-interaction-button.is-primary { color: var(--on-primary); background: var(--primary-deep); border-color: var(--primary-deep); }
+body[data-page="chat"] .message .reply-interaction-button.is-primary:hover:enabled { background: var(--primary); border-color: var(--primary); }
+body[data-page="chat"] .message .reply-interaction-button.is-selected { color: var(--chat-accent, var(--primary-deep)); background: var(--chat-soft, var(--surface-raised)); }
+body[data-page="chat"] .message .bank-actions { gap: 9px; margin-top: 12px; }
+body[data-page="chat"] .message .bank-action-card { margin-top: 12px; }
+body[data-page="chat"] .message .bank-action-card > .bank-plan-actions { margin: 0; }
+body[data-page="chat"] .message .bank-action-card .bank-plan-status { margin: 8px 0 0; font-size: max(13px, .86em); }
+body[data-page="chat"] .message .bank-button.primary { color: var(--on-primary); background: var(--primary-deep); border-color: var(--primary-deep); }
+body[data-page="chat"] .message .bank-button.primary:hover:enabled { background: var(--primary); }
+
+/* 现金流和依据不再在总卡内堆多层卡；对象列之间用细线分开。 */
+body[data-page="chat"] .message .bank-actions > :is(.cashflow-panel, .workflow-evidence-panel) { margin-top: 12px; padding: 14px 16px; }
+body[data-page="chat"] .message :is(.cashflow-panel, .workflow-evidence-panel) > :is(h2, h3) { margin: 0 0 8px; font-size: 1em; font-weight: 650; }
+body[data-page="chat"] .message .cashflow-account-grid { gap: 10px; margin: 14px 0; }
+body[data-page="chat"] .message .cashflow-account { padding: 4px 14px; border: 0; border-inline-start: 1px solid var(--chat-line, var(--border)); border-radius: 0; background: transparent; }
+body[data-page="chat"] .message .cashflow-account:first-child { padding-inline-start: 0; border-inline-start: 0; }
+body[data-page="chat"] .message .cashflow-account h4 { margin-bottom: 10px; font-size: 1em; color: var(--ink); }
+body[data-page="chat"] .message .cashflow-metrics { gap: 8px 12px; font-size: max(13px, .86em); }
+body[data-page="chat"] .message .cashflow-metrics :is(dt, dd) { min-width: 0; overflow-wrap: anywhere; }
+body[data-page="chat"] .message .cashflow-metrics dd { font-weight: 650; }
+body[data-page="chat"] .message .cashflow-subheading { margin: 14px 0 8px; font-size: 1em; }
+body[data-page="chat"] .message .cashflow-days { gap: 0; }
+body[data-page="chat"] .message .cashflow-day { padding: 0; border: 0; border-bottom: 1px solid var(--chat-line, var(--border)); border-radius: 0; background: transparent; }
+body[data-page="chat"] .message .cashflow-day:last-child { border-bottom: 0; }
+body[data-page="chat"] .message .cashflow-day > summary { min-height: 40px; padding-block: 9px; font-size: 1em; }
+body[data-page="chat"] .message .cashflow-event { margin: 0 0 10px; padding: 4px 0 4px 12px; border: 0; border-inline-start: 2px solid var(--chat-line, var(--border)); border-radius: 0; background: transparent; }
+body[data-page="chat"] .message .cashflow-event-title { font-size: 1em; }
+body[data-page="chat"] .message :is(.cashflow-source, .workflow-task-list, .workflow-source-list, .workflow-source-list ul, .workflow-review-status, .bank-note) { font-size: max(13px, .86em); }
+body[data-page="chat"] .message .workflow-review-status { padding: 4px 8px; border-radius: 6px; }
+body[data-page="chat"] .message .workflow-evidence-panel.is-reviewed .workflow-review-status { color: var(--state-success); background: color-mix(in srgb, var(--state-success) 9%, var(--chat-paper, var(--surface-card))); }
+body[data-page="chat"] .message .workflow-evidence-panel.is-blocked .workflow-review-status { color: var(--state-danger); background: color-mix(in srgb, var(--state-danger) 9%, var(--chat-paper, var(--surface-card))); }
+
+/* 日历与已发布资金视图保留其网格、语义颜色、依据及确认入口。 */
+body[data-page="chat"] .message .calendar-widget > h3 { margin: 0 0 8px; font-size: 1em; font-weight: 650; }
+body[data-page="chat"] .message .calendar-widget :is(.calendar-identity, .calendar-note) { font-size: max(13px, .86em); line-height: 1.65; }
+body[data-page="chat"] .message .calendar-widget .calendar-identity { color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .calendar-widget .calendar-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 12px; margin: 14px 0; }
+body[data-page="chat"] .message .calendar-widget .calendar-metric { min-width: 0; padding: 10px 12px; border: 0; border-inline-start: 1px solid var(--chat-line, var(--border)); border-radius: 0; background: transparent; }
+body[data-page="chat"] .message .calendar-widget .calendar-metric:first-child { padding-inline-start: 0; border-inline-start: 0; }
+body[data-page="chat"] .message .calendar-widget .calendar-metric > span { font-size: max(13px, .86em); color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .calendar-widget .calendar-metric > strong { display: block; margin: 5px 0; font-size: 1.25em; font-weight: 650; line-height: 1.4; }
+body[data-page="chat"] .message .calendar-widget .calendar-summary-currency { min-width: 0; padding: 10px 12px; border-radius: 8px; background: var(--chat-soft, var(--surface-raised)); font-size: 1em; }
+body[data-page="chat"] .message .calendar-widget .calendar-grid { gap: 5px; }
+body[data-page="chat"] .message .calendar-widget .calendar-day { min-height: 78px; padding: 8px; border-color: var(--chat-line, var(--border)); background: transparent; }
+body[data-page="chat"] .message .calendar-widget .calendar-day:hover:enabled { background: var(--chat-soft, var(--surface-raised)); }
+body[data-page="chat"] .message .calendar-widget .calendar-day :is(.calendar-day-title, small) { font-size: max(13px, .8em); }
+body[data-page="chat"] .message .calendar-widget .calendar-confirm { margin-top: 12px; padding: 12px 14px; border-color: var(--chat-line, var(--border)); border-radius: 8px; background: var(--chat-soft, var(--surface-raised)); }
+body[data-page="chat"] .message .calendar-widget .calendar-confirm h3 { font-size: 1em; }
+body[data-page="chat"] .message .calendar-widget .calendar-note :is(dt, dd) { margin: 0 0 5px; overflow-wrap: anywhere; }
+body[data-page="chat"] .message .calendar-widget > details > summary { min-height: 38px; padding-block: 8px; font-size: max(13px, .88em); color: var(--chat-accent, var(--primary-deep)); cursor: pointer; }
+body[data-page="chat"] .message .calendar-widget .calendar-metric > details { font-size: max(13px, .86em); }
+
+/* 记忆和服务资料有明确成组边界；出处作为正文的轻量页脚。 */
+body[data-page="chat"] .message .memory-context-card { border-inline-start-width: 2px; background: var(--chat-soft, var(--surface-raised)); }
+body[data-page="chat"] .message :is(.memory-context-card, .memory-proposal-card, .service-negotiation-card) :is(h3, h4) { margin: 0 0 6px; font-size: 1em; font-weight: 650; color: var(--ink); }
+body[data-page="chat"] .message .memory-proposal-card > strong { font-size: 1em; font-weight: 650; }
+body[data-page="chat"] .message :is(.memory-context-card, .memory-proposal-card, .service-negotiation-card) > p { margin: 0; color: var(--chat-muted, var(--ink-50)); font-size: max(13px, .9em); line-height: 1.65; }
+body[data-page="chat"] .message .memory-context-card ul { margin: 10px 0 0; padding-inline-start: 1.2em; gap: 5px; font-size: 1em; }
+body[data-page="chat"] .message .memory-proposal-row { padding-top: 10px; align-items: flex-start; border-top: 1px solid var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .memory-proposal-row > div:first-child { flex: 1; min-width: 0; }
+body[data-page="chat"] .message .memory-proposal-row > div:first-child > span { color: var(--chat-muted, var(--ink-50)); font-size: max(13px, .84em); }
+body[data-page="chat"] .message .memory-proposal-row p { margin-top: 4px; color: var(--ink); font-size: 1em; }
+body[data-page="chat"] .message .memory-proposal-actions { flex-wrap: wrap; flex-shrink: 0; justify-content: flex-end; gap: 6px; }
+body[data-page="chat"] .message .memory-proposal-saved { color: var(--state-success); font-size: max(13px, .84em); }
+body[data-page="chat"] .message .service-negotiation-card { gap: 10px; }
+body[data-page="chat"] .message .service-negotiation-card textarea { min-height: 80px; padding: 10px 12px; border-color: var(--chat-line, var(--border)); border-radius: 8px; background: var(--chat-paper, var(--surface-card)); font-size: 1em; line-height: 1.6; }
+body[data-page="chat"] .message .service-negotiation-card .service-memory-share { align-items: start; font-size: max(13px, .86em); line-height: 1.6; }
+body[data-page="chat"] .message .service-negotiation-card > .p-btn { justify-self: start; }
+body[data-page="chat"] .message .service-negotiation-result > .service-offer { margin: 0; padding: 12px 0 0; border: 0; border-top: 1px solid var(--chat-line, var(--border)); border-radius: 0; background: transparent; gap: 8px; }
+body[data-page="chat"] .message .service-offer :is(h4, p, ul) { font-size: 1em; line-height: 1.6; }
+body[data-page="chat"] .message .service-offer h4 { font-weight: 650; }
+body[data-page="chat"] .message :is(.service-offer, .service-negotiation-card) small { font-size: max(13px, .84em); color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .market-chat-sources { margin: 16px 0 0; padding-top: 10px; border-top: 1px solid var(--chat-line, var(--border)); font-size: var(--chat-component-small, max(13px, .8em)); line-height: 1.65; }
+body[data-page="chat"] .message .market-chat-sources h4 { margin: 0 0 5px; font-size: 1em; font-weight: 600; color: var(--chat-muted, var(--ink-50)); }
+body[data-page="chat"] .message .market-chat-sources .market-source { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 14px; margin-block: 4px; padding: 0; border: 0; background: transparent; font-size: 1em; }
+body[data-page="chat"] .message .market-chat-sources .market-source > span { color: var(--chat-muted, var(--ink-50)); }
+
+/* 旧问卷仍是同一套可点击选项；只去掉旧金色装饰。 */
+body[data-page="chat"] .chat-messages .message.ai .bubble.quiz-inline { padding: 14px 16px; border: 1px solid var(--chat-line, var(--border)); border-radius: var(--chat-radius, 12px); background: var(--chat-paper, var(--surface-card)); }
+body[data-page="chat"] .message .quiz-inline .quiz-progress { margin-bottom: 10px; color: var(--chat-muted, var(--ink-50)); font-size: max(13px, .84em); }
+body[data-page="chat"] .message .quiz-inline .quiz-question { margin-bottom: 12px; font-size: 1em; font-weight: 600; }
+body[data-page="chat"] .message .quiz-inline .quiz-options { gap: 8px; }
+body[data-page="chat"] .message .quiz-inline .quiz-option { min-height: 44px; padding: 9px 12px; border-color: var(--chat-line, var(--border)); border-radius: 8px; background: transparent; font-size: var(--chat-component-text, .94em); }
+body[data-page="chat"] .message .quiz-inline .quiz-option:hover { background: var(--chat-soft, var(--surface-raised)); border-color: var(--chat-line, var(--border)); }
+body[data-page="chat"] .message .quiz-inline .quiz-option > span:first-child { width: 26px !important; height: 26px !important; border: 1px solid var(--chat-line, var(--border)) !important; color: var(--chat-accent, var(--primary-deep)) !important; background: var(--chat-soft, var(--surface-raised)); font-size: max(13px, .86em) !important; font-weight: 600 !important; }
+
+/* 运行进度保留原展开、滚动和状态，只接入文字/线条的共用尺度。 */
+body[data-page="chat"] .message .runtime-activity-panel { background: transparent; border-color: var(--chat-line, var(--border)); font-size: max(13px, .86em); }
+body[data-page="chat"] .message .runtime-activity-panel .runtime-activity-current { font-size: 1em; }
+body[data-page="chat"] .message .runtime-activity-panel .runtime-activity-name { font-size: 1em; }
+
+body[data-page="chat"].mode-senior .message .bubble :is(.task-component-button, .reply-interaction-button, .bank-button, .p-btn, .calendar-button, .nrc-detail-action),
+body[data-page="chat"].mode-senior .message .ni-card .ni-view-switch > button { min-height: 48px; }
+body[data-page="chat"].mode-senior .message .ncp-panel .ncp-checklist-label { min-height: 48px; }
+
+@media (max-width: 620px) {
+  body[data-page="chat"] .message .bubble :is(.task-component-button, .reply-interaction-button, .bank-button, .p-btn, .calendar-button, .nrc-detail-action),
+  body[data-page="chat"] .message .ni-card .ni-view-switch > button { min-height: 44px; }
+  body[data-page="chat"] .message .ncp-panel .ncp-checklist-label { min-height: 44px; }
+  body[data-page="chat"] .message .bubble :is(.ncc-component, .ncp-panel, .calendar-widget, .cashflow-panel, .workflow-evidence-panel, .bank-action-card, .memory-context-card, .memory-proposal-card, .service-negotiation-card, .reply-interaction) { padding: 12px; }
+  body[data-page="chat"] .message .navren-reply-component :is(.nrc-head, .nrc-rows, .nrc-metrics, .nrc-source) { padding-inline: 12px; }
+  body[data-page="chat"] .message .navren-reply-component .nrc-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+  body[data-page="chat"] .message .navren-reply-component .nrc-metric-primary { grid-column: 1 / -1; }
+  body[data-page="chat"] .message .navren-reply-component.nrc-income.ni-card { padding: 12px; }
+  body[data-page="chat"] .message .ncc-component .ncc-fact { grid-template-columns: minmax(70px, .4fr) minmax(0, 1fr); column-gap: 12px; }
+  body[data-page="chat"] .message .ncc-component .ncc-table .ncc-cell { padding: 8px 10px; }
+  body[data-page="chat"] .message .navren-reply-component .nrc-row-summary { grid-template-columns: minmax(0, 1fr) minmax(0, max-content) 16px; column-gap: 8px; }
+  body[data-page="chat"] .message .navren-reply-component .nrc-detail-fields { grid-template-columns: minmax(65px, .35fr) minmax(0, 1fr); }
+  body[data-page="chat"] .message .ni-card .ni-row > summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 14px; min-height: 48px; padding-block: 9px; }
+  body[data-page="chat"] .message .ni-card .ni-percent { grid-column: 2; grid-row: 2; }
+  body[data-page="chat"] .message .ni-card .ni-arrow { grid-column: 3; grid-row: 1 / 3; }
+  body[data-page="chat"] .message .ni-card[data-income-view="overview"] .ni-ring-layout { grid-template-columns: 96px minmax(0, 1fr); gap: 16px; }
+  body[data-page="chat"] .message .ni-card .ni-ring { width: 96px; height: 96px; }
+  body[data-page="chat"] .message .ni-card .ni-ring-core { width: 77px; height: 77px; padding: 4px; }
+  body[data-page="chat"] .message .ni-card .ni-ring-number { font-size: 1.2em; }
+  body[data-page="chat"] .message .cashflow-account-grid { grid-template-columns: 1fr; }
+  body[data-page="chat"] .message .cashflow-account { padding: 10px 0 0; border-inline-start: 0; border-top: 1px solid var(--chat-line, var(--border)); }
+  body[data-page="chat"] .message .cashflow-account:first-child { padding-top: 0; border-top: 0; }
+  body[data-page="chat"] .message .calendar-widget .calendar-summary { grid-template-columns: 1fr; }
+  body[data-page="chat"] .message .calendar-widget .calendar-metric { padding: 10px 0 0; border-inline-start: 0; border-top: 1px solid var(--chat-line, var(--border)); }
+  body[data-page="chat"] .message .calendar-widget .calendar-metric:first-child { padding-top: 0; border-top: 0; }
+  body[data-page="chat"] .message .calendar-widget .calendar-day { padding: 6px 4px; min-height: 74px; }
+  body[data-page="chat"] .message .memory-proposal-row { flex-direction: column; gap: 8px; }
+  body[data-page="chat"] .message .memory-proposal-actions { justify-content: flex-start; }
+}
+
+/* 连续对话实屏返修：小型对比收束列距，条形图保持紧凑而可辨。 */
+body[data-page="chat"] .message .bubble .ncc-component.ncc-compare {width:min(100%,64em);}
+body[data-page="chat"] .message .ncc-compare .ncc-table tr > :first-child {width:25%;}
+body[data-page="chat"] .message .ncp-panel li.ncp-measure-item + li.ncp-measure-item {margin-top:6px;}
+body[data-page="chat"] .message .ncp-panel .ncp-measure-heading {line-height:1.45;}
+body[data-page="chat"] .message .ncp-panel progress.ncp-meter {height:7px;margin-top:4px;}
+
+/* 数据面属于同一答复，不给常规组件重复套纸卡。业务确认仍保留其语义表面。 */
+body[data-page="chat"] .message .bubble :is(.ncc-component,.ncp-panel,.navren-reply-component) {
+  margin-block:20px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;
+}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-title {
+  display:flex;align-items:baseline;gap:12px;
+  padding-bottom:10px;margin-bottom:0;border-bottom:1px solid var(--chat-line);
+  font-size:1em;font-weight:650;letter-spacing:.01em;
+}
+body[data-page="chat"] .message .bubble .ncc-component.ncc-compare {max-width:960px;}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-table-wrap {border:0;border-radius:0;}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-table {border:0;}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-table .ncc-cell {padding:11px 14px;border-color:var(--chat-line);}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-table .ncc-cell:first-child {padding-inline-start:0;}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-table-head .ncc-cell {padding-block:9px;background:transparent;color:var(--chat-muted);font-size:.88em;font-weight:550;}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-table-head .ncc-cell:not(:first-child) {color:var(--chat-accent);font-weight:700;}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-table-body tr:last-child .ncc-cell {border-bottom:1px solid var(--chat-line);}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-table-body th.ncc-cell {font-weight:500;}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-value {font-size:1.08em;}
+body[data-page="chat"] .message .bubble .ncc-component .ncc-fact {padding-block:11px;}
+body[data-page="chat"] .message .bubble .ncc-component.ncc-note {padding:12px 16px;border-inline-start:2px solid var(--chat-accent);background:var(--chat-soft);border-radius:0 8px 8px 0;}
+body[data-page="chat"] .message .bubble .ncc-component.ncc-note .ncc-title {padding-bottom:0;margin-bottom:4px;border:0;}
+body[data-page="chat"] .message .bubble details.ncp-panel {border-block:1px solid var(--chat-line);}
+body[data-page="chat"] .message .bubble .ncp-panel > .ncp-summary {padding:14px 0;min-height:44px;}
+body[data-page="chat"] .message .bubble .ncp-panel[open] > .ncp-body {margin:0;padding:16px 0;border-color:var(--chat-line);}
+body[data-page="chat"] .message .bubble .ncp-panel .ncp-metric > strong.ncp-value {font-size:1.38em;}
+body[data-page="chat"] .message .bubble .navren-reply-component .nrc-head {padding:0 0 12px;border-bottom:1px solid var(--chat-line);}
+body[data-page="chat"] .message .bubble .navren-reply-component .nrc-metrics {padding:18px 0;}
+body[data-page="chat"] .message .bubble .navren-reply-component .nrc-rows {padding:0;}
+body[data-page="chat"] .message .bubble .navren-reply-component .nrc-source {padding:10px 0 0;border-top:1px solid var(--chat-line);border-radius:0;}
+body[data-page="chat"] .message .bubble .navren-reply-component.nrc-income.ni-card {padding:0;--ni-paper:transparent;}
+body[data-page="chat"] .message .bubble .ni-card .ni-top {padding-bottom:12px;border-bottom:1px solid var(--chat-line);}
+body[data-page="chat"] .message .bubble .ni-card .ni-total {margin:18px 0;}
+body[data-page="chat"] .message .bubble .ni-card .ni-number {font-size:1.8em;font-weight:650;letter-spacing:-.035em;}
+body[data-page="chat"] .message .bubble .ni-card .ni-row > summary {padding-block:12px;}
+body[data-page="chat"] .message .bubble .ni-card .ni-view-switch {background:var(--chat-soft);border:0;padding:3px;}
+body[data-page="chat"] .message .bubble .ni-card .ni-view-switch > button[aria-pressed="true"] {background:var(--chat-paper);}
+body[data-page="chat"] .message .bubble .ni-card .ni-foot {padding-top:10px;border-top:1px solid var(--chat-line);}
+@media(max-width:620px) {
+  body[data-page="chat"] .message .bubble .ncc-component .ncc-table .ncc-cell {padding-inline:9px;}
+  body[data-page="chat"] .message .bubble .ncc-component .ncc-table .ncc-cell:first-child {padding-inline-start:0;}
+}

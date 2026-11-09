@@ -1,0 +1,83 @@
+/* 正式聊天展示函数的离线回放；不发送模型请求、不读写账户。 */
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const {JSDOM}=require('jsdom');
+const source=fs.readFileSync(path.resolve(__dirname,'../../js/chat.js'),'utf8');
+const take=(from,to)=>{const start=source.indexOf(from),end=source.indexOf(to,start);assert(start>=0&&end>start);return source.slice(start,end);};
+const dom=new JSDOM('<!doctype html><body><main id="chatMessages"></main></body>',{runScripts:'outside-only'});
+const w=dom.window,d=w.document;
+w.scrollToBottom=()=>{};
+w.escapeHtml=value=>{const el=d.createElement('span');el.textContent=String(value??'');return el.innerHTML;};
+w.eval(take('// 仅渲染本轮实际收到的活动','// ── Add Messages')+
+  take('function renderReplyText(','function clearFollowUpQuestions(')+
+  '\nwindow.__responseTest={renderRuntimeEvent,finishRuntimeProgress,runtimeActivityStates,renderReplyText,ensureMessageTools};');
+const api=w.__responseTest;
+const message=()=>{const el=d.createElement('article');el.innerHTML='<div class="bubble"><div class="message-body"></div></div>';d.getElementById('chatMessages').append(el);return el;};
+const event=(id,name,status,more={})=>({type:'CUSTOM',name:'navren.activity',value:{schema_version:1,kind:'tool',request_id:'fixture-request',call_id:id,name,status,summary:{source:'simulation',period:'2026-10-28'},...more}});
+const loading=message();
+for(let i=1;i<=5;i++){
+  const id='budget-'+i;
+  api.renderRuntimeEvent(loading,event(id,'budget','started'));
+  api.renderRuntimeEvent(loading,{type:'TOOL_CALL_START',toolCallId:id,toolCallName:'budget'});
+  api.renderRuntimeEvent(loading,{type:'TOOL_CALL_END',toolCallId:id});
+  api.renderRuntimeEvent(loading,event(id,'budget','completed'));
+}
+assert.equal(loading.querySelectorAll('.runtime-step').length,1,'连续能力归为一行');
+assert.equal(loading.querySelector('.runtime-activity-count').textContent,'5次读取');
+assert.equal(api.runtimeActivityStates.get(loading).records.size,5,'独立调用身份不得去重');
+assert.equal(loading.querySelector('.runtime-activity-state').textContent,'已完成');
+api.renderRuntimeEvent(loading,event('budget-5','budget','started'));
+assert.equal(loading.querySelector('.runtime-activity-state').textContent,'已完成','迟到started不得复活已结束调用');
+api.renderRuntimeEvent(loading,event('other','account_summary','completed'));
+api.renderRuntimeEvent(loading,event('budget-6','budget','started'));
+assert.equal(loading.querySelectorAll('.runtime-step').length,3,'隔着其他能力的调用不挪到旧行');
+api.renderRuntimeEvent(loading,event('foreign','budget','started',{request_id:'another-request'}));
+assert.equal(api.runtimeActivityStates.get(loading).records.size,7,'跨请求事件拒绝');
+const mixed=message();
+api.renderRuntimeEvent(mixed,event('a','budget','completed'));
+api.renderRuntimeEvent(mixed,event('b','budget','started'));
+assert.match(mixed.textContent,/1次已完成.*1次进行中/);
+api.renderRuntimeEvent(mixed,event('b','budget','failed'));
+assert.equal(mixed.querySelector('.runtime-activity-state').textContent,'未完成');
+assert.match(mixed.textContent,/1次未完成/,'分组不能用成功覆盖失败');
+const secret=message();
+api.renderRuntimeEvent(secret,event('safe','future_tool','completed',{summary:{source:'simulation',api_key:'SECRET_SENTINEL',arguments:{balance:123}}}));
+assert.ok(!secret.textContent.includes('SECRET_SENTINEL'));
+assert.match(secret.textContent,/future_tool/,'未知真实工具仍可辨认');
+const skills=message();
+api.renderRuntimeEvent(skills,event('s1','load_skill','completed',{summary:{skill:'cashflow'}}));
+api.renderRuntimeEvent(skills,event('s2','load_skill','completed',{summary:{skill:'payments'}}));
+assert.equal(skills.querySelectorAll('.runtime-step').length,2,'不同专业技能不能被同一个load_skill名称掩盖');
+const reply=message();
+api.finishRuntimeProgress(mixed,reply,{isFallback:true});
+assert.ok(!mixed.isConnected);
+assert.equal(reply.querySelector('.runtime-activity-notice').textContent,'本次处理未完成');
+assert.equal(reply.querySelectorAll('.runtime-activity-list').length,0);
+const fallback='账户账本 · 2026-10-28\n账户甲 · 已结算余额：85,302.06元\n账户乙 · 已结算余额：0.00元\n\n这次回答未能在处理限制内完成，请重新发送问题。 本次对话没有确认执行任何金融操作。';
+const rendered=api.renderReplyText(fallback,{safeStatus:true});
+const box=d.createElement('div');box.innerHTML=rendered;
+assert.equal(box.querySelectorAll('.reply-ledger-row').length,2);
+assert.deepEqual([...box.querySelectorAll('dd')].map(el=>el.textContent),['85,302.06元','0.00元']);
+assert.match(box.textContent,/已结算余额/);
+assert.match(box.textContent,/未能在处理限制内完成/);
+assert.ok(!/可支配|合计|已核验|已完成/.test(box.textContent));
+assert.ok(!api.renderReplyText(fallback).includes('reply-ledger-preview'),'成功自由正文不套用失败样式');
+for(const text of [fallback.replace('已结算余额：85,302.06元','当前可安排资金：85,302.06元'),fallback.replace('账户账本','资金合计'),fallback.replace('\n\n','\n')]){
+  assert.ok(!api.renderReplyText(text,{safeStatus:true}).includes('reply-ledger-preview'),'不猜测或部分解析其他口径');
+}
+box.innerHTML=api.renderReplyText(fallback.replace('账户甲','<img src=x onerror=alert(1)>'),{safeStatus:true});
+assert.equal(box.querySelector('img'),null,'原文全部转义');
+const footer=message(),bubble=footer.querySelector('.bubble');
+bubble.insertAdjacentHTML('beforeend','<button class="message-audio-control">朗读</button><div class="bank-actions" data-bank-response="fixture"><button>查看账户与操作记录</button><div class="bank-action-card"><button data-bank-draft="{}">核对并确认</button></div></div><button class="chat-retry">重试这个问题</button><button class="message-bookmark-control">收藏</button>');
+const tools=api.ensureMessageTools(footer);
+assert.equal(tools.querySelectorAll('.message-tool-actions button').length,2);
+assert.equal(tools.querySelectorAll(':scope > .message-audio-control,:scope > .message-bookmark-control').length,2);
+assert.ok(bubble.querySelector(':scope > .bank-actions .bank-action-card [data-bank-draft]'),'原生金融确认卡不得被移入普通操作栏');
+assert.equal(tools.querySelector('[data-bank-draft]'),null);
+api.ensureMessageTools(footer);
+assert.equal(bubble.querySelectorAll(':scope > .message-tools').length,1);
+assert.equal(tools.querySelectorAll('.message-action-group').length,1,'重复整理不能复制按钮');
+console.log('回复展示回放通过：实际调用身份/分组/失败、回退余额不合计、转义与动作归属；0模型/0账户写入。');
+w.close();
