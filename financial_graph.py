@@ -164,7 +164,7 @@ class FinancialGraph:
             if f in p and (not isinstance(p[f],str) or len(p[f])>500):raise BankError('GRAPH_QUERY','查询内容无效。')
         return view,source,start,end,asof
 
-    def query(self,w,parameters=None,for_agent=False):
+    def query(self,w,parameters=None,for_agent=False,_stale_retries=1):
         p=parameters or {};view,source,start,end,asof=self._parameters(w,p)
         portfolio=p.get('portfolio','current')
         if not isinstance(portfolio,str) or len(portfolio)>100:raise BankError('GRAPH_PORTFOLIO','组合标识无效。')
@@ -397,8 +397,14 @@ class FinancialGraph:
                 'related_knowledge':[c for c in json.loads((Path(__file__).parent/'knowledge/financial-concepts.json').read_text())['concepts'] if view in c['views'] or any(ALIASES.get(v)==view for v in c['views'])],
                 'notice':'金额来自确定性账本计算；观测、本人确认、候选与情景分开。图谱不替代授权，也不把消费频率当作偏好。'}
         for i in insights:i['view']=ALIASES.get(i['view'],i['view'])
-        if version!=self._version(w):raise BankError('GRAPH_STALE','读取期间资料已变化，请重试。',409)
-        self._persist(w,public);self._remember(cache_key,public)
+        try:
+            if version!=self._version(w):raise BankError('GRAPH_STALE','读取期间资料已变化，请重试。',409)
+            self._persist(w,public)
+        except BankError as late:
+            # 并发写入在读期间推进版本时重建一次，避免把可重试的竞态直接抛给页面。
+            if late.code=='GRAPH_STALE' and _stale_retries>0:return self.query(w,parameters,for_agent,_stale_retries-1)
+            raise
+        self._remember(cache_key,public)
         elapsed=time.monotonic()-started
         if elapsed>=1.0:logging.getLogger('navren.graph').info('graph_build workspace=%s seconds=%.2f nodes=%d edges=%d',w,elapsed,len(public['nodes']),len(public['links']))
         return self._subgraph(public,p,view,for_agent)

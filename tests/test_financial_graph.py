@@ -39,6 +39,15 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(len(persists),n+1)
         self.assertNotEqual(third['version'],first['version'])
         self.assertNotEqual(third['memory_enabled'],first['memory_enabled'])
+    def test_stale_projection_rebuilds_once_before_failing(self):
+        graph=type(self.g.financial_graph);calls=[]
+        def persist(inst,w,data):
+            calls.append(w)
+            if len(calls)==1:raise BankError('GRAPH_STALE','读取期间资料已变化，请重试。',409)
+        with patch.object(graph,'_persist',persist):
+            result=self.query()
+        self.assertEqual(len(calls),2)
+        self.assertGreater(len(result['nodes']),12)
     def test_previous_period_inputs_are_not_lost(self):
         r=self.query(view='funds',**{'from':'2026-08-01','to':'2026-08-31'})
         for c in r['calculations']:
