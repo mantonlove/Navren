@@ -233,6 +233,19 @@ class RegisteredExperienceProvider:
         self.bank, self.instances = bank, instances
         self.demo_sessions, self.private_store = demo_sessions, private_store
 
+    def _prewarm(self, workspace_id):
+        """选中画像后立即在后台算一遍图谱投影，页面首屏通常就命中缓存。"""
+        graph = getattr(self, 'graph', None)
+        if graph is None or not workspace_id:return
+        import threading
+        def run():
+            try:graph.query(workspace_id, {})
+            except Exception as exc:
+                import logging
+                logging.getLogger('navren.graph').info('graph_prewarm workspace=%s skipped=%s', workspace_id, type(exc).__name__)
+        try:threading.Thread(target=run, name='navren-graph-prewarm', daemon=True).start()
+        except Exception:pass
+
     def _auth(self, owner, subject, expiry):
         owner = registered_id(owner)
         if not isinstance(subject, str) or not re.fullmatch('[A-Za-z0-9:_-]{16,192}', subject):
@@ -334,7 +347,9 @@ class RegisteredExperienceProvider:
                 raise BankError('WORKSPACE_CHANGED', '当前画像已变化，请重新核对后选择。', 409)
             if getattr(self, 'materializer', None) is not None:
                 self.materializer.g._activate_selected_historical_source(instance['workspace_id'], db=db)
-            return self._issue(db, owner, subject, expiry, instance)
+            selected = self._issue(db, owner, subject, expiry, instance)
+        self._prewarm(instance['workspace_id'])
+        return selected
 
     def _issue(self, db, owner, subject, expiry, instance):
         self._auth(owner, subject, expiry)  # 开账/私库初始化后重新核真实到期时间。
@@ -369,7 +384,9 @@ class RegisteredExperienceProvider:
                 raise BankError('PRIVACY_REVISION_CHANGED', '资料权限已变化，请重新读取。', 409)
             if getattr(self, 'materializer', None) is not None:
                 self.materializer.g._activate_selected_historical_source(instance['workspace_id'], db=db)
-            return self._issue(db, current['registered_user_id'], current['auth_subject'], current['auth_expires_at'], instance)
+            selected = self._issue(db, current['registered_user_id'], current['auth_subject'], current['auth_expires_at'], instance)
+        self._prewarm(instance['workspace_id'])
+        return selected
 
     def recover_committed_selection(self, registered_user_id, auth_subject, *, auth_expires_at, bank_session_token):
         """仅恢复同一有效欢迎授权中已提交、相邻代次且丢失响应头的切号。"""
@@ -618,6 +635,7 @@ def attach_registered_experiences(gateway):
                                 materializer.initialize_bank, materializer.initialize_private)
     provider = RegisteredExperienceProvider(gateway.bank, registry, gateway.demo_sessions, gateway.personal_data)
     provider.materializer = materializer
+    provider.graph = gateway.financial_graph
     gateway.experience_provider = provider
     from simulated_bank.living_simulation import LivingWorker, LivingScheduler
     gateway.living_simulation=LivingWorker(gateway.bank,template_service_for=materializer.service_for,funding_enabled=True)
