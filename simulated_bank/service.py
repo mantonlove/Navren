@@ -398,8 +398,22 @@ CREATE INDEX IF NOT EXISTS service_negotiation_application_workspace ON service_
                 'data_ready': ['customer_archive','beneficiaries','scheduled_payments','split_bills','cards','credit','loans','subscriptions','cross_scene_tasks','investment_lots'],
                 'settlement_notice': '模拟工作日规则简化为日历日；异步赎回需演示者用CLI推进模拟日期。'}
 
+    @contextmanager
+    def _read_snapshot(self):
+        """只读快照：WAL 下读事务不阻塞写入，避免读路径抢占写锁。"""
+        db = self.connect()
+        own = isinstance(db, sqlite3.Connection)
+        try:
+            if own:
+                db.execute('BEGIN')
+            yield db
+        finally:
+            if own:
+                db.rollback()
+            db.close()
+
     def customer_archive(self, workspace):
-        with self.transaction() as db:
+        with self._read_snapshot() as db:
             ws = self._workspace(db,workspace)
             records = read_archive(db,workspace)
             for table in ('transactions','mandates','holdings','orders'):
