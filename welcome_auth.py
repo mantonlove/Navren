@@ -563,6 +563,16 @@ class WelcomeAuth:
             return self._db_cookie(db,user_id,session_token)
 
 
+def _log_experience_failure(method, error, kind):
+    """只记录定位所需的结构化事实，不记录异常原文或业务正文。"""
+    import logging
+    import traceback
+    frames = [{'file':Path(frame.filename).name, 'line':frame.lineno, 'function':frame.name}
+              for frame in traceback.extract_tb(error.__traceback__)]
+    logging.getLogger('navren.welcome').error('experience_failure method=%s kind=%s type=%s code=%s frames=%s',
+        method, kind, type(error).__name__, getattr(error,'code',None), frames)
+
+
 class RegisteredExperienceAdapter:
     """同进程边界：仅从当前已验证welcome会话解析owner，永不公开业务Cookie。"""
     def __init__(self, auth, provider):
@@ -581,8 +591,10 @@ class RegisteredExperienceAdapter:
         try:
             return getattr(self.provider,method)(*args,**kwargs)
         except BankError as error:
+            _log_experience_failure(method, error, 'bank')
             raise AuthError('个人体验空间暂时无法核对，请重新读取或登录。',error.status,error.code) from None
-        except Exception:
+        except Exception as error:
+            _log_experience_failure(method, error, 'unexpected')
             raise AuthError('个人体验空间暂不可用，请稍后再试。',503,'PRIVATE_EXPERIENCE_UNAVAILABLE') from None
 
     def _session(self, token, *, verified=True):
