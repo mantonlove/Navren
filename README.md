@@ -122,4 +122,6 @@ npm ci && npm run test:ci                     # 前端门禁子集
 
 本次代码同步不代表执行了全部测试或通过了真实模型、当前入口及全产品验收。旧版量表和评分不代表真实用户效果或比赛成绩。
 
+对外实例的发布形态、必需运行时资产与回滚步骤见 [部署说明](docs/deployment.md)；部署后可用 `python3 scripts/smoke_test_public.py` 做匿名冒烟检查（不登录、不写数据）。
+
 技术结构见 [技术说明](TECHNICAL.md)。银行数据结构与第三方归属见 [银行说明](simulated_bank/README.md)、[第三方材料说明](simulated_bank/THIRD_PARTY_NOTICES.md) 和 [数据合同](simulated_bank/customer-contract.json)。运行数据库、媒体原件、凭据、缓存、下载的研究原件及本机验收记录不随源码发布。
