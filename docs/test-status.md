@@ -1,11 +1,11 @@
 # 测试现状
 
-> 测量日期：2026-11-09　被测版本：`main@5eca2da`（`Add anonymous read-only public market projection`）
-> 环境：macOS 26（Apple Silicon）、Python 3.14.2（本地 venv）/ 3.13（干净 venv 复验依赖安装）、Node 22.23.2
+> 测量日期：2026-11-10　被测版本：`main@03af275`（仓库硬化与本机独有内容合并后）
+> 环境：macOS 26（Apple Silicon）、Python 3.14.2（门禁）/ 3.13（CI 干净环境）、Node 22.23.2
 
 ## 结论
 
-仓库不缺测试数量，缺的是**可复现的绿色基线**：干净检出跑全量套件约三成不通过，且没有 CI 记录过任何一次绿。当前的失败大部分可以用环境缺失解释，但没有区分手段，因此分不清“环境没配好”和“代码改坏了”。
+仓库不缺测试数量，缺的是**可复现的绿色基线**：干净检出跑全量套件仍有约 28% 不通过。当前的失败大部分可以用环境缺失解释，但没有区分手段，因此分不清“环境没配好”和“代码改坏了”。门禁子集（79 模块 / 1435 用例）已在 GitHub Actions 上稳定全绿，全量结果单独作为不阻塞报告发布。
 
 ## Python 套件
 
@@ -15,22 +15,22 @@ python -m unittest discover -s tests -p 'test_*.py'
 
 | 指标 | 数值 |
 |---|---|
-| 测试数 | 3041 |
-| 耗时 | 约 311 s |
-| 结果 | failures=299，errors=591，skipped=1（合计 890 不通过，约 29%） |
-| 测试模块 | 177 个 `test_*.py`；逐模块单独执行时 78 个通过、99 个不通过 |
+| 测试数 | 3087 |
+| 耗时 | 约 370 s |
+| 结果 | failures=296，errors=576，skipped=1（合计 872 不通过，约 28%） |
+| 测试模块 | 181 个 `tests/test_*.py`（含子目录共 216 个测试文件）；门禁子集 79 个模块 |
 
 按异常类型统计（一次失败只计最外层异常，部分用例叠加多种原因）：
 
 | 类型 | 数量 | 典型原因 |
 |---|---|---|
 | `AssertionError: network_forbidden` | 244 | 测试自带出网拦截，未放行的用例在离线环境直接失败 |
-| `simulated_bank.service.BankError` | 189 | 短信 MFA 未配置；旧测试只传 `SimulatedBank(path)`，未跟上新增的短信门禁 |
-| `ValueError` | 112 | 其中 63 个 `missing_event_generation`、31 个 `official_only_intent_routing_disabled`：功能开关未开 |
-| `financial_data_service.service.FinancialDataError` | 110 | 财务库未初始化或版本不符 |
-| `FileNotFoundError` | 84 | 读取被 `.gitignore` 排除的封存夹具，如 `outputs/window-progress/finance/implementation/adapter-oracles.json` |
+| `simulated_bank.service.BankError` | 170 | 短信 MFA 未配置；旧测试只传 `SimulatedBank(path)`，未跟上新增的短信门禁 |
+| `ValueError` | 226 | 其中 63 个 `missing_event_generation`、31 个 `official_only_intent_routing_disabled`：功能开关未开 |
+| `financial_data_service.service.FinancialDataError` | 119 | 财务库未初始化或版本不符 |
+| `FileNotFoundError` | 85 | 读取被 `.gitignore` 排除的封存夹具，如 `outputs/window-progress/finance/implementation/adapter-oracles.json` |
 | `local_knowledge.store.KnowledgeError` | 45 | 知识库未构建 |
-| `ModelAdapterError` | 31 | 未配置模型密钥，真实模型路径不可用 |
+| `ModelAdapterError` | 33 | 未配置模型密钥，真实模型路径不可用 |
 
 `tests/run_all.py` 不是测试入口：它是演示用的自评脚本，七个维度里大部分分值是写死的常量（如 `d1 = {"1.1":85,...}`），只用于展示，不能当作质量证据。该文件已在仓库整理中改名为 `tests/demo_score.py` 并注明用途。
 
@@ -97,6 +97,6 @@ node --test tests/test_xxx.js               # 前端逐个确认后改清单
 
 ## 已知未做
 
-- 尚未在 Linux 上跑过门禁（CI 首次运行可能需要调整平台相关断言）。
-- 99 个失败模块未逐个修复，只做了归类。
+- 门禁已在 GitHub Actions（ubuntu + Python 3.13）跑通，但全量套件仍只在 macOS 上测过。
+- 除已恢复的两个短信模块外，其余失败模块未逐个修复，只做了归类。
 - 未接入真实模型做端到端验收；能力结论仍以既有验收记录为准。
