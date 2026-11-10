@@ -27,6 +27,18 @@ class GraphTests(unittest.TestCase):
         for c in r['calculations']:
             current=[r for r in c['input_refs'] if not r.get('comparison_period')]
             self.assertEqual(c['amount_minor'],sum(-r['amount_minor'] if r['kind']=='refund' else r['amount_minor'] for r in current))
+    def test_projection_cache_reuses_identical_reads_and_follows_revision(self):
+        persists=[]
+        graph=type(self.g.financial_graph)
+        with patch.object(graph,'_persist',lambda inst,*a:persists.append(1)):
+            first=self.query();n=len(persists);second=self.query()
+            self.assertEqual(len(persists),n)
+            self.assertEqual(first['version'],second['version'])
+            self.g.memories.set_enabled(self.w,{'enabled':True})
+            third=self.query()
+        self.assertEqual(len(persists),n+1)
+        self.assertNotEqual(third['version'],first['version'])
+        self.assertNotEqual(third['memory_enabled'],first['memory_enabled'])
     def test_previous_period_inputs_are_not_lost(self):
         r=self.query(view='funds',**{'from':'2026-08-01','to':'2026-08-31'})
         for c in r['calculations']:

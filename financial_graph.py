@@ -1,12 +1,13 @@
 """可重算的个人财务图投影。SQLite 保存类型与证据，NetworkX 只做子图检索。"""
 from __future__ import annotations
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from contextlib import closing
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import hashlib
 import json
 import re
+import threading
 import uuid
 from pathlib import Path
 from contextlib import nullcontext
@@ -126,7 +127,19 @@ def liquidity_scenario(timeline, account_id, plans, floor_minor=None):
 class FinancialGraph:
     def __init__(self, gateway):
         self.g=gateway
+        self._cache=OrderedDict();self._cache_lock=threading.Lock()
         with closing(self.g.bank.connect()) as db:db.executescript(SCHEMA)
+
+    def _cached(self,k):
+        with self._cache_lock:
+            if k not in self._cache:return None
+            self._cache.move_to_end(k)
+            return self._cache[k]
+
+    def _remember(self,k,v):
+        with self._cache_lock:
+            self._cache[k]=v;self._cache.move_to_end(k)
+            while len(self._cache)>8:self._cache.popitem(last=False)
 
     def _version(self,w,db=None):
         with (nullcontext(db) if db is not None else closing(self.g.bank.connect())) as db:
@@ -157,7 +170,12 @@ class FinancialGraph:
         basis=p.get('accounting_basis','holdings_only_v1' if portfolio=='current' else 'total_equity_v2')
         if portfolio=='current' and basis!='holdings_only_v1':raise BankError('GRAPH_BASIS','旧账户组合仅支持 holdings_only_v1；权益法请指定历史组合。')
         if basis not in {'total_equity_v2','holdings_only_v1'}:raise BankError('GRAPH_BASIS','核算口径无效。')
-        archive=self.g.bank.customer_archive(w);records=archive['records'];version=self._version(w)
+        version=self._version(w)
+        if p.get('expected_version') and p['expected_version']!=version:raise BankError('GRAPH_STALE','对象来源或组合版本已变化，请重新读取。',409)
+        cache_key=(w,version,view,source,start.isoformat(),end.isoformat(),portfolio,basis)
+        cached=self._cached(cache_key)
+        if cached is not None:return self._subgraph(cached,p,view,for_agent)
+        archive=self.g.bank.customer_archive(w);records=archive['records']
         nodes={};edges=[];calculations=[];insights=[];gaps=[];metrics=[];portfolio_meta=None
         period={'from':start.isoformat(),'to_exclusive':(end+timedelta(days=1)).isoformat()}
         def ref(table,id,scope=source,**fields):return {'source_scope':scope,'source_table':table,'source_id':str(id),'source_version':version,**fields}
@@ -376,9 +394,8 @@ class FinancialGraph:
                 'related_knowledge':[c for c in json.loads((Path(__file__).parent/'knowledge/financial-concepts.json').read_text())['concepts'] if view in c['views'] or any(ALIASES.get(v)==view for v in c['views'])],
                 'notice':'金额来自确定性账本计算；观测、本人确认、候选与情景分开。图谱不替代授权，也不把消费频率当作偏好。'}
         for i in insights:i['view']=ALIASES.get(i['view'],i['view'])
-        if p.get('expected_version') and p['expected_version']!=version:raise BankError('GRAPH_STALE','对象来源或组合版本已变化，请重新读取。',409)
         if version!=self._version(w):raise BankError('GRAPH_STALE','读取期间资料已变化，请重试。',409)
-        self._persist(w,public)
+        self._persist(w,public);self._remember(cache_key,public)
         return self._subgraph(public,p,view,for_agent)
 
     def _persist(self,w,data):
