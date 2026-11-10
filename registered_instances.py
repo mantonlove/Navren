@@ -299,7 +299,13 @@ class RegisteredExperienceProvider:
 
     def resume(self, registered_user_id, auth_subject, *, auth_expires_at, bank_session_token=None):
         owner, subject, expiry = self._auth(registered_user_id, auth_subject, auth_expires_at)
-        with self.bank.transaction() as db:self._subject(db,owner,subject,expiry,create=True)
+        # 欢迎授权已在库且未变化时走只读校验：每个受保护请求都开写事务会与图谱投影争锁。
+        with closing(self.bank.connect()) as db:
+            existing = db.execute('SELECT * FROM registered_auth_subjects WHERE registered_user_id=? AND auth_subject=?',
+                                  (owner, subject)).fetchone()
+        if not (existing is not None and not existing['revoked'] and existing['expires_at'] == expiry
+                and existing['expires_at'] > self.bank.clock()):
+            with self.bank.transaction() as db: self._subject(db, owner, subject, expiry, create=True)
         if bank_session_token is not None:
             with closing(self.bank.connect()) as db:
                 record = self._validate(db, bank_session_token, owner=owner, subject=subject)
