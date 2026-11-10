@@ -145,6 +145,8 @@
       if (epoch !== bootEpoch || (chat && active !== turn) || hidden) return;
       shellError = null; shellReady = true;
       syncCopy(); geometry();
+      // 账户/发现/消息/我的没有数据就绪回调，壳层与语言同步完成即可揭开；对话页仍等 chat.js 调 ready()。
+      if (!chat && active === turn) turn.ready = true;
       if (shellError) fail(shellError); else if (active) maybeReveal(active);
     } catch (error) { if (epoch === bootEpoch && (!chat || active === turn) && !hidden) { shellError = error; fail(error); } }
   }
