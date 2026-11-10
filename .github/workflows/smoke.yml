@@ -1,0 +1,25 @@
+name: 线上冒烟检查
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 目标地址
+        required: false
+        default: https://navren.cn
+  schedule:
+    - cron: '0 1 * * *'   # 每天 09:00 CST
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 匿名冒烟检查
+        env:
+          BASE_URL: ${{ inputs.base_url || 'https://navren.cn' }}
+        run: python3 scripts/smoke_test_public.py --base-url "$BASE_URL"
