@@ -383,6 +383,11 @@ class FinancialGraph:
 
     def _persist(self,w,data):
         """当前投影原子替换；删除记忆后不保留可复活其内容的旧实体/证据快照。"""
+        # 投影版本未变时跳过整表重写：读取路径不再因为重复落库长期占用写锁。
+        with closing(self.g.bank.connect()) as probe:
+            stored=probe.execute('SELECT record_version FROM graph_assertions WHERE workspace_id=? LIMIT 1',(w,)).fetchone()
+        if stored is not None and stored[0]==data['version']:
+            return
         with self.g.bank.transaction() as db:
             if self._version(w,db)!=data['version']:raise BankError('GRAPH_STALE','图谱投影依据已变化。',409)
             for table in ('graph_evidence_links','graph_assertions','graph_events','graph_entities','graph_calculations'):
