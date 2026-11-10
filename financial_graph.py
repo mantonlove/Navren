@@ -6,6 +6,8 @@ from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import hashlib
 import json
+import time
+import logging
 import re
 import threading
 import uuid
@@ -175,6 +177,7 @@ class FinancialGraph:
         cache_key=(w,version,view,source,start.isoformat(),end.isoformat(),portfolio,basis)
         cached=self._cached(cache_key)
         if cached is not None:return self._subgraph(cached,p,view,for_agent)
+        started=time.monotonic()
         archive=self.g.bank.customer_archive(w);records=archive['records']
         nodes={};edges=[];calculations=[];insights=[];gaps=[];metrics=[];portfolio_meta=None
         period={'from':start.isoformat(),'to_exclusive':(end+timedelta(days=1)).isoformat()}
@@ -396,6 +399,8 @@ class FinancialGraph:
         for i in insights:i['view']=ALIASES.get(i['view'],i['view'])
         if version!=self._version(w):raise BankError('GRAPH_STALE','读取期间资料已变化，请重试。',409)
         self._persist(w,public);self._remember(cache_key,public)
+        elapsed=time.monotonic()-started
+        if elapsed>=1.0:logging.getLogger('navren.graph').info('graph_build workspace=%s seconds=%.2f nodes=%d edges=%d',w,elapsed,len(public['nodes']),len(public['links']))
         return self._subgraph(public,p,view,for_agent)
 
     def _persist(self,w,data):
